@@ -1,0 +1,46 @@
+[build-system]
+requires = ["setuptools==84.2.1"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "toolforge"
+version = "0.0.1"
+description = "An MCP server that lets an AI agent build, verify and reuse its own tools, safely."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+dependencies = [
+    "pydantic==2.14.3",
+    "pydantic-settings==2.16.3",
+    "jsonschema==4.26.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==9.2.0",
+    "ruff==0.17.5",
+]
+
+[project.scripts]
+toolforge = "toolforge.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+# ruff 0.17 also formats code blocks inside Markdown; the guide and README are not Python source. third_party is the MiniLocker submodule.
+extend-exclude = ["*.md", "third_party"]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+markers = [
+    "docker: needs a Docker daemon (skipped automatically when none answers)",
+    "llm: needs a configured OpenAI-compatible endpoint (TOOLFORGE_LLM_BASE_URL)",
+    "attacks: the hostile-author suite against real sandboxes (needs Docker)",
+]

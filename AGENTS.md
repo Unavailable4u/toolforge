@@ -77,7 +77,7 @@ Definition of done: acceptance commands run and pass (or are listed as not run),
 3. Create the patch with `git format-patch -1 HEAD --stdout > NNNN-pxx-<slug>.patch`, where `NNNN` is the patch number
    padded to four digits (P05 becomes `0005-p05-execution-contract.patch`). Stretch patches use `01NN` (S01 becomes
    `0101-s01-bundles-and-attestations.patch`). Split parts add a letter after the number (`0006a-p06a-framework.patch`).
-4. Check it: on a clean checkout of the previous tip, `git am --check NNNN-*.patch` must succeed.
+4. Check it: on a clean checkout of the previous tip, `git apply --check NNNN-*.patch` must succeed.
 5. Give the person the patch file and a reply containing: what the patch does in a few sentences; the exact commands to
    verify it; what you could not run; any deviation from the guide; and one line saying which patch is next.
 

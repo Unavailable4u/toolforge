@@ -87,11 +87,11 @@ mkdir -p ~/patches
 cp /mnt/c/Users/<WindowsUser>/Downloads/0001-p01-skeleton.patch ~/patches/
 cd ~/projects/toolforge
 git status                                # must be clean, on main
-git am --check ~/patches/0001-p01-skeleton.patch
+git apply --check ~/patches/0001-p01-skeleton.patch
 git am ~/patches/0001-p01-skeleton.patch
 ```
 
-If `git am --check` complains, work down this list:
+If `git apply --check` complains, work down this list:
 
 | Symptom | Cause and fix |
 | --- | --- |

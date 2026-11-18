@@ -24,6 +24,12 @@ Still no code: only the guide changed. Nothing here alters the language, the gat
 | 28 | P14 is too large for one pass and the guide did not say where to cut. | A suggested split into P14a and P14b. | P14 |
 | 29 | The author works in WSL2 and the setup was one sentence. | `06-wsl2-setup.md`: Python 3.12 and venv on Ubuntu 24.04, Docker options, git settings, applying patches downloaded in Windows. | 06, README |
 
+### Corrected while building P01
+
+* The guide told readers to run `git am --check`, which is not a git option. The dry run is `git apply --check <patch>`
+  (`AGENTS.md`, `06-wsl2-setup.md`).
+* The current ruff formats code blocks inside Markdown, so `pyproject.toml` excludes `*.md` from ruff.
+
 ### Added
 
 * `scripts/check_guide.py` (standard library only): patches versus table, dependencies, titles, required sections, index, patch

@@ -7,7 +7,7 @@ patch" in the same patch. Never tick a box for work that is not in the patch. Bo
 
 | Done | Patch | Title | Depends on |
 | --- | --- | --- | --- |
-| [ ] | P01 | Skeleton, tooling, CI | none |
+| [x] | P01 | Skeleton, tooling, CI | none |
 | [ ] | P02 | Tool package spec and validation | P01 |
 | [ ] | P03 | Registry: lifecycle, blobs, search | P02 |
 | [ ] | P04 | Sandbox seam and MiniLocker runner | P01 |
@@ -34,11 +34,19 @@ Milestones (M0 to M7) and what can be dropped: `docs/guide/05-milestones.md`.
 
 ## Notes for the next patch
 
-Start of the project, plan revision 3 (details and reasons in `docs/guide/REVISIONS.md`). Decisions already made that P01
-and later patches must respect:
+Done: P01 (skeleton). Next: P02. Decisions and interfaces that later patches must respect:
 
-* Language is Python 3.12. Do not propose another.
-* P01 settings also include `server_host`, `server_port`, `server_token` and `log_level` (see P01).
+* Language is Python 3.12. Do not propose another. Runtime pins: pydantic 2.14.3, pydantic-settings 2.16.3, jsonschema 4.26.0; dev:
+  pytest 9.2.0, ruff 0.17.5 (line length 110, rules E4 E7 E9 F I). Build backend setuptools 84.2.1, src layout.
+* `toolforge.config.Settings` is the only reader of the environment (`TOOLFORGE_` prefix, `.env` read from the current directory).
+  `load_settings()` turns bad values into `ConfigError`. Secret fields are `SecretStr`; `Settings.masked()` is what `toolforge config`
+  prints. `build_allow` is a list (comma-separated in the environment). The challenger falls back to the builder through the
+  `effective_challenger_*` properties. A new setting needs an `.env.example` line (a drift test enforces it).
+* `toolforge.cli`: add a subcommand by writing `register(subparsers)` in your module and appending it to `cli.REGISTRARS`; set
+  `handler` with `set_defaults`. `ToolForgeError` raised by a handler prints `error [code]: message` and `hint:` and exits 1.
+* `tests/conftest.py`: `docker`, `llm` and `attacks` tests skip themselves; an autouse fixture removes `TOOLFORGE_*` variables and
+  changes directory to `tests/` so no stray `.env` is read; `tmp_home` gives a throwaway data directory.
+* CI actions are pinned by commit SHA (checkout v7.0.1, setup-python v7.1.0, looked up on 2026-11-19).
 * A tool reaches `active` before P09/P10 exist only through `toolforge promote` (P07). There is no other path.
 * `verified_basic` with network or secrets goes to `pending_approval` (P09), never through `promote`. `release` and manual
   `quarantine` are operator CLI commands from P08; `rollback` (P12) may only target a version that was active before.
