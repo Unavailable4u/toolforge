@@ -1,0 +1,115 @@
+{
+  "description": "Count the words, characters and lines in a piece of text, and report the most frequent words.",
+  "entrypoint": "tool.py:run",
+  "examples": [
+    {
+      "input": {
+        "text": "the cat and the hat"
+      },
+      "output": {
+        "characters": 19,
+        "lines": 1,
+        "top_words": [
+          {
+            "count": 2,
+            "word": "the"
+          },
+          {
+            "count": 1,
+            "word": "and"
+          },
+          {
+            "count": 1,
+            "word": "cat"
+          }
+        ],
+        "words": 5
+      }
+    },
+    {
+      "input": {
+        "text": ""
+      },
+      "output": {
+        "characters": 0,
+        "lines": 0,
+        "top_words": [],
+        "words": 0
+      }
+    }
+  ],
+  "input_schema": {
+    "additionalProperties": false,
+    "properties": {
+      "text": {
+        "maxLength": 50000,
+        "type": "string"
+      },
+      "top": {
+        "default": 3,
+        "maximum": 20,
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "text"
+    ],
+    "type": "object"
+  },
+  "kind": "stateless",
+  "limits": {
+    "memory_mb": 128,
+    "output_kb": 16,
+    "timeout_s": 10
+  },
+  "name": "word_count",
+  "output_schema": {
+    "properties": {
+      "characters": {
+        "type": "integer"
+      },
+      "lines": {
+        "type": "integer"
+      },
+      "top_words": {
+        "items": {
+          "properties": {
+            "count": {
+              "type": "integer"
+            },
+            "word": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "word",
+            "count"
+          ],
+          "type": "object"
+        },
+        "type": "array"
+      },
+      "words": {
+        "type": "integer"
+      }
+    },
+    "required": [
+      "words",
+      "characters",
+      "lines",
+      "top_words"
+    ],
+    "type": "object"
+  },
+  "parent_version": null,
+  "permissions": {
+    "browser": false,
+    "inputs": false,
+    "network": [],
+    "secrets": []
+  },
+  "requirements": [],
+  "version": "1.0.0",
+  "when_to_use": "The task gives some text and asks how long it is or which words appear most."
+}

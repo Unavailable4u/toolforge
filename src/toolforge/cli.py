@@ -12,6 +12,7 @@ import sys
 from collections.abc import Callable, Sequence
 
 from toolforge import __version__
+from toolforge import cli_package as package_commands
 from toolforge.config import load_settings
 from toolforge.errors import ToolForgeError
 
@@ -41,7 +42,7 @@ def _register_core(subparsers: argparse._SubParsersAction) -> None:
     subparsers.add_parser("doctor", help="check the environment").set_defaults(handler=_cmd_doctor)
 
 
-REGISTRARS: list[Callable[[argparse._SubParsersAction], None]] = [_register_core]
+REGISTRARS: list[Callable[[argparse._SubParsersAction], None]] = [_register_core, package_commands.register]
 
 
 def build_parser() -> argparse.ArgumentParser:

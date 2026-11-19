@@ -1,0 +1,85 @@
+{
+  "description": "Summarise a CSV file: row count, column names, and the minimum, maximum and mean of each numeric column.",
+  "entrypoint": "tool.py:run",
+  "examples": [
+    {
+      "files": {
+        "inputs/data.csv": "a,b,name\n1,2,x\n3,4,y\n"
+      },
+      "input": {
+        "path": "inputs/data.csv"
+      },
+      "output": {
+        "columns": [
+          "a",
+          "b",
+          "name"
+        ],
+        "numeric": {
+          "a": {
+            "max": 3.0,
+            "mean": 2.0,
+            "min": 1.0
+          },
+          "b": {
+            "max": 4.0,
+            "mean": 3.0,
+            "min": 2.0
+          }
+        },
+        "rows": 2
+      }
+    }
+  ],
+  "input_schema": {
+    "additionalProperties": false,
+    "properties": {
+      "path": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "path"
+    ],
+    "type": "object"
+  },
+  "kind": "stateless",
+  "limits": {
+    "memory_mb": 256,
+    "output_kb": 64,
+    "timeout_s": 20
+  },
+  "name": "csv_summary",
+  "output_schema": {
+    "properties": {
+      "columns": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "numeric": {
+        "type": "object"
+      },
+      "rows": {
+        "type": "integer"
+      }
+    },
+    "required": [
+      "rows",
+      "columns",
+      "numeric"
+    ],
+    "type": "object"
+  },
+  "parent_version": null,
+  "permissions": {
+    "browser": false,
+    "inputs": true,
+    "network": [],
+    "secrets": []
+  },
+  "requirements": [],
+  "version": "1.0.0",
+  "when_to_use": "The task gives a CSV file and asks for statistics about it."
+}

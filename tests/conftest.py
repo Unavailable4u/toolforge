@@ -6,12 +6,15 @@ when their prerequisite is missing, so `pytest` is always safe to run. (P19 adds
 
 from __future__ import annotations
 
+import copy
 import os
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from functools import lru_cache
 from pathlib import Path
 
 import pytest
+
+from toolforge.config import Settings
 
 
 @lru_cache(maxsize=1)
@@ -52,3 +55,55 @@ def tmp_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]:
     home.mkdir()
     monkeypatch.setenv("TOOLFORGE_HOME", str(home))
     yield home
+
+
+# --- Tool packages (P02) ---------------------------------------------------------------------------------------------
+
+BASE_MANIFEST: dict = {
+    "name": "word_count",
+    "version": "1.0.0",
+    "parent_version": None,
+    "description": "Count the words in a piece of text and report how many there are.",
+    "when_to_use": "The task gives some text and asks how many words it has.",
+    "entrypoint": "tool.py:run",
+    "kind": "stateless",
+    "input_schema": {
+        "type": "object",
+        "properties": {"text": {"type": "string"}},
+        "required": ["text"],
+        "additionalProperties": False,
+    },
+    "output_schema": {"type": "object", "properties": {"words": {"type": "integer"}}, "required": ["words"]},
+    "permissions": {"network": [], "secrets": [], "inputs": False, "browser": False},
+    "limits": {"timeout_s": 10, "memory_mb": 128, "output_kb": 16},
+    "requirements": [],
+    "examples": [{"input": {"text": "a b"}, "output": {"words": 2}, "live": False}],
+}
+BASE_FILES: dict[str, str] = {
+    "tool.py": "def run(args):\n    return {'words': len(args['text'].split())}\n",
+    "tests/test_tool.py": (
+        "from tool import run\n\n"
+        "def test_two():\n    assert run({'text': 'a b'}) == {'words': 2}\n\n"
+        "def test_none():\n    assert run({'text': ''}) == {'words': 0}\n\n"
+        "def test_spaces():\n    assert run({'text': ' a  b  c '}) == {'words': 3}\n"
+    ),
+}
+
+
+@pytest.fixture
+def settings() -> Settings:
+    return Settings()
+
+
+@pytest.fixture
+def make_payload() -> Callable[[], dict]:
+    """A fresh, valid submission payload `{"manifest": ..., "files": ...}` that a test may mutate freely."""
+    return lambda: {"manifest": copy.deepcopy(BASE_MANIFEST), "files": dict(BASE_FILES)}
+
+
+@pytest.fixture
+def inline_schema_check(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Check examples against schemas in-process. Faster; the isolation tests and the CLI keep the real subprocess."""
+    from toolforge.models import package
+
+    monkeypatch.setattr(package, "SCHEMA_CHECK_ISOLATED", False)
