@@ -115,7 +115,7 @@ P05. Decisions and interfaces that later patches must respect:
   fails is shown as a warning, and doctor never starts a container or pulls an image.
 * P04 known limits (also in `03-minilocker-integration.md`): one global egress allowlist that only grows; two ToolForge processes on one
   Docker daemon share the proxy container name; egress is read after `run` returns, and an unreadable proxy logs `forge.egress.unobserved`.
-* P04, not run: the 16 `docker`-marked tests in `tests/docker/test_minilocker_runner.py` and `toolforge doctor` against a real daemon, because
-  no Docker daemon was available where the patch was written. Run `pytest -m docker tests/docker -q` first and fix what it shows.
+* P04 on a real daemon (Docker 29.8.1, run by the person): `toolforge doctor` all ok and 15 of the 16 `docker` tests passed; the 16th failed
+  because of a wrong assertion in the test itself (decoy ids such as `aws_secret` contain "secret"), fixed in `fix-p04-decoy-test.patch`.
 * P04 CI: the checkout step now fetches submodules and installs `.[dev,sandbox]`, so the MiniLocker tests run rather than skip.
 * P05: the runner passes `extra_env` to the box as given; keep real secrets out of `SandboxSpec.env` (brokered placeholders only, P09).

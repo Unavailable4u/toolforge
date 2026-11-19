@@ -154,9 +154,6 @@ def test_decoys_are_planted_and_a_read_of_one_is_noticed(runner: MiniLockerRunne
         summary = box.close()
     kinds = {e["type"] for e in summary.decoy_events}
     assert "canary.seeded" in kinds and ("canary.read" in kinds or "canary.exposed" in kinds)
-    assert all(
-        "secret" not in str(e["payload"]).lower() or "label" in e["payload"] for e in summary.decoy_events
-    )
 
 
 def test_decoy_values_are_not_in_the_decoy_events(runner: MiniLockerRunner, tmp_path: Path) -> None:
