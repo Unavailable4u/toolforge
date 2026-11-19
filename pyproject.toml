@@ -16,6 +16,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Needed to run real sandboxes (MiniLocker imports it). Unit tests and `import toolforge` do not need it.
+sandbox = [
+    "docker==7.2.0",
+]
 dev = [
     "pytest==9.2.0",
     "ruff==0.17.5",

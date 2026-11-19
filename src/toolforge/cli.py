@@ -12,6 +12,7 @@ import sys
 from collections.abc import Callable, Sequence
 
 from toolforge import __version__
+from toolforge import cli_doctor as doctor_commands
 from toolforge import cli_package as package_commands
 from toolforge import cli_registry as registry_commands
 from toolforge.config import load_settings
@@ -30,21 +31,16 @@ def _cmd_config(_: argparse.Namespace) -> int:
     return 0
 
 
-def _cmd_doctor(_: argparse.Namespace) -> int:
-    print("no checks yet (the checks arrive with the sandbox patch)")
-    return 0
-
-
 def _register_core(subparsers: argparse._SubParsersAction) -> None:
     subparsers.add_parser("version", help="print the version").set_defaults(handler=_cmd_version)
     subparsers.add_parser("config", help="print effective settings, secrets masked").set_defaults(
         handler=_cmd_config
     )
-    subparsers.add_parser("doctor", help="check the environment").set_defaults(handler=_cmd_doctor)
 
 
 REGISTRARS: list[Callable[[argparse._SubParsersAction], None]] = [
     _register_core,
+    doctor_commands.register,
     package_commands.register,
     registry_commands.register,
 ]

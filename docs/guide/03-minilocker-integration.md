@@ -16,6 +16,10 @@ below is the one this text was written against, and every function signature in 
 before writing the adapter. MiniLocker also ships an "Attack Lab" of its own (scripted attacks against its agent sandbox);
 ToolForge's Attack Lab (P15) is a separate suite aimed at hostile tool authors and the verification pipeline.
 
+**Update, P04 (2026-11-20):** the signatures of `Sandbox`, `EgressManager`, `Watch`, `Ledger`, `snapshot` and `policy.injection` were read at
+the pinned commit while writing the adapter. The differences from this text are listed in `docs/guide/DEVIATIONS.md`; the submodule
+URL and pin are the ones in the commands under P04 ("Adding the submodule"). The pin is still the reviewed commit.
+
 ## How it is consumed
 
 * A git submodule at `third_party/minilocker`, pinned to one commit (the commit above unless the guide says otherwise).
@@ -43,10 +47,10 @@ ToolForge's Attack Lab (P15) is a separate suite aimed at hostile tool authors a
 | Measure what a sandbox did | `Sandbox.measure()`, `Sandbox.hardening()` | Highest memory, process count and CPU; the hardening settings as Docker reports them. |
 | Controlled outbound traffic | `EgressManager` (`minilocker.egress.manager`) | `EgressManager(allowed_hosts, image=..., packaged=False, broker=None).start()`. Provides `internal_network` and `proxy_env()`; every attempt is logged per container. **One proxy at a time**: network and container names are fixed constants. The allowlist is set when the proxy starts. |
 | Secrets without exposure | credential broker (`broker_from_env`, `MINILOCKER_BROKER`, `MINILOCKER_BROKER_TOKEN_<n>`) | The sandbox holds a placeholder; only the proxy holds the token and makes the HTTPS call. HTTP APIs only. |
-| Catch credential theft | `Watch` (`minilocker.agent.watch`) | `Watch(strict=False)`; `supported(box)`, `attach(box, log)` plants decoy SSH/AWS/GitHub/.env credentials, `after_tool(box, tool, result, log)` notices reads and copies, `on_egress(ev, log)`, `audit(box, kind, log, workspace=True)` records filesystem, secrets and compute at destroy time. `log` is `log(actor, type, payload)`. `tripped` becomes true when a decoy is used in strict mode. |
-| Tamper-evident history | `Ledger`, `verify_events`, `read_events` (`minilocker.ledger.chain`) | `Ledger(task_id, path).append(actor, type, payload)` hash-chains events; `verify_events(events)` returns `(ok, message)`. |
+| Catch credential theft | `Watch` (`minilocker.agent.watch`) | `Watch(strict=False)`; `supported(box)`, `attach(box, log)` plants decoy SSH/AWS/GitHub/.env credentials, `after_tool(box, tool, result, log, probe=False)` notices exposed values and, with `probe=True`, reads of decoy files (the runner passes `probe=True` and the full output text), `on_egress(ev, log)`, `audit(box, kind, log, workspace=True)` records filesystem, secrets and compute at destroy time. `log` is `log(actor, type, payload)`. `tripped` becomes true when a decoy is used in strict mode. |
+| Tamper-evident history | `Ledger`, `verify_events`, `read_events` (`minilocker.ledger.chain`) | `Ledger(task_id, path=None).append(actor, type, payload)` hash-chains events; `verify_events(events)` returns `(ok, message)`. It neither creates the parent directory nor forces a write to disk, and a damaged file raises a bare `json` error on load; `toolforge.ledger.ToolforgeLedger(path, task_id)` adds the directory, an `fsync` after each append, a lock for threads and a `LedgerError`. |
 | The report | `build_report(task_id, events, read_error=None)` and `render_html(report)` (`minilocker.ledger.report`) | Nine dimensions measured from ledger events. A dimension with nothing behind it says "not measured". |
-| Untrusted text handling | `sanitize`, `scan`, `fence` (`minilocker.policy.injection`) | `sanitize` strips invisible Unicode, `scan` scores instruction-like text, `fence` wraps text in a random-nonce marker. Early warning, not a security boundary. |
+| Untrusted text handling | `sanitize`, `scan`, `fence` (`minilocker.policy.injection`) | `sanitize` strips invisible Unicode, `scan` scores instruction-like text, `fence` wraps text in a random-nonce marker. Early warning, not a security boundary. ToolForge uses `sanitize` and `scan` from here when MiniLocker is importable, but writes its own `fence` (`toolforge.textsafety`): MiniLocker's header calls the text "untrusted web content", which is untrue for tool output. Without MiniLocker `scan` says `measured: false`, never a score of zero. |
 | Browser for tools that need a web page | `BrowserSandbox` (`minilocker.sandbox.browser`) | `BrowserSandbox(egress=None, image=None, ...)`, `.call(action, params, timeout_s)`, `.destroy()`, `BrowserUnavailable`, `image_present()`. Read the actions in `browser_worker.py` before use. |
 
 Before writing the adapter, open and read these files at the pinned commit. Do not rely on this table alone:
@@ -72,6 +76,21 @@ class SandboxHandle(Protocol):
 `decoys` flag and a ledger path. All MiniLocker-specific behavior (Watch, egress forwarding, hardening capture, audits)
 lives inside the runner implementation.
 
+## What the P04 runner does and its known limits
+
+`MiniLockerRunner.open` creates the ledger first, then (for a network other than `none`) acquires the process-wide `EgressPool`, then
+the `Sandbox`; any failure after that destroys the box and gives the proxy back. `close` audits, destroys the container even when the
+audit fails, releases the pool and logs `sandbox.destroyed` only when the container really is gone. With `decoys=True` a sandbox whose
+decoys cannot be planted is refused (a containment run without decoys would pass vacuously). Limits, written down on purpose:
+
+* The proxy has one global allowlist that only grows until `EgressPool.shutdown()`, so a tool can reach any host approved for any tool
+  that ran since the proxy started. A request for hosts outside the allowlist while a sandbox is using the proxy raises
+  `SandboxUnavailable("egress is busy")`.
+* Two ToolForge processes on one Docker daemon share the fixed proxy container name and would remove each other's proxy.
+* Egress events are read when `run` returns and in `close`, not while a command runs. If the proxy cannot be read, one
+  `forge.egress.unobserved` event is logged, so "no egress events" never silently means "nothing was attempted".
+* `tests/docker/test_minilocker_runner.py` is the proof of the hardening and needs a Docker daemon; the unit tests use stand-ins.
+
 ## Things MiniLocker does not do that ToolForge must handle
 
 1. **Per-sandbox egress allowlists.** The proxy has one global allowlist. v1 keeps one `EgressManager` whose allowlist is
@@ -92,8 +111,9 @@ lives inside the runner implementation.
 
 * Every tool call and every verification run uses a **fresh sandbox**, except sessions (P13).
 * Never mount host paths. Pass data in with `put` and out through the result envelope.
-* Always close handles in a `finally` block; a leaked container is a bug. `toolforge doctor` (P04) lists and removes
-  leftover `minilocker-*` containers owned by this process.
+* Always close handles in a `finally` block; a leaked container is a bug. `toolforge doctor` (P04) lists leftover
+  `minilocker-*` containers and, with `--clean`, removes only those labelled `minilocker=sandbox` that are older than 10 minutes.
+  It never starts a container or pulls an image.
 * Real secrets never enter a sandbox. Brokered services are named in the manifest; the sandbox gets placeholders only.
 * If Docker is unavailable, runner construction raises `SandboxUnavailable`; callers turn it into a `skipped` gate or a
   clear MCP error. Never fall back to running tool code on the host.

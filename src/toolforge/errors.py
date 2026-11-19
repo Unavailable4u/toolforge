@@ -34,6 +34,16 @@ class SandboxUnavailable(ToolForgeError):
     code = "sandbox_unavailable"
 
 
+class SandboxError(ToolForgeError):
+    """A sandbox that was opened failed to do what was asked (a write, a thaw, a call on a killed container)."""
+
+    code = "sandbox_error"
+
+
+class LedgerError(ToolForgeError):
+    code = "ledger_error"
+
+
 class RegistryError(ToolForgeError):
     code = "registry_error"
 

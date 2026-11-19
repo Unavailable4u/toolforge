@@ -18,6 +18,11 @@ from toolforge.config import Settings
 from toolforge.models.package import ToolPackage
 from toolforge.registry import Registry, VersionRecord
 
+# The autouse fixture below removes every TOOLFORGE_* variable so tests never see a developer's settings. A developer who keeps
+# MiniLocker somewhere other than the submodule says so in TOOLFORGE_MINILOCKER_PATH; remember it here, before it is removed,
+# for the tests that need MiniLocker (the `minilocker` fixture).
+_INVOKER_MINILOCKER_PATH = os.environ.get("TOOLFORGE_MINILOCKER_PATH")
+
 
 @lru_cache(maxsize=1)
 def docker_available() -> bool:
@@ -48,6 +53,20 @@ def _clean_environment(monkeypatch: pytest.MonkeyPatch) -> None:
         if name.startswith("TOOLFORGE_"):
             monkeypatch.delenv(name)
     monkeypatch.chdir(Path(__file__).parent)  # a stray .env in the repository root is not read
+
+
+@pytest.fixture
+def minilocker(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    """For tests that need the real MiniLocker: skip unless it can be imported, through the same lookup production uses."""
+    from toolforge.sandbox import _ml_path
+
+    if _INVOKER_MINILOCKER_PATH:
+        monkeypatch.setenv("TOOLFORGE_MINILOCKER_PATH", _INVOKER_MINILOCKER_PATH)
+    _ml_path.reset_for_tests()
+    if not _ml_path.minilocker_available():
+        pytest.skip("MiniLocker is not available (run `git submodule update --init third_party/minilocker`)")
+    yield
+    _ml_path.reset_for_tests()
 
 
 @pytest.fixture

@@ -10,7 +10,7 @@ patch" in the same patch. Never tick a box for work that is not in the patch. Bo
 | [x] | P01 | Skeleton, tooling, CI | none |
 | [x] | P02 | Tool package spec and validation | P01 |
 | [x] | P03 | Registry: lifecycle, blobs, search | P02 |
-| [ ] | P04 | Sandbox seam and MiniLocker runner | P01 |
+| [x] | P04 | Sandbox seam and MiniLocker runner | P01 |
 | [ ] | P05 | Execution contract and `run` path | P02, P04 |
 | [ ] | P06 | Verification pipeline: gates G1 to G4 | P03, P05 |
 | [ ] | P07 | MCP server v1 | P03, P05, P06 |
@@ -34,8 +34,8 @@ Milestones (M0 to M7) and what can be dropped: `docs/guide/05-milestones.md`.
 
 ## Notes for the next patch
 
-Done: P01 (skeleton), P02 (package spec), P03 (registry). Next: P04 (sandbox seam; its only dependency, P01, is done). P05 needs P02 and
-P04, P06 needs P03 and P05. Decisions and interfaces that later patches must respect:
+Done: P01 (skeleton), P02 (package spec), P03 (registry), P04 (sandbox seam). Next: P05 (needs P02 and P04, both done). P06 needs P03 and
+P05. Decisions and interfaces that later patches must respect:
 
 * Language is Python 3.12. Do not propose another. Runtime pins: pydantic 2.14.3, pydantic-settings 2.16.3, jsonschema 4.26.0; dev:
   pytest 9.2.0, ruff 0.17.5 (line length 110, rules E4 E7 E9 F I). Build backend setuptools 84.2.1, src layout.
@@ -100,5 +100,22 @@ P04, P06 needs P03 and P05. Decisions and interfaces that later patches must res
 * `META_TOOLS` (P07) and `GATE_INFO` (P06) are the single sources for the tool list and the gate list.
 * The website repository URL needs no manual edit: P19 resolves it from `--repo-url`, `site.json`, `GITHUB_REPOSITORY` or the
   git `origin` remote. Create the GitHub repository and add the remote before the first `--release` build.
-* MiniLocker's pinned commit and signatures are unverified. P04 reads the source first and records differences in
-  `docs/guide/DEVIATIONS.md` (it now exists; P02 wrote the first entries).
+* P04 interfaces. `toolforge.sandbox`: `SandboxSpec` (validates itself), `RunOutput`, `AuditSummary`, the `SandboxRunner` / `SandboxHandle`
+  protocols, `FakeRunner(script, available=, hardening=, measured=)` (records `.opened` and `.handles`, never runs code) and, loaded lazily,
+  `MiniLockerRunner(settings=, pool=)` and `EgressPool`. `open` raises `SandboxUnavailable` (Docker, image, submodule or decoys missing) and
+  `put` / `run` / `freeze` / `thaw` raise `SandboxError`; call `runner.shutdown()` once when a process is done with sandboxes. `put` only
+  writes under `/workspace` and `/tmp`; a relative path resolves under `/workspace`. `toolforge.ledger.ToolforgeLedger(path, task_id)`
+  (`append`, `events`, `verify`), `toolforge.textsafety` (`sanitize`, `scan`, `fence`, `using_minilocker`).
+* P04 tests. The `minilocker` fixture in `tests/conftest.py` skips a test unless the real MiniLocker imports. The import boundary lives in
+  `tests/test_import_boundary.py` (`ALLOWED_IMPORTERS`; `LAZY_ONLY_ROOTS` covers `minilocker`, `docker`, `requests`, imported only inside
+  functions): P08 and P14 extend it in their own patch with a dated line in `DEVIATIONS.md`. Do not name a unit test `test_minilocker_runner.py`
+  (it would clash with the one in `tests/docker/`, there is no `__init__.py`).
+* P04 doctor. Checks are `Check(name, required, fn)` entries in `cli_doctor.CHECKS`; add yours to that list (P10: the "challenger model equals
+  builder model" warning; P13: make `--clean` also remove session containers). A check that raises is shown as FAIL, an optional check that
+  fails is shown as a warning, and doctor never starts a container or pulls an image.
+* P04 known limits (also in `03-minilocker-integration.md`): one global egress allowlist that only grows; two ToolForge processes on one
+  Docker daemon share the proxy container name; egress is read after `run` returns, and an unreadable proxy logs `forge.egress.unobserved`.
+* P04, not run: the 16 `docker`-marked tests in `tests/docker/test_minilocker_runner.py` and `toolforge doctor` against a real daemon, because
+  no Docker daemon was available where the patch was written. Run `pytest -m docker tests/docker -q` first and fix what it shows.
+* P04 CI: the checkout step now fetches submodules and installs `.[dev,sandbox]`, so the MiniLocker tests run rather than skip.
+* P05: the runner passes `extra_env` to the box as given; keep real secrets out of `SandboxSpec.env` (brokered placeholders only, P09).

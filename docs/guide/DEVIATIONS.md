@@ -2,6 +2,28 @@
 
 Where reality differed from the guide, newest first: what the guide said, what is true, what was done.
 
+* 2026-11-20 (P04): the guide's CI runs `pip install -e ".[dev]"` and checks out without submodules, so every test that needs MiniLocker
+  (the `minilocker` fixture) would skip silently. P04 sets `submodules: true` on the checkout step and installs `.[dev,sandbox]`
+  (`sandbox` is a new optional extra: `docker==7.2.0`). The `docker`-marked tests still need a daemon and are not run in CI.
+* 2026-11-20 (P04): the guide wraps MiniLocker's `Ledger` as `ToolforgeLedger(path, task_id)`; the real class is `Ledger(task_id, path=None)`
+  and does not create the parent directory, does not fsync and raises a bare `json` error on a damaged file. `ToolforgeLedger` adds the
+  `mkdir`, an `fsync` after each append under a lock, and `LedgerError`. `events` returns a copy, and `SandboxHandle.events()` returns a deep
+  copy, so a caller cannot alter the chain in memory.
+* 2026-11-20 (P04): the guide says `textsafety.fence` wraps MiniLocker's. Its `fence` header reads "UNTRUSTED WEB CONTENT", untrue for tool output,
+  so `fence` is local in every case (same `<<<BEGIN UNTRUSTED nonce>>>` shape, random 16-hex nonce, body and label defanged). `sanitize` and
+  `scan` use MiniLocker's `policy.injection` when importable; the fallback `scan` returns `measured: false` and no score.
+* 2026-11-20 (P04): the guide's `Watch.after_tool(box, tool, result, log)` is `after_tool(box, tool, result, log, probe=False)` in the source. The
+  runner passes `probe=True` and the complete output text (not a short rendering), so a decoy beyond the first few hundred characters is
+  still noticed. `Sandbox` also needs `supports_measure`; a box without it makes `Watch` inert, so the runner refuses `decoys=True` for
+  such a box instead of running without decoys.
+* 2026-11-20 (P04): the guide says the submodule is added with the three commands under "Adding the submodule". They were run as written
+  (URL `https://github.com/shaikh-dotcom/MiniLocker.git`, pin `0e76295a986292cdb07795d6efc1570f9d0c1acb`); the patch carries the gitlink and
+  `.gitmodules`. A person who applies it with `git am` then runs `git submodule update --init third_party/minilocker`.
+* 2026-11-20 (P04): scope additions the guide does not list: `SandboxError` and `LedgerError` in `errors.py`, `src/toolforge/cli_doctor.py` (the
+  checks live in their own module, registered through `cli.REGISTRARS` like the other commands), the `sandbox` extra in `pyproject.toml`, the
+  `minilocker` fixture in `tests/conftest.py`, and `tests/test_runner_with_stand_in.py` (the runner's unit tests with a stand-in box, since
+  `tests/docker/` needs a daemon). The `docker`-marked tests could not be run where the patch was written.
+
 * 2026-11-19 (P03): the guide's scope lists `registry/{db,store,lifecycle,search}.py` and the CLI. P03 also adds
   `registry/__init__.py` (the `Registry` class that wires the four together and holds the version, gate-result and approval storage,
   so callers have one object to open) and `src/toolforge/cli_registry.py` (the two commands, registered through `cli.REGISTRARS` like
