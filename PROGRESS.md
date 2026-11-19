@@ -9,7 +9,7 @@ patch" in the same patch. Never tick a box for work that is not in the patch. Bo
 | --- | --- | --- | --- |
 | [x] | P01 | Skeleton, tooling, CI | none |
 | [x] | P02 | Tool package spec and validation | P01 |
-| [ ] | P03 | Registry: lifecycle, blobs, search | P02 |
+| [x] | P03 | Registry: lifecycle, blobs, search | P02 |
 | [ ] | P04 | Sandbox seam and MiniLocker runner | P01 |
 | [ ] | P05 | Execution contract and `run` path | P02, P04 |
 | [ ] | P06 | Verification pipeline: gates G1 to G4 | P03, P05 |
@@ -34,8 +34,8 @@ Milestones (M0 to M7) and what can be dropped: `docs/guide/05-milestones.md`.
 
 ## Notes for the next patch
 
-Done: P01 (skeleton), P02 (package spec). Next: P03 (registry) or P04 (sandbox seam); both depend only on done patches. Decisions and
-interfaces that later patches must respect:
+Done: P01 (skeleton), P02 (package spec), P03 (registry). Next: P04 (sandbox seam; its only dependency, P01, is done). P05 needs P02 and
+P04, P06 needs P03 and P05. Decisions and interfaces that later patches must respect:
 
 * Language is Python 3.12. Do not propose another. Runtime pins: pydantic 2.14.3, pydantic-settings 2.16.3, jsonschema 4.26.0; dev:
   pytest 9.2.0, ruff 0.17.5 (line length 110, rules E4 E7 E9 F I). Build backend setuptools 84.2.1, src layout.
@@ -47,7 +47,9 @@ interfaces that later patches must respect:
   `handler` with `set_defaults`. `ToolForgeError` raised by a handler prints `error [code]: message` and `hint:` and exits 1.
 * `tests/conftest.py`: `docker`, `llm` and `attacks` tests skip themselves; an autouse fixture removes `TOOLFORGE_*` variables and
   changes directory to `tests/` so no stray `.env` is read; `tmp_home` gives a throwaway data directory. P02 added `settings`,
-  `make_payload` (a fresh valid submission dict) and `inline_schema_check` (skips the schema-check subprocess for speed).
+  `make_payload` (a fresh valid submission dict) and `inline_schema_check` (skips the schema-check subprocess for speed). P03 added
+  `registry` (a `Registry` in a temp dir), `make_package(name, version, network=, secrets=, ...)` and `activate(record)` (walks a version
+  to `active`).
 * P02 interfaces. `toolforge.models.package`: `ToolPackage` (`from_dir`, `from_submission`, `validate(settings)`, `manifest`, `to_tar()`,
   `code_sha`, `to_dir`), `Manifest`, `ISSUE_CODES` (the one catalogue of issue codes, severity, rule and hint; `package-format.md` embeds
   it and a drift test checks it) and `name_problem`. `toolforge.models.results`: `Issue(path, code, message, hint)` and
@@ -67,6 +69,27 @@ interfaces that later patches must respect:
 * P06: `toolforge new` scaffolds `tests/test_tool.py` with three tests that fail against a `None`-returning stub (checked in
   `tests/test_cli_package.py`); the reference packs have five tests each. The two example packs were checked by hand to return exactly
   their manifest example outputs; no test runs package code on the host, so P06 (in a sandbox) is the first automated check of that.
+* P03 interfaces. `from toolforge.registry import Registry`; `Registry(home)` or `Registry.from_settings(settings)`, a context manager.
+  Versions: `add_version(package, created_by=)` (status `submitted`; the package must already be valid; `version_exists` on a repeat),
+  `get_version`, `find_version`, `list_versions(name=, status=)`, `active_version`, `list_tools`, `get_tool`. State changes only through
+  `transition(version_id, to, actor=, reason=)`, which returns the ledger event (the registry never writes ledgers; `event["related"]`
+  holds the `forge.deprecated` events of versions displaced by a promotion, which belong in their own ledgers). Also `search(query,
+  limit)`, `record_call(...)`, `stats(id | "name@version" | "name")`, `record_gate(...)` / `gate_results`, and approval storage
+  (`add_approval`, `decide_approval`, `list_approvals`; statuses `pending`, `approved`, `denied`). `registry.blobs` is the blob store.
+  Migrations: append a `Migration` to `registry.db.MIGRATIONS` (P12 and P13 do); never edit one. `lifecycle.EDGES` is the one state
+  machine (events, operator-only, reason, network/secrets rules); `docs/registry.md` embeds a table made from it.
+* P03 rules the callers must follow. Pass `actor="operator"` for promote, approve, release and rollback, and a reason for the last three
+  and for promote; no other actor is accepted, so the pipeline and any server code must use another name (`pipeline`, `builder`,
+  `timeout`). `verified` and `verified_basic` versions that declare network or secrets can only go `pending_approval -> active`.
+* P06: G2 stores the blob with `registry.blobs.put(...)` then `registry.attach_blob(version_id, sha)` (allowed once, only while the
+  version is `submitted` or `verifying`). With no `requirements` the blob is `package.to_tar()`, so `blob_sha == code_sha`. Gate detail
+  over 64 KB is replaced by a size marker; keep details small and sanitised.
+* P07/P09: keep `Registry.transition`, `decide_approval` and `attach_blob` out of the MCP server; P09 adds the `ast` test. The registry
+  cannot authenticate the "operator" string. A registry never records who made past moves: the ledger does, so append every event.
+* P12: search ranking is `search.search`/`BM25_WEIGHTS`; `Hit` has name, version, description, score, status, uses, success_rate. Without
+  FTS5 the fallback scores between 0 and 1 and is not comparable with bm25. Success rate is over the last 50 calls, `None` under 5.
+* Not run in P03: nothing needing Docker or an LLM exists yet. The registry tests need FTS5 (present in this SQLite build, checked); the
+  fallback is tested by simulation.
 * CI actions are pinned by commit SHA (checkout v7.0.1, setup-python v7.1.0, looked up on 2026-11-19).
 * A tool reaches `active` before P09/P10 exist only through `toolforge promote` (P07). There is no other path.
 * `verified_basic` with network or secrets goes to `pending_approval` (P09), never through `promote`. `release` and manual

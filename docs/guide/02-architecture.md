@@ -93,8 +93,8 @@ The code keeps this list once, as `GATE_INFO` (P06). Docs and the site read it.
 
 ## Event catalogue (extend in each patch)
 
-`forge.submitted`, `forge.gate.started`, `forge.gate.passed`, `forge.gate.failed`, `forge.gate.skipped`,
-`forge.verified`, `forge.approval.requested`, `forge.approval.granted`, `forge.approval.denied`, `forge.promoted`,
+`forge.submitted`, `forge.verifying`, `forge.gate.started`, `forge.gate.passed`, `forge.gate.failed`, `forge.gate.skipped`,
+`forge.verified`, `forge.rejected`, `forge.approval.requested`, `forge.approval.granted`, `forge.approval.denied`, `forge.promoted`,
 `forge.deprecated`, `forge.quarantined`, `forge.released`, `forge.call.started`, `forge.call.finished`,
 `forge.build.finished`, `forge.session.opened`, `forge.session.step`, `forge.session.rewound`, `forge.session.closed`,
 `forge.repaired`, `forge.rolled_back`. MiniLocker-native events from `Watch` and the sandbox are kept as is.

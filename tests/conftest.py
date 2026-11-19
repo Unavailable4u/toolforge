@@ -15,6 +15,8 @@ from pathlib import Path
 import pytest
 
 from toolforge.config import Settings
+from toolforge.models.package import ToolPackage
+from toolforge.registry import Registry, VersionRecord
 
 
 @lru_cache(maxsize=1)
@@ -107,3 +109,64 @@ def inline_schema_check(monkeypatch: pytest.MonkeyPatch) -> None:
     from toolforge.models import package
 
     monkeypatch.setattr(package, "SCHEMA_CHECK_ISOLATED", False)
+
+
+# --- Registry (P03) --------------------------------------------------------------------------------------------------
+
+
+@pytest.fixture
+def registry(tmp_path: Path) -> Iterator[Registry]:
+    """A registry in a throwaway data directory."""
+    with Registry(tmp_path / "registry-home") as reg:
+        yield reg
+
+
+@pytest.fixture
+def make_package() -> Callable[..., ToolPackage]:
+    """Build a package (not validated against settings; the registry only needs a parsable manifest) with changes applied.
+
+    `make_package("pdf_text", "1.2.0", description="...", network=["api.example.com"])`. The code differs per name and
+    version, so two packages never share a `code_sha` by accident.
+    """
+
+    def build(
+        name: str = "word_count",
+        version: str = "1.0.0",
+        *,
+        description: str | None = None,
+        when_to_use: str | None = None,
+        network: tuple[str, ...] | list[str] = (),
+        secrets: tuple[str, ...] | list[str] = (),
+        examples: list[dict] | None = None,
+        parent_version: str | None = None,
+    ) -> ToolPackage:
+        manifest = copy.deepcopy(BASE_MANIFEST)
+        manifest.update(name=name, version=version, parent_version=parent_version)
+        if description is not None:
+            manifest["description"] = description
+        if when_to_use is not None:
+            manifest["when_to_use"] = when_to_use
+        if examples is not None:
+            manifest["examples"] = examples
+        manifest["permissions"]["network"] = list(network)
+        manifest["permissions"]["secrets"] = list(secrets)
+        files = dict(BASE_FILES)
+        files["tool.py"] += f"# {name} {version}\n"
+        return ToolPackage(manifest, files)
+
+    return build
+
+
+@pytest.fixture
+def activate(registry: Registry) -> Callable[[VersionRecord], VersionRecord]:
+    """Walk a registered version through the pipeline to `verified` and on to `active`, as the pipeline and operator would."""
+
+    def run(record: VersionRecord) -> VersionRecord:
+        registry.transition(record.id, "verifying", actor="pipeline")
+        registry.transition(record.id, "verified", actor="pipeline")
+        registry.transition(record.id, "active", actor="pipeline")
+        found = registry.get_version(record.id)
+        assert found is not None
+        return found
+
+    return run
