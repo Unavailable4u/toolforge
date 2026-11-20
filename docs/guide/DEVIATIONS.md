@@ -2,6 +2,27 @@
 
 Where reality differed from the guide, newest first: what the guide said, what is true, what was done.
 
+* 2026-11-20 (P05): the guide puts the runner in `src/toolforge/core/runner.py` and lists `core/` (forge, approvals, sessions, repair,
+  builder) in the architecture. P05 puts it in `src/toolforge/services/runner.py` (`services/__init__.py` says why: these modules sit
+  between the MCP server and the registry) and `02-architecture.md` now lists `services/`. The patch files P06 to P13 still say
+  `core/`; read that as `services/`.
+* 2026-11-20 (P05): the guide says the harness sets `PYTHONHASHSEED=0` and adds `/workspace/.tf` to `sys.path`. The hash seed cannot be
+  changed once Python runs, so the harness re-executes itself once with the variable set (and `-B`); `.tf` is already on the path
+  because it is the script's own folder. The harness loads `toolforge_sdk`, `json`, `traceback` and the encodings before the package's
+  folders go on the path, so a package that ships its own `json.py` or `toolforge_sdk.py` cannot replace them.
+* 2026-11-20 (P05): the guide says the harness is "a string constant plus a copy under `assets/`". `sandbox/harness.py` holds the
+  constant (`HARNESS_SOURCE`, a raw triple single quoted string) and the host-side constants (paths, markers, error types);
+  `sandbox/assets/harness.py` is the copy, and `tests/test_harness.py::test_the_asset_copy_equals_the_constant` fails when they differ.
+* 2026-11-20 (P05): the guide allows running `harness.py` on the host only for fixtures in `tests/fixtures/trusted_tools/`.
+  `tests/test_run_path_local.py` also runs the two reference packs in `examples/toolpacks` through `ToolRunner` and the real harness
+  with a stand-in sandbox, because that is code of ours and it is the only automated check, before P06, that both packs return exactly
+  their manifest examples (they do). It never runs a generated or submitted package.
+* 2026-11-20 (P05): the open question about `csv_summary` and relative paths is settled: the harness's working directory is
+  `/workspace`, so `inputs/data.csv` resolves as given and `input_path` accepts the same string. The pack is unchanged.
+* 2026-11-20 (P05): scope additions the guide does not list: `ToolNotRunnable` in `errors.py`, `CallError` next to `CallResult` in
+  `models/results.py`, `src/toolforge/cli_run.py` (registered through `cli.REGISTRARS`, like the other commands),
+  `tests/test_sdk.py`, `tests/test_cli_run.py` and `tests/test_run_path_local.py`. The Docker tests in `tests/docker/test_run_path.py`
+  and the `toolforge run --dev-unverified` acceptance command could not be run where the patch was written (no Docker daemon).
 * 2026-11-20 (P04): the guide's CI runs `pip install -e ".[dev]"` and checks out without submodules, so every test that needs MiniLocker
   (the `minilocker` fixture) would skip silently. P04 sets `submodules: true` on the checkout step and installs `.[dev,sandbox]`
   (`sandbox` is a new optional extra: `docker==7.2.0`). The `docker`-marked tests still need a daemon and are not run in CI.

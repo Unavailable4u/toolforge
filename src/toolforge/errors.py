@@ -40,6 +40,16 @@ class SandboxError(ToolForgeError):
     code = "sandbox_error"
 
 
+class ToolNotRunnable(ToolForgeError):
+    """A tool version cannot be called: wrong status, a session tool, no frozen package, or a package that cannot be unpacked.
+
+    This is for the operator or the pipeline, not for a tool's author: a bad argument or a bad file is a failed `CallResult`
+    instead, because the tool is not at fault.
+    """
+
+    code = "tool_not_runnable"
+
+
 class LedgerError(ToolForgeError):
     code = "ledger_error"
 

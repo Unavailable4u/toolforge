@@ -99,6 +99,15 @@ The code keeps this list once, as `GATE_INFO` (P06). Docs and the site read it.
 `forge.build.finished`, `forge.session.opened`, `forge.session.step`, `forge.session.rewound`, `forge.session.closed`,
 `forge.repaired`, `forge.rolled_back`. MiniLocker-native events from `Watch` and the sandbox are kept as is.
 
+### Call events (P05)
+
+Each call writes `forge.call.started` before its sandbox exists and `forge.call.finished` after it is gone, to
+`ledgers/<tool>@<version>/<call-id>.jsonl` (`ledgers/_dev/...` for `--dev-unverified`); the sandbox's own events go to the same chain
+while it is open. `started` carries the call id, tool label, `code_sha`, the SHA-256 and size of the arguments, the number and size
+of files, the limits and the network rule. `finished` carries `ok`, the error type, the host-measured `duration_ms`, `truncated`,
+`sandbox_timed_out`, `result_bytes` and the audit summary (`cleanup_ok`, `egress_attempts`, `decoy_events`). Argument values, file
+names, results and output text never enter the ledger. A call that cannot write `started` does not run.
+
 ## Directory layout at the end
 
 ```
@@ -106,9 +115,10 @@ src/toolforge/
   __init__.py  cli.py  config.py  errors.py
   models/       package.py  results.py  events.py
   registry/     db.py  store.py  search.py  lifecycle.py
-  sandbox/      base.py  fake.py  minilocker_runner.py  harness.py  images.py
+  sandbox/      base.py  fake.py  minilocker_runner.py  harness.py  assets/harness.py  images.py
+  sdk.py        (written into every sandbox as toolforge_sdk.py)
   verify/       pipeline.py  g1_static.py  g2_build.py  g3_selftest.py  g4_fuzz.py  g5_challenger.py  g6_containment.py
-  core/         forge.py  runner.py  approvals.py  sessions.py  repair.py  builder.py
+  services/     runner.py  forge.py  approvals.py  sessions.py  repair.py  builder.py
   llm/          client.py  prompts/
   server/       app.py  tools.py  fences.py
   report/       blast_radius.py

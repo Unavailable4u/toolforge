@@ -11,7 +11,7 @@ patch" in the same patch. Never tick a box for work that is not in the patch. Bo
 | [x] | P02 | Tool package spec and validation | P01 |
 | [x] | P03 | Registry: lifecycle, blobs, search | P02 |
 | [x] | P04 | Sandbox seam and MiniLocker runner | P01 |
-| [ ] | P05 | Execution contract and `run` path | P02, P04 |
+| [x] | P05 | Execution contract and `run` path | P02, P04 |
 | [ ] | P06 | Verification pipeline: gates G1 to G4 | P03, P05 |
 | [ ] | P07 | MCP server v1 | P03, P05, P06 |
 | [ ] | P08 | Containment gate G6 and Blast Radius per tool | P06 |
@@ -34,8 +34,8 @@ Milestones (M0 to M7) and what can be dropped: `docs/guide/05-milestones.md`.
 
 ## Notes for the next patch
 
-Done: P01 (skeleton), P02 (package spec), P03 (registry), P04 (sandbox seam). Next: P05 (needs P02 and P04, both done). P06 needs P03 and
-P05. Decisions and interfaces that later patches must respect:
+Done: P01 (skeleton), P02 (package spec), P03 (registry), P04 (sandbox seam), P05 (execution contract and `run`). Next: P06 (needs P03 and
+P05, both done). P07 needs P03, P05 and P06. Decisions and interfaces that later patches must respect:
 
 * Language is Python 3.12. Do not propose another. Runtime pins: pydantic 2.14.3, pydantic-settings 2.16.3, jsonschema 4.26.0; dev:
   pytest 9.2.0, ruff 0.17.5 (line length 110, rules E4 E7 E9 F I). Build backend setuptools 84.2.1, src layout.
@@ -62,13 +62,12 @@ P05. Decisions and interfaces that later patches must respect:
   call `validate` first. `code_sha` of the same content is pinned by a golden-value test: changing the archive format changes every hash.
 * `validate` reports at most 100 errors and 100 warnings, and when a package has more than 40 files it reports only `files.too_many`
   (it does not look inside). Warnings are produced only once the manifest is valid.
-* P05: the reference pack `examples/toolpacks/csv_summary` opens `args["path"]` as given (its manifest example passes
-  `inputs/data.csv`) and falls back to a local `ToolError` when `toolforge_sdk` is absent. Decide where relative paths resolve in the
-  sandbox (the package's working directory must make `inputs/data.csv` resolve to `/workspace/inputs/data.csv`, or switch the pack to
-  `input_path`) and keep both packs passing. P05's docs addition belongs in `package-format.md`, section "Not built yet".
+* P05 settled the reference-pack question: the harness's working directory is `/workspace`, so `inputs/data.csv` resolves as given and
+  `toolforge_sdk.input_path` accepts the same string; both packs are unchanged. `tests/test_run_path_local.py` runs both through
+  `ToolRunner` and the real harness (stand-in sandbox, our own code only) and they return exactly their manifest examples.
 * P06: `toolforge new` scaffolds `tests/test_tool.py` with three tests that fail against a `None`-returning stub (checked in
-  `tests/test_cli_package.py`); the reference packs have five tests each. The two example packs were checked by hand to return exactly
-  their manifest example outputs; no test runs package code on the host, so P06 (in a sandbox) is the first automated check of that.
+  `tests/test_cli_package.py`); the reference packs have five tests each. Both example packs return exactly their manifest example outputs (checked by
+  `tests/test_run_path_local.py`); P06 still has to check them inside a sandbox with the real gates.
 * P03 interfaces. `from toolforge.registry import Registry`; `Registry(home)` or `Registry.from_settings(settings)`, a context manager.
   Versions: `add_version(package, created_by=)` (status `submitted`; the package must already be valid; `version_exists` on a repeat),
   `get_version`, `find_version`, `list_versions(name=, status=)`, `active_version`, `list_tools`, `get_tool`. State changes only through
@@ -119,3 +118,24 @@ P05. Decisions and interfaces that later patches must respect:
   because of a wrong assertion in the test itself (decoy ids such as `aws_secret` contain "secret"), fixed in `fix-p04-decoy-test.patch`.
 * P04 CI: the checkout step now fetches submodules and installs `.[dev,sandbox]`, so the MiniLocker tests run rather than skip.
 * P05: the runner passes `extra_env` to the box as given; keep real secrets out of `SandboxSpec.env` (brokered placeholders only, P09).
+* P05 interfaces. `toolforge.services.runner`: `ToolRunner(runner, registry, settings, ledger_factory, clock=, new_id=)` with
+  `run(name | name@version | VersionRecord, args, files=, session_id=, allow_status=("active",)) -> CallResult` and
+  `run_unverified(package, args, files=)`; also `parse_envelope`, `repack_blob`, `Envelope`, `RegistryLike`, `LedgerLike`. Unknown tool or
+  version raises `RegistryError`; a wrong status, a session tool, a missing or unusable blob and an invalid package raise
+  `ToolNotRunnable` (codes `status_not_allowed`, `no_active_version`, `session_not_built`, `no_blob`, `blob_unusable`, `package_invalid`,
+  `no_registry`). Bad arguments or files are a failed `CallResult` (`InvalidArguments`, `InvalidFiles`), never an exception, and write
+  nothing. P06 must pass `allow_status=("submitted", "verifying", ...)` for versions that are not active yet, and `files={"inputs/<name>": bytes}`.
+  `toolforge.models.results`: `CallResult`, `CallError` (host-only types `Timeout`, `SandboxCrashed`, `NoResult`; harness types
+  `ToolError`, `Crash`, `NotJson`, `OutputTooLarge`). The sandbox spec uses `network="none"` for every call until P09, and `limits`
+  come from the manifest, else `Settings.default_timeout_s` / `default_memory_mb` / 64 KB. Only a `ToolError` is not counted against a
+  tool's statistics; everything else that failed in the tool or the sandbox is.
+* P05 harness contract (docs/guide/package-format.md, "How a tool runs"). `toolforge.sandbox.harness` holds `HARNESS_SOURCE`, the paths
+  (`HARNESS_PATH`, `SDK_PATH`, `REQUEST_PATH`, `INPUTS_PREFIX`), `start_marker`/`end_marker` and `ENVELOPE_ERROR_TYPES`. Edit
+  `sandbox/assets/harness.py` and paste the result into the constant; a test checks they are equal. P06 extends the harness with
+  `--tests`, `--batch` and `--stub` in both copies. The harness works out its workspace from its own location, so it can run from a
+  temporary folder in tests. `tests/test_harness.py` runs it only on `tests/fixtures/trusted_tools/`.
+* P05 not run: the `docker` tests in `tests/docker/test_run_path.py` and `toolforge run --package examples/toolpacks/word_count --args
+  '{"text": "a b c"}' --dev-unverified` (no Docker daemon where the patch was written). Known limits: `output_path` files are discarded
+  (P14); the runner records `egress_attempts` and `decoy_events` counts in the ledger but nothing acts on them until P08; a result is
+  held in memory up to `limits.output_kb * 6 + 128 KB` of stdout before it is cut.
+* P05 housekeeping: the guide's `core/` is `services/` in the code (see `DEVIATIONS.md`); P06 to P13 should put their modules there.

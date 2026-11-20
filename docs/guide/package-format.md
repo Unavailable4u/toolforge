@@ -152,6 +152,83 @@ The `code` of an issue is stable and safe to match on. This table is generated f
 | `examples.no_output` | warning | At least one example gives an expected `output`. |
 <!-- issue-codes:end -->
 
+## How a tool runs
+
+`toolforge run` and every later caller (the MCP server, the verification gates) run a tool the same way: in a fresh sandbox, one call
+per sandbox, with no network. Your tool never sees anything from another call.
+
+### What a tool looks like
+
+```python
+# tool.py
+from toolforge_sdk import ToolError
+
+def run(args: dict) -> object:
+    """Return any JSON value. Raise ToolError(message) for a failure the caller can fix."""
+```
+
+`run` receives the caller's arguments, already checked against `input_schema`, and returns a JSON value: dicts, lists, text,
+numbers, booleans or `None`. NaN, infinity, text that is not valid Unicode, a set or an object that is not JSON is `NotJson`; a result
+larger than `limits.output_kb` is `OutputTooLarge`. `ToolError` is a handled failure that does not count against the tool; any other
+exception, including `SystemExit`, is a `Crash` and does. Anything printed is captured, not returned: only the last 2000 characters of
+stdout and of stderr reach the caller.
+
+### The `toolforge_sdk` helpers
+
+`toolforge_sdk` is written next to the harness and needs no installation; it is standard library only.
+
+| Name | What it does |
+| --- | --- |
+| `ToolError(message)` | A handled failure. The message goes to the caller, so say what to change. |
+| `input_path(name)` | The path of a file the caller provided, under `/workspace/inputs/`. `name` is relative to that folder, and one leading `inputs/` is accepted, so the `path` argument a caller sent (`inputs/data.csv`) works as given. Raises `ToolError` listing the files that were provided when there is no such file. |
+| `output_path(name)` | `/workspace/outputs/<name>`, with its folders created. Files written there are discarded with the sandbox: delivering them to the caller is patch P14. Return results through `run`. |
+
+### What is in the sandbox
+
+```
+/workspace/
+  pkg/            your package (tool.py, tests/, and .deps/ when it has requirements)
+  inputs/         the caller's files, only when permissions.inputs is true: inputs/<name>
+  .tf/            harness.py, in.json, toolforge_sdk.py (written by the host; not yours)
+```
+
+The harness starts with `/workspace` as its working directory, so a relative path such as `inputs/data.csv` opens
+`/workspace/inputs/data.csv` and `open(args["path"])` works. `/workspace/pkg` and `/workspace/pkg/.deps` are first on `sys.path`, but a
+package cannot replace the standard library or `toolforge_sdk`: both are loaded before your folders are added. `PYTHONHASHSEED` is `0`
+and bytecode is not written, so a tool that returns `list(some_set)` answers the same way every time.
+
+Limits: the wall-clock timeout is `limits.timeout_s` (the setting default when unset) plus a 3 second grace; memory is
+`limits.memory_mb`, enforced by the container; one file may not exceed 32 MB; a call may attach at most 20 files and 1 MB in total.
+The caller never sees host paths or Docker detail.
+
+### What comes back
+
+The harness prints one line, `<<TF:<nonce>>>{json}<<TF-END:<nonce>>>`, on the real stdout; the nonce is random per call, `<` and `>` are
+escaped inside the JSON, and the host reads only the last envelope that carries its nonce, with a strict shape, a second size check,
+and every text field stripped of control characters and clipped. A tool can forge an envelope, but that only lets it report a
+different result for itself, which it could return honestly. The host measures `duration_ms` itself and decides timeouts and kills
+by what it observed, never by what the envelope says.
+
+| `error.type` | Decided by | Meaning |
+| --- | --- | --- |
+| `InvalidArguments`, `InvalidFiles` | host, before any sandbox | The caller's arguments or files are wrong. Nothing ran; the tool is not blamed. |
+| `ToolError` | harness | The tool refused on purpose. Not counted against the tool. |
+| `Crash` | harness | The tool raised, or the entrypoint could not be loaded. Counted against the tool. |
+| `NotJson`, `OutputTooLarge` | harness (checked again by host) | The result cannot be returned. |
+| `Timeout` | host | The tool did not finish in time and the sandbox was stopped. |
+| `SandboxCrashed` | host | The sandbox or the process was killed from outside (memory is the usual cause). |
+| `NoResult` | host | The process ended without an envelope (for example `os._exit`). |
+
+### Running one yourself
+
+```
+toolforge run <name or name@version> --args '{...}' [--file path ...]        # an active, registered version
+toolforge run --package <dir> --args '{...}' --dev-unverified [--file ...]    # a folder, with no gate having run
+```
+
+Each `--file` appears as `inputs/<file name>`. The result prints as JSON (ASCII only) and the exit code is 0 when the call succeeded.
+`--dev-unverified` still runs only inside a sandbox, prints a warning, and records nothing in the registry. Both need Docker.
+
 ## What the package hash means
 
 `code_sha` is the SHA-256 of a deterministic archive of the package: files sorted by name, modification time 0, owner 0, mode
@@ -181,6 +258,6 @@ that fan out) can otherwise keep the checker busy for hours; if it cannot finish
 
 These parts of the format are described in the guide but are not implemented, so nothing above depends on them:
 
-* The sandbox contract (what `run` receives and may return, the `toolforge_sdk` helpers, where caller files appear): patch P05.
 * Running your tests, the stand-in test-strength check, building `requirements`, and schema fuzzing: patch P06.
-* Sessions (`kind: session`): patch P13. The browser permission: patch P14.
+* Sessions (`kind: session`): patch P13.
+* The browser permission, and delivering the files a tool writes with `output_path`: patch P14.
