@@ -125,7 +125,7 @@ def test_the_ledger_of_a_call_is_one_valid_chain_with_both_sides_in_it(
     ledger = ToolforgeLedger(path, result.call_id)
     ok, why = ledger.verify()
     assert ok, why
-    types = [event["type"] for event in ledger.events()]
+    types = [event["type"] for event in ledger.events]
     assert types[0] == "forge.call.started" and types[-1] == "forge.call.finished"
     assert "probe_marker" not in path.read_text(encoding="utf-8")  # no argument or result value is recorded
     assert json.loads(path.read_text(encoding="utf-8").splitlines()[0])  # one JSON object per line

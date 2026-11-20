@@ -139,3 +139,7 @@ P05, both done). P07 needs P03, P05 and P06. Decisions and interfaces that later
   (P14); the runner records `egress_attempts` and `decoy_events` counts in the ledger but nothing acts on them until P08; a result is
   held in memory up to `limits.output_kb * 6 + 128 KB` of stdout before it is cut.
 * P05 housekeeping: the guide's `core/` is `services/` in the code (see `DEVIATIONS.md`); P06 to P13 should put their modules there.
+* Fix P05 (`fix-p05-ledger-events-test.patch`): `ToolforgeLedger.events` is a property, and the Docker ledger test called it. Run on a real
+  daemon (Docker, Python 3.14.4): the other five tests in `tests/docker/test_run_path.py` passed, and `toolforge run --package
+  examples/toolpacks/word_count --args '{"text": "a b c"}' --dev-unverified` printed `"ok": true` with the expected result in 354 ms. The
+  fixed test itself has not been run again where the fix was written (no daemon).
