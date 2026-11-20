@@ -143,3 +143,7 @@ P05, both done). P07 needs P03, P05 and P06. Decisions and interfaces that later
   daemon (Docker, Python 3.14.4): the other five tests in `tests/docker/test_run_path.py` passed, and `toolforge run --package
   examples/toolpacks/word_count --args '{"text": "a b c"}' --dev-unverified` printed `"ok": true` with the expected result in 354 ms. The
   fixed test itself has not been run again where the fix was written (no daemon).
+* Fix P05 (`fix-p05-ledger-forge-events-test.patch`): the same Docker test also asserted that `probe_marker` appears nowhere in the ledger
+  file. MiniLocker's own `sandbox.audit` event shares the chain and reports what the sandbox ended up with, so a file name the tool left
+  in `/workspace` can appear there. The test now checks what the guarantee is about: the `forge.*` events carry no tool value. Not run
+  again where the fix was written (no Docker daemon). Note for P08: the audit is where Blast Radius will read workspace changes from.

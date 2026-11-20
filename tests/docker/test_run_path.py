@@ -125,7 +125,13 @@ def test_the_ledger_of_a_call_is_one_valid_chain_with_both_sides_in_it(
     ledger = ToolforgeLedger(path, result.call_id)
     ok, why = ledger.verify()
     assert ok, why
-    types = [event["type"] for event in ledger.events]
+    events = ledger.events
+    types = [event["type"] for event in events]
     assert types[0] == "forge.call.started" and types[-1] == "forge.call.finished"
-    assert "probe_marker" not in path.read_text(encoding="utf-8")  # no argument or result value is recorded
-    assert json.loads(path.read_text(encoding="utf-8").splitlines()[0])  # one JSON object per line
+    # MiniLocker's own events share the chain; its audit may name the files a tool left in the workspace (probe_marker). What must
+    # never appear is a value of ours: the events ToolForge writes carry hashes, counts and labels only.
+    ours = json.dumps([event for event in events if str(event["type"]).startswith("forge.")])
+    assert "probe_marker" not in ours and "uid" not in ours and "found" not in ours
+    assert all(
+        json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()
+    )  # one JSON object per line
