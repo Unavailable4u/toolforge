@@ -18,6 +18,41 @@ from typing import Any
 from toolforge.errors import LedgerError
 from toolforge.sandbox import _ml_path
 
+OPERATOR_LEDGER = (
+    "operator.jsonl"  # per version: promote, quarantine, release (and the runtime tripwire's quarantine)
+)
+MAX_LEDGER_BYTES = 8 * 1024 * 1024  # a larger file is not read into memory for a report
+
+
+def version_ledger_dir(home: str | os.PathLike[str], label: str) -> Path:
+    """`$TOOLFORGE_HOME/ledgers/<tool>@<version>`: where one version's ledger files, and its stored report, live."""
+    return Path(home) / "ledgers" / label
+
+
+def read_ledger(path: str | os.PathLike[str]) -> tuple[list[dict], str | None]:
+    """`(events, problem)` for a ledger file. `problem` is None when every line parsed; a torn last line is ignored.
+
+    Reading never writes and never needs the sandbox. A missing file, a file over `MAX_LEDGER_BYTES` and an unparseable line in
+    the middle are returned as a problem (with the events read so far), never skipped silently.
+    """
+    chain = _ml_path.load("minilocker.ledger.chain")
+    try:
+        if os.path.getsize(path) > MAX_LEDGER_BYTES:
+            return [], f"the ledger file is larger than {MAX_LEDGER_BYTES // (1024 * 1024)} MB"
+        events, problem = chain.read_events(os.fspath(path))
+    except OSError as exc:
+        return [], f"the ledger file could not be read ({type(exc).__name__})"
+    return list(events), problem
+
+
+def verify_chain(events: list[dict]) -> tuple[bool, str]:
+    """`(ok, message)`: MiniLocker's `verify_events` on a list of events. An empty list does not verify anything."""
+    if not events:
+        return False, "no events"
+    chain = _ml_path.load("minilocker.ledger.chain")
+    ok, message = chain.verify_events(events)
+    return bool(ok), str(message)
+
 
 class ToolforgeLedger:
     """`ToolforgeLedger(path, task_id)`; `path=None` keeps the events in memory only (nothing is written)."""

@@ -413,3 +413,14 @@ def test_a_scripted_command_does_not_touch_the_host(tmp_path: Path) -> None:
     with FakeRunner([ok()]).open(spec()) as box:
         box.run(["sh", "-c", f"touch {marker}"], 5, 10)
     assert not marker.exists()
+
+
+def test_scripted_events_appear_in_every_handle_and_in_the_summary() -> None:
+    events = [("canary.seeded", {"items": [{"id": "c1", "label": "k"}]}), ("canary.read", {"item": "c1"})]
+    runner = FakeRunner(events=events)
+    for _ in range(2):
+        handle = runner.open(spec(label="t", decoys=True))
+        assert [e["type"] for e in handle.events()] == ["canary.seeded", "canary.read"]
+        summary = handle.close()
+        assert [e["type"] for e in summary.decoy_events] == ["canary.seeded", "canary.read"]
+    assert events[0][1]["items"][0]["id"] == "c1"  # the scripted payloads were copied, not shared

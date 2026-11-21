@@ -148,7 +148,33 @@ def check_run_args(argv: Any, timeout_s: Any, max_out: Any) -> list[str]:
 
 
 def split_events(events: Iterable[dict]) -> tuple[list[dict], list[dict]]:
-    """(decoy events, egress events) from a ledger event list: MiniLocker's native `canary.*` and `egress.*` names."""
+    """(decoy events, egress events) from a ledger event list: MiniLocker's native `canary.*` and `egress.*` names.
+
+    The decoy events include `canary.seeded`, which only says the decoys were planted. Most callers want `decoy_violations`.
+    """
     decoys = [copy.deepcopy(e) for e in events if str(e.get("type", "")).startswith("canary.")]
     egress = [copy.deepcopy(e) for e in events if str(e.get("type", "")).startswith("egress.")]
     return decoys, egress
+
+
+# What MiniLocker's `Watch` logs when something touched a planted decoy (trust/canary.py says what each means):
+#   read    a decoy file's access time moved          exposed  a decoy value was in what a command printed
+#   tripped a decoy value was used (for example as a host name)   copied  a decoy value was found in a file left behind
+# `canary.seeded` (planted) and `canary.unavailable` (could not plant) are not violations. This is the one definition: gate G6 and the
+# runtime tripwire both read it, so what fails verification is exactly what quarantines a tool that is already active.
+DECOY_VIOLATION_TYPES = ("canary.read", "canary.exposed", "canary.tripped", "canary.copied")
+DECOY_PLANTED_TYPE = "canary.seeded"
+
+
+def decoy_violations(events: Iterable[dict]) -> list[dict]:
+    """The events that say a decoy was touched, in order. Empty means none was seen, not that decoys were planted."""
+    return [copy.deepcopy(e) for e in events if e.get("type") in DECOY_VIOLATION_TYPES]
+
+
+def decoys_planted(events: Iterable[dict]) -> int:
+    """How many decoys the sandbox says it planted (0 when no `canary.seeded` event exists: then nothing was watched)."""
+    for event in events:
+        if event.get("type") == DECOY_PLANTED_TYPE:
+            items = (event.get("payload") or {}).get("items")
+            return len(items) if isinstance(items, list) else 0
+    return 0

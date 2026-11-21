@@ -142,6 +142,7 @@ class StandInRegistry:
         self.calls: list[tuple] = []
         self.record_error: Exception | None = None
         self.reads: list[int] = []
+        self.transitions: list[tuple] = []
 
     def add(self, record: VersionRecord) -> VersionRecord:
         self.records[record.id] = record
@@ -159,6 +160,22 @@ class StandInRegistry:
 
     def get_tool(self, name: str) -> Any:
         return next((r for r in self.records.values() if r.name == name), None)
+
+    def transition(
+        self, version_id: int, to: str, *, actor: str, reason: str | None = None
+    ) -> dict[str, Any]:
+        record = self.records[version_id]
+        if record.status != "active" or to != "quarantined":
+            raise RegistryError("illegal transition", code="bad_transition")
+        self.records[version_id] = replace(record, status=to)
+        self.transitions.append((version_id, to, actor, reason))
+        return {
+            "type": "forge.quarantined",
+            "version_id": version_id,
+            "actor": actor,
+            "reason": reason,
+            "related": [],
+        }
 
     def record_call(self, version_id, ok, duration_ms, error_class=None, session_id=None) -> None:  # type: ignore[no-untyped-def]
         if self.record_error is not None:
@@ -1237,3 +1254,95 @@ def test_run_unverified_refuses_a_session_tool(rig: Rig) -> None:
         pytest.skip("a session manifest is not valid until P13")
     with pytest.raises(ToolNotRunnable):
         rig.runner.run_unverified(package, {"text": "a"})
+
+
+# --- The tripwire: a decoy touched during a real call (P08) --------------------------------------------------------------
+
+DECOY_READ = ("canary.read", {"item": "c1", "label": "AWS access key", "path": "/home/tool/.aws/credentials"})
+
+
+def operator_events(rig: Rig) -> list[dict]:
+    return [e for e in rig.events if str(e["path"]).endswith("operator.jsonl")]
+
+
+def test_a_decoy_touched_during_a_call_fails_it_and_quarantines_the_version(rig: Rig) -> None:
+    rig.fake._events = [("canary.seeded", {"items": [{"id": "c1", "label": "AWS access key"}]}), DECOY_READ]
+    result = rig.run()
+    assert result.ok is False and result.error is not None
+    assert result.error.type == "PolicyViolation"
+    assert result.result is None
+    assert result.stdout_tail == "" and result.stderr_tail == ""
+    assert (
+        "/home/tool" not in result.error.message + result.error.hint
+    )  # no path from the sandbox is repeated
+    assert rig.registry.transitions == [(1, "quarantined", "forge", rig.registry.transitions[0][3])]
+    assert "call0001" in rig.registry.transitions[0][3]
+    assert rig.registry.records[1].status == "quarantined"
+    finished = next(e for e in rig.events if e["type"] == "forge.call.finished")["payload"]
+    assert finished["ok"] is False and finished["error_type"] == "PolicyViolation"
+    assert finished["decoy_violations"] == 1 and finished["quarantined"] is True
+    assert "violations" not in finished  # the raw events are not copied into the call ledger
+
+
+def test_the_quarantine_is_written_to_the_operators_ledger(rig: Rig) -> None:
+    rig.fake._events = [DECOY_READ]
+    rig.run()
+    (event,) = operator_events(rig)
+    assert event["path"] == str(rig.settings.home / "ledgers" / "word_count@1.0.0" / "operator.jsonl")
+    assert event["actor"] == "forge" and event["type"] == "forge.quarantined"
+    assert event["payload"]["call_id"] == "call0001"
+    assert event["payload"]["decoys"] == ["AWS access key"]
+    assert "related" not in event["payload"] and "type" not in event["payload"]
+
+
+def test_a_clean_call_is_not_quarantined_even_with_decoys_planted(rig: Rig) -> None:
+    rig.fake._events = [("canary.seeded", {"items": [{"id": "c1", "label": "AWS access key"}]})]
+    result = rig.run()
+    assert result.ok is True
+    assert rig.registry.transitions == [] and operator_events(rig) == []
+
+
+def test_an_operator_who_turned_decoys_off_gets_no_tripwire(rig: Rig) -> None:
+    rig.runner._settings = rig.settings.model_copy(update={"runtime_decoys": False})
+    rig.fake._events = [DECOY_READ]
+    result = rig.run()
+    assert result.ok is True
+    assert rig.registry.transitions == []
+    assert "violations" not in rig.events[-1]["payload"]
+
+
+def test_an_unverified_run_is_refused_but_nothing_is_transitioned(rig: Rig) -> None:
+    package = rig.package()
+    rig.fake._events = [DECOY_READ]
+    result = rig.runner.run_unverified(package, {"text": "a b"})
+    assert result.ok is False and result.error is not None and result.error.type == "PolicyViolation"
+    assert rig.registry.transitions == []
+    assert operator_events(rig) == []
+
+
+def test_a_failed_transition_still_refuses_the_call(rig: Rig) -> None:
+    def refuse(*args: Any, **kwargs: Any) -> dict:
+        raise RegistryError("no", code="bad_transition")
+
+    rig.registry.transition = refuse  # type: ignore[method-assign]
+    rig.fake._events = [DECOY_READ]
+    result = rig.run()
+    assert result.ok is False and result.error is not None and result.error.type == "PolicyViolation"
+    assert rig.events[-1]["payload"]["quarantined"] is False
+    assert operator_events(rig) == []
+
+
+def test_losing_the_operator_ledger_line_does_not_undo_the_quarantine(rig: Rig) -> None:
+    rig.ledger_fail = "forge.quarantined"
+    rig.fake._events = [DECOY_READ]
+    result = rig.run()
+    assert result.ok is False and result.error is not None and result.error.type == "PolicyViolation"
+    assert rig.registry.records[1].status == "quarantined"
+
+
+def test_a_hostile_decoy_label_is_cleaned_before_it_reaches_a_ledger(rig: Rig) -> None:
+    rig.fake._events = [("canary.read", {"item": "c1", "label": "key\x1b[31m‮" + "A" * 200})]
+    rig.run()
+    (event,) = operator_events(rig)
+    (name,) = event["payload"]["decoys"]
+    assert "\x1b" not in name and "‮" not in name and len(name) <= 60

@@ -53,6 +53,7 @@ class FakeHandle(ContextHandle):
         script: Script | None,
         hardening: dict | None = None,
         measured: dict | None = None,
+        events: Sequence[tuple[str, dict]] | None = None,
     ) -> None:
         self.spec = spec
         self.files: dict[str, bytes] = {}  # everything `put` or `thaw` wrote, by absolute path
@@ -69,6 +70,10 @@ class FakeHandle(ContextHandle):
         self._measured = dict(measured or {})
         self._events: list[dict] = []
         self._summary: AuditSummary | None = None
+        for type, payload in (
+            events or ()
+        ):  # what a test says MiniLocker logged, present in every handle from the start
+            self.add_event(type, payload)
 
     def _check_usable(self) -> None:
         if self.closed:
@@ -178,6 +183,7 @@ class FakeRunner:
         available: bool = True,
         hardening: dict | None = None,
         measured: dict | None = None,
+        events: Sequence[tuple[str, dict]] | None = None,
     ) -> None:
         self.opened: list[SandboxSpec] = []  # every spec ever passed to `open`, including refused ones
         self.handles: list[FakeHandle] = []
@@ -185,6 +191,7 @@ class FakeRunner:
         self._script = script
         self._hardening = hardening
         self._measured = measured
+        self._events = events
         self._lock = threading.Lock()
 
     def expect(self, script: Script) -> None:
@@ -202,6 +209,6 @@ class FakeRunner:
                     "the FakeRunner was told to be unavailable",
                     hint="this simulates a machine without Docker",
                 )
-            handle = FakeHandle(spec, self._script, self._hardening, self._measured)
+            handle = FakeHandle(spec, self._script, self._hardening, self._measured, self._events)
             self.handles.append(handle)
             return handle

@@ -14,7 +14,7 @@ patch" in the same patch. Never tick a box for work that is not in the patch. Bo
 | [x] | P05 | Execution contract and `run` path | P02, P04 |
 | [x] | P06 | Verification pipeline: gates G1 to G4 | P03, P05 |
 | [x] | P07 | MCP server v1 | P03, P05, P06 |
-| [ ] | P08 | Containment gate G6 and Blast Radius per tool | P06 |
+| [x] | P08 | Containment gate G6 and Blast Radius per tool | P06 |
 | [ ] | P09 | Permissions, approvals, egress and brokered secrets | P07, P08 |
 | [ ] | P10 | Independent challenger, gate G5 | P06 |
 | [ ] | P11 | Server-side builder | P07, P10 |
@@ -34,8 +34,18 @@ Milestones (M0 to M7) and what can be dropped: `docs/guide/05-milestones.md`.
 
 ## Notes for the next patch
 
-Done: P01 (skeleton), P02 (package spec), P03 (registry), P04 (sandbox seam), P05 (execution contract and `run`), P06 (gates G1 to G4), P07 (MCP server v1).
-Next: P08 (containment gate G6 and Blast Radius per tool; needs P06, done). P09 needs P07 and P08. Decisions and interfaces that later patches must respect:
+Done: P01 (skeleton), P02 (package spec), P03 (registry), P04 (sandbox seam), P05 (execution contract and `run`), P06 (gates G1 to G4), P07 (MCP server v1), P08 (gate G6 and Blast Radius).
+Next: P09 (permissions, approvals, egress and brokered secrets; needs P07 and P08, done). P10 (gate G5) needs only P06. Decisions and interfaces that later patches must respect:
+
+* P08 interfaces. `verify/g6_containment.py::ContainmentGate` (G6, registered in `GATE_CLASS_PATHS`); `sandbox.base.decoy_violations` and `decoys_planted`
+  (one definition shared by G6 and the runtime tripwire); `sandboxrun.open_sandbox(..., decoys=)`; `FakeRunner(events=[(type, payload)])` scripts
+  `canary.*` and `egress.*` events. `report/blast_radius.py`: `generate(settings, name, version)`, `load_stored`, `summarize`, `missing_summary`,
+  `render_text`, `render_html`; stored as `ledgers/<tool>@<version>/blast-radius.json` (no database column). `ledger.read_ledger`, `verify_chain`,
+  `version_ledger_dir`, `OPERATOR_LEDGER`. `operator_actions.quarantine`, `release`, `release_context`; CLI `toolforge release|quarantine|report`;
+  `forge_describe` returns `blast_radius`. `ToolRunner` quarantines the active version (actor `forge`) when a call touches a decoy and fails the call with
+  `PolicyViolation`. P09 must add egress to the report (G6 runs with the network closed, so egress there is `not applicable`, never `clean`).
+  A skipped G6 keeps a version at `verified_basic`; with the local stand-in runner G6 is always skipped. Known limit: a caller who passes a decoy path to
+  a tool that opens caller-chosen paths can force a quarantine (reversible with `release`).
 
 * P07 interfaces. `toolforge.server.tools`: `META_TOOLS` (tuple of `MetaTool(name, summary, inputs, returns, since, description)`; append your tool
   here, add its handler to `server/app.py::_handlers` (a mismatch stops the server from starting), and refresh the tables in `README.md` and

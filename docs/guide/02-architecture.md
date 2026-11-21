@@ -113,6 +113,14 @@ summary of the declared permissions, the run id and whether the run resumed an e
 same file of the version that the promotion replaced. The actor is `operator`. Later operator commands (release, quarantine, rollback) use the same
 file.
 
+### Containment and Blast Radius events (P08)
+
+`toolforge quarantine` writes `forge.quarantined` and `toolforge release` writes `forge.released` (both with the operator's reason, actor
+`operator`) to the version's `operator.jsonl`; releasing also writes `forge.deprecated` to a sibling it displaced. The runtime tripwire writes
+`forge.quarantined` there too, with actor `forge`, the call id and the decoy labels, when a real call touches a decoy. G6 writes no event of its own
+beyond the usual `forge.gate.*` ones; the pipeline adds a Blast Radius report next to the ledgers, `blast-radius.json` (`report/blast_radius.py`).
+G6 runs with the network closed, so "no undeclared egress" in the table above is not measured by it; that arrives with approvals in P09.
+
 ### Call events (P05)
 
 Each call writes `forge.call.started` before its sandbox exists and `forge.call.finished` after it is gone, to

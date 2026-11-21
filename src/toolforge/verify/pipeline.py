@@ -109,9 +109,11 @@ _GATE_TEXT: tuple[tuple[str, str, str, str, str], ...] = (
     (
         "G6",
         "Containment",
-        "Runs the tool with decoy secrets in place and the network closed, and watches what it tries to touch.",
-        "Attempts to read credentials, reach hosts that were not declared, or break out of the sandbox.",
-        "A tool that opens a file named like an API-key file is caught by the decoy.",
+        "Runs the tool with the network closed and decoy secrets planted (fake keys, an SSH key, an .env file), and watches what it touches.",
+        "Reading, printing or copying the decoy credentials, going past the memory, process or CPU limits, changing the container's own "
+        "files, and a sandbox that is less locked down than it should be. The network is closed for this run, so it cannot show what a "
+        "tool does with network access; a clean run is evidence, not proof.",
+        "A tool that opens `/tmp/.aws/credentials` is caught by the decoy planted there.",
     ),
     (
         "G7",
@@ -122,12 +124,13 @@ _GATE_TEXT: tuple[tuple[str, str, str, str, str], ...] = (
     ),
 )
 
-# Gate id -> "module:Class". The one place a gate becomes built: a later patch adds its line here (G5 in P10, G6 in P08, G7 in P09).
+# Gate id -> "module:Class". The one place a gate becomes built: a later patch adds its line here (G5 in P10, G7 in P09).
 GATE_CLASS_PATHS: dict[str, str] = {
     "G1": "toolforge.verify.g1_static:StaticGate",
     "G2": "toolforge.verify.g2_build:BuildGate",
     "G3": "toolforge.verify.g3_selftest:SelfTestGate",
     "G4": "toolforge.verify.g4_fuzz:FuzzGate",
+    "G6": "toolforge.verify.g6_containment:ContainmentGate",
 }
 
 # The gates `Pipeline.run` goes through. G7 is an approval step run by P09, not part of a verification run.
@@ -371,7 +374,9 @@ def _notify(progress: ProgressFn | None, gate_id: str, phase: str, status: str |
         log.debug("a progress observer failed on %s %s", gate_id, phase, exc_info=True)
 
 
-def _next_action(status: str, failing: GateReport | None, registered: bool) -> str:
+def _next_action(
+    status: str, failing: GateReport | None, registered: bool, skipped_ids: Sequence[str] = ()
+) -> str:
     if status == lifecycle.REJECTED and failing is not None:
         first = failing.hints[0] if failing.hints else failing.summary
         again = (
@@ -381,7 +386,11 @@ def _next_action(status: str, failing: GateReport | None, registered: bool) -> s
         )
         return clip(f"fix {failing.id} ({failing.name}): {first}; {again}", 400)
     if status == lifecycle.VERIFIED_BASIC:
-        return "wait for an operator to promote this version (G5 and G6 have not run, so it is not fully verified)"
+        if not skipped_ids:
+            return "wait for an operator to promote this version (it is not fully verified)"
+        names = " and ".join(skipped_ids)
+        verb = "has" if len(skipped_ids) == 1 else "have"
+        return f"wait for an operator to promote this version ({names} {verb} not run, so it is not fully verified)"
     if status == lifecycle.VERIFIED:
         return "this version passed every gate and can be promoted"
     return "none"
@@ -484,6 +493,8 @@ class Pipeline:
             reason = f"{failing.id}: {failing.summary}" if failing else None
             event = registry.transition(record.id, status, actor=ACTOR, reason=reason)
             ledger.append(event.pop("type"), event)
+            if any(r.id == "G6" and r.status != NOT_RUN for r in reports) and ledger.path is not None:
+                warnings += self._store_blast_radius(record, ledger.path)
         return VerificationReport(
             status=status,
             name=record.name if record else self._name(package),
@@ -491,12 +502,32 @@ class Pipeline:
             code_sha=self._code_sha(package, record),
             gates=tuple(reports),
             warnings=tuple(warnings),
-            next_action=_next_action(status, failing, record is not None),
+            next_action=_next_action(
+                status, failing, record is not None, [r.id for r in reports if r.status == SKIPPED]
+            ),
             registered=record is not None,
             dry_run=self._registry is None,
             version_id=record.id if record else None,
             run_id=run_id,
         )
+
+    def _store_blast_radius(self, record: VersionRecord, ledger_path: str) -> list[str]:
+        """Build and store the Blast Radius report of the run that just ended. A report that cannot be built is a warning, never a failure."""
+        if not Path(ledger_path).is_file():
+            return []  # an in-memory ledger (tests) wrote nothing to measure
+        try:
+            from toolforge.report import blast_radius
+
+            blast_radius.generate(
+                self._settings, record.name, record.version, verification_path=Path(ledger_path)
+            )
+        except Exception as exc:
+            log.warning("could not store the Blast Radius report of %s", record.label, exc_info=True)
+            return [
+                f"the Blast Radius report could not be stored ({type(exc).__name__}); "
+                f"`toolforge report {record.label}` builds it again"
+            ]
+        return []
 
     def _start(
         self,
@@ -677,7 +708,7 @@ def report_from_registry(registry: Registry, record: VersionRecord) -> Verificat
         code_sha=record.code_sha,
         gates=tuple(gates),
         warnings=tuple(warnings),
-        next_action=_next_action(record.status, failing, True)
+        next_action=_next_action(record.status, failing, True, [g.id for g in gates if g.status == SKIPPED])
         if record.status in (lifecycle.REJECTED, lifecycle.VERIFIED_BASIC, lifecycle.VERIFIED)
         else f"this version is {record.status}",
         registered=True,

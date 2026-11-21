@@ -14,6 +14,10 @@ Security properties, and the tests that prove them (`tests/test_tool_runner.py` 
 * The ledger of a call is written before the sandbox exists and after it is gone, never while it is open, because the sandbox's own
   runner appends to the same hash chain (`test_ledger_events_surround_the_sandbox`). Arguments and results never enter it, only
   their hashes and sizes (`test_no_argument_value_reaches_the_ledger`).
+* A call that touches a decoy credential is refused and nothing it produced is kept: no result, stdout or stderr, because a decoy value
+  could be in them. The active version is quarantined by actor `forge` and the event goes to the operator ledger, but only the
+  decoy labels, never a value (`test_a_decoy_touched_during_a_call_fails_it_and_quarantines_the_version`,
+  `test_the_quarantine_is_written_to_the_operators_ledger`). `RUNTIME_DECOYS=false` turns this off.
 
 What a caller learns is limited to `CallResult`. Infrastructure problems (no Docker, a sandbox that could not be filled, a corrupt
 blob) are raised as exceptions for the operator instead; a server must not forward their text to an agent.
@@ -44,12 +48,13 @@ from pydantic import ValidationError as PydanticValidationError
 from toolforge import schemacheck, textsafety
 from toolforge.config import Settings
 from toolforge.errors import RegistryError, SandboxError, ToolNotRunnable
+from toolforge.ledger import OPERATOR_LEDGER
 from toolforge.models.package import ToolPackage, json_problem
 from toolforge.models.results import CallError, CallResult
 from toolforge.packaging import check_rel_path
-from toolforge.registry import VersionRecord
+from toolforge.registry import VersionRecord, lifecycle
 from toolforge.sandbox import harness
-from toolforge.sandbox.base import RunOutput, SandboxRunner, SandboxSpec
+from toolforge.sandbox.base import RunOutput, SandboxRunner, SandboxSpec, decoy_violations
 
 log = logging.getLogger(__name__)
 
@@ -87,6 +92,9 @@ class RegistryLike(Protocol):
     def find_version(self, name: str, version: str) -> VersionRecord | None: ...
     def active_version(self, name: str) -> VersionRecord | None: ...
     def get_tool(self, name: str) -> Any: ...
+    def transition(
+        self, version_id: int, to: str, *, actor: str, reason: str | None = None
+    ) -> dict[str, Any]: ...
     def record_call(
         self,
         version_id: int,
@@ -257,6 +265,7 @@ class _Target:
     load_blob: Callable[[], bytes]
     ledger_dir: str
     unverified: bool = False
+    status: str | None = None  # the registry status when the call was resolved (None: not registered)
 
 
 @dataclass
@@ -404,6 +413,7 @@ class ToolRunner:
             version_id=record.id,
             load_blob=lambda: registry.blobs.get(sha),
             ledger_dir=record.label,
+            status=record.status,
         )
         self._require_stateless(target)
         return target
@@ -576,6 +586,13 @@ class ToolRunner:
             outcome, duration_ms, summary_info = self._in_sandbox(
                 spec, packed, request, attached, nonce, limits
             )
+            violations = summary_info.pop("violations", [])  # never stored as given
+            if not spec.decoys:
+                violations = []
+            if violations:  # the tripwire: nothing the tool produced is kept, and the version is pulled
+                outcome = self._decoy_outcome(violations)
+                summary_info["decoy_violations"] = len(violations)
+                summary_info["quarantined"] = self._quarantine(target, call_id, violations)
             finished.update(
                 ok=outcome.ok,
                 error_type=outcome.error.type if outcome.error else None,
@@ -661,7 +678,57 @@ class ToolRunner:
             "cleanup_ok": True,
             "egress_attempts": len(summary.egress_attempts),
             "decoy_events": len(summary.decoy_events),
+            "violations": decoy_violations(
+                summary.decoy_events
+            ),  # taken out again by `_execute`; never stored as given
         }
+
+    @staticmethod
+    def _decoy_names(violations: Sequence[dict[str, Any]]) -> list[str]:
+        """The decoy labels (fixed MiniLocker names such as 'AWS access key', never a value), short and clean."""
+        names = {
+            _plain((e.get("payload") or {}).get("label") or (e.get("payload") or {}).get("item"), 60)
+            for e in violations
+        }
+        return sorted(n for n in names if n)[:5]
+
+    def _decoy_outcome(self, violations: Sequence[dict[str, Any]]) -> _Outcome:
+        """What a caller is told when the tool touched a decoy: no result, no output (a decoy value could be in it), no detail."""
+        return _failure(
+            "PolicyViolation",
+            "the tool looked for credentials while it ran, so its answer was discarded",
+            "this version has been quarantined and an operator has to review it before it can run again; "
+            "use another tool or ask the operator",
+        )
+
+    def _quarantine(self, target: _Target, call_id: str, violations: Sequence[dict[str, Any]]) -> bool:
+        """Pull an active version out of use because it touched a decoy. True when this call did it.
+
+        Only a registered, active version can be quarantined. A second call that finds the work done, or a version whose status
+        changed meanwhile, is not an error: the call is refused all the same and the operator's ledger already says why.
+        """
+        registry = self._registry
+        if registry is None or target.version_id is None or target.unverified:
+            return False
+        names = self._decoy_names(violations)
+        reason = f"a decoy credential was touched during call {call_id} ({', '.join(names) or 'unnamed'})"
+        try:
+            event = registry.transition(
+                target.version_id, lifecycle.QUARANTINED, actor="forge", reason=reason
+            )
+        except Exception:
+            log.warning("could not quarantine %s after a decoy was touched", target.label, exc_info=True)
+            return False
+        event_type = str(event.pop("type", "forge.quarantined"))
+        event.pop("related", None)
+        path = str(Path(self._settings.home) / "ledgers" / target.ledger_dir / OPERATOR_LEDGER)
+        try:
+            self._ledger_factory(path, f"quarantine:{target.label}").append(
+                "forge", event_type, {**event, "call_id": call_id, "decoys": names}
+            )
+        except Exception:  # the registry already says quarantined; losing this line must not undo that
+            log.exception("%s was quarantined but the operator ledger could not be written", target.label)
+        return True
 
     def _record(
         self, target: _Target, outcome: _Outcome, duration_ms: int, session: str | None, call_id: str

@@ -1,7 +1,7 @@
-"""MiniLocker is imported in four named modules only, and never at module level, so `import toolforge` needs no Docker.
+"""MiniLocker is imported in five named modules only, and never at module level, so `import toolforge` needs no Docker.
 
-Later patches may extend ALLOWED_IMPORTERS with `report/blast_radius.py` (P08) and `sandbox/browser_adapter.py` (P14), in their own
-patch and with a dated line in docs/guide/DEVIATIONS.md.
+P08 added `report/blast_radius.py` (it reaches MiniLocker's report builder, which needs no Docker). A later patch may extend
+ALLOWED_IMPORTERS with `sandbox/browser_adapter.py` (P14), in its own patch and with a dated line in docs/guide/DEVIATIONS.md.
 """
 
 from __future__ import annotations
@@ -16,6 +16,7 @@ ALLOWED_IMPORTERS = {
     "toolforge/sandbox/_ml_path.py",
     "toolforge/sandbox/minilocker_runner.py",
     "toolforge/ledger.py",
+    "toolforge/report/blast_radius.py",
     "toolforge/textsafety.py",
 }
 # Third-party packages that only a real sandbox needs; they are imported inside functions, never at module level.

@@ -47,10 +47,12 @@ def package_with(**changes) -> ToolPackage:
 
 
 @pytest.mark.parametrize("pack", ["word_count", "csv_summary"])
-def test_a_reference_pack_ends_verified_basic_with_g5_and_g6_skipped(pack, settings, sandbox) -> None:
+def test_a_reference_pack_passes_g1_to_g4_and_g6_and_ends_verified_basic_with_g5_skipped(
+    pack, settings, sandbox
+) -> None:
     report = Pipeline(settings, sandbox, None).run(ToolPackage.from_dir(PACKS / pack), "test")
     assert [(g.id, g.status) for g in report.gates] == [
-        ("G1", "passed"), ("G2", "passed"), ("G3", "passed"), ("G4", "passed"), ("G5", "skipped"), ("G6", "skipped"),
+        ("G1", "passed"), ("G2", "passed"), ("G3", "passed"), ("G4", "passed"), ("G5", "skipped"), ("G6", "passed"),
     ], report.text()  # fmt: skip
     assert report.status == lifecycle.VERIFIED_BASIC
 

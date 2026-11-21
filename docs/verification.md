@@ -6,7 +6,7 @@ list of gates in the repository; `tests/test_verification_docs.py` fails when th
 
 ## The gates
 
-Gates G1 to G4 are built. G5 to G7 are planned and are recorded as `skipped` for now, which caps a passing version at `verified_basic`.
+Gates G1 to G4 and G6 are built. G5 and G7 are planned and are recorded as `skipped` for now, which caps a passing version at `verified_basic`.
 
 <!-- gates:begin -->
 | Gate | Name | Status | What it does | What it catches | Example |
@@ -16,7 +16,7 @@ Gates G1 to G4 are built. G5 to G7 are planned and are recorded as `skipped` for
 | G3 | Self-tests | built | Runs the tool's own tests and its manifest examples in a sandbox with no network, then checks that the tests really check something. | Tests that fail, examples whose answer is wrong, and tests that would still pass if the tool returned nothing. | A suite made only of `assert True` still passes when the tool returns nothing, so it is rejected. |
 | G4 | Schema fuzz | built | Feeds the tool generated inputs that are valid by its own input schema: empty text, long text, zero, big numbers, empty lists. | Crashes, hangs and oversized or non-JSON answers on inputs the schema says are allowed. Refusing with a clear message (`ToolError`) is fine; crashing is not. | A tool that crashes on an empty list fails, with the input that broke it. |
 | G5 | Challenger | planned | A second AI model, not the one that wrote the tool, tries to break it with inputs the author did not think of. | Mistakes the author's own tests missed. | The challenger finds that the tool miscounts words that contain an apostrophe. |
-| G6 | Containment | planned | Runs the tool with decoy secrets in place and the network closed, and watches what it tries to touch. | Attempts to read credentials, reach hosts that were not declared, or break out of the sandbox. | A tool that opens a file named like an API-key file is caught by the decoy. |
+| G6 | Containment | built | Runs the tool with the network closed and decoy secrets planted (fake keys, an SSH key, an .env file), and watches what it touches. | Reading, printing or copying the decoy credentials, going past the memory, process or CPU limits, changing the container's own files, and a sandbox that is less locked down than it should be. The network is closed for this run, so it cannot show what a tool does with network access; a clean run is evidence, not proof. | A tool that opens `/tmp/.aws/credentials` is caught by the decoy planted there. |
 | G7 | Approval | planned | A human operator decides on tools that ask for network access or secrets. | Permissions nobody agreed to. | A tool that asks to call `api.example.org` waits until the operator approves exactly that host. |
 <!-- gates:end -->
 
@@ -30,6 +30,7 @@ time budget fails, unless it had already failed with its own message. The first 
 | G2 | 300 seconds (the pip step itself is limited to 240) |
 | G3 | 360 seconds (tests 120, examples 60, strength check 120) |
 | G4 | 210 seconds (inputs 120) |
+| G6 | 180 seconds (inputs 90) |
 
 ## Running it
 
@@ -116,6 +117,69 @@ only the required fields, and the manifest examples with one property changed at
 * A crash, a timeout, an oversized result or a result that is not JSON fails the gate, and the hint names the input that did it.
 * If every input was refused, the gate passes with a warning that the main path was not exercised.
 
+## G6: containment
+
+One sandbox is opened with the **network closed** and MiniLocker's decoy credentials planted: fake cloud keys, an SSH key, an `.env`
+file and variables in the environment. The tool then runs on every manifest example that is not `live` and on the first 10 generated
+inputs of G4 (same seed, so the same inputs), one process per input. Before the sandbox is destroyed, MiniLocker audits it and the gate
+reads what the audit found. It **fails** when:
+
+* a decoy was read, shown in output, copied into a file or used. No tool has a reason to look for credentials;
+* the sandbox was not locked down as it should be (a runner problem, but a tool must never be verified in a weaker box than the one it
+  runs in);
+* the container's own files changed, a host folder was mounted, or a real secret was found inside;
+* memory, process count or CPU went past the limits, or an input hit the time limit.
+
+It is **skipped, never passed,** when the sandbox could not observe what it needs to: no decoys were planted, the hardening could not
+be read, the audit was incomplete, or there was nothing to run. A skipped gate keeps the version at `verified_basic`. On a machine
+without Docker the pipeline stops before any gate can use a sandbox, so G6 never reports a pass it did not earn.
+
+What G6 does not show: the network is closed during this run, so a tool cannot try to connect and **egress is "not applicable"**, never
+"clean". What a tool does with a network it was approved for is a matter for approvals (P09). A tool that reads an environment variable
+and tells nobody is not seen. A passing G6 is evidence from one run, not proof.
+
+### After verification: the runtime tripwire
+
+Real calls are run with the same decoys (`RUNTIME_DECOYS`, on by default). If a tool touches one during a call:
+
+* the call fails with `PolicyViolation`; its result, stdout and stderr are discarded (a decoy value could be in them);
+* the **active version is quarantined** by actor `forge`, so it can no longer be found or run;
+* `forge.quarantined` is written to `ledgers/<tool>@<version>/operator.jsonl`, with the call id and the decoy **labels** (never a value).
+
+Only a person can undo it, with `toolforge release`. Limit to know about: a caller who passes a decoy path (for example
+`/tmp/.aws/credentials`) to a tool that opens caller-chosen paths can trigger a quarantine, which is a denial of service. It is
+reversible by `release`, and the SDK confines file arguments to `/workspace/inputs`.
+
+## Blast Radius
+
+The Blast Radius of a version says what it was seen doing while it was watched, measured from the hash-chained ledgers and never
+claimed. It is stored as `ledgers/<tool>@<version>/blast-radius.json` next to them, built when verification finishes (and again by
+`toolforge report`). It has five dimensions, each with a status: `network`, `filesystem`, `secrets`, `compute` and `persistence`.
+MiniLocker's policy, time, browser and artifact dimensions describe an agent's shell and browser, so they are listed as
+`not_applicable` instead of being shown as zeros.
+
+* **Scope.** Only the containment run counts (from the start of G6 on). The build gate's package downloads cannot show up as network.
+  The whole ledger is still checked for tampering.
+* **A gap is not a zero.** A dimension that nothing observed says `not measured`. `network` says `no_route` only when Docker itself
+  reported no network for every sandbox.
+* **Finished means destroyed.** A run is finished when every sandbox it created has a matching `sandbox.destroyed` event.
+* **A sample of real calls** (the newest 20 call ledgers) is added as `runtime_sample`.
+
+The verdict is one of `ledger_broken` (a ledger did not verify, so nothing can be trusted), `violation_seen`, `not_measured`,
+`incomplete` and `no_violation_seen`. The last one is evidence, not proof. A report that cannot be built is a warning on the
+verification, never a failure of it.
+
+| Command | What it does |
+| --- | --- |
+| `toolforge report <name@version> [--json \| --html]` | Build the report again from the ledgers, store it and print it. Needs no Docker. |
+| `toolforge quarantine <name@version> --reason "..."` | Operator: take an active version out of use. |
+| `toolforge release <name@version> --reason "..."` | Operator: print why it was quarantined and its Blast Radius, then make it active again. |
+
+`release` prints the recorded quarantine reason and the report first and then acts; it does not ask for confirmation, the required
+`--reason` is the decision. If another version of the tool is active, it is deprecated, as in `promote`. `forge_describe` shows the
+stored report under `blast_radius` (a missing one is shown as `not_measured`), with a note that paths and names in it came from
+running the tool. No MCP tool can release or quarantine.
+
 ## What the report holds
 
 A report lists each gate with its status, a one-line summary, short hints and a few numbers. Text that came from a sandbox is clipped and
@@ -125,5 +189,6 @@ cleaned before it is shown. The ledger for a run (`ledgers/<tool>@<version>/veri
 
 ## Not measured
 
-Nothing here has been measured against hostile tools yet: that is gate G6 (P08) and the attack lab (P15). G5 (a second model) arrives in
-P10 and the operator's approval (G7) in P09.
+Gate G6 has run only against the tools in this repository and, once `pytest -m docker` has been run, the Docker tests; it has not been
+measured against hostile tools yet: that is the attack lab (P15). G5 (a second model) arrives in P10 and the operator's approval (G7) in
+P09. Network behaviour is not measured at all in this release (see G6).

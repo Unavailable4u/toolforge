@@ -16,6 +16,8 @@ from toolforge import cli_doctor as doctor_commands
 from toolforge import cli_package as package_commands
 from toolforge import cli_promote as promote_commands
 from toolforge import cli_registry as registry_commands
+from toolforge import cli_release as release_commands
+from toolforge import cli_report as report_commands
 from toolforge import cli_run as run_commands
 from toolforge import cli_serve as serve_commands
 from toolforge import cli_verify as verify_commands
@@ -48,6 +50,8 @@ REGISTRARS: list[Callable[[argparse._SubParsersAction], None]] = [
     package_commands.register,
     promote_commands.register,
     registry_commands.register,
+    release_commands.register,
+    report_commands.register,
     run_commands.register,
     serve_commands.register,
     verify_commands.register,

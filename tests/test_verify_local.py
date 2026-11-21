@@ -16,6 +16,7 @@ from local_sandbox import LocalRunner
 from verify_helpers import MemoryLedgers, valid_package
 
 from toolforge.config import Settings
+from toolforge.ledger import ToolforgeLedger
 from toolforge.models.package import ToolPackage
 from toolforge.registry import Registry, lifecycle
 from toolforge.services.forge import Forge
@@ -63,8 +64,14 @@ def test_the_gates_use_one_sandbox_each_with_the_expected_network_rule(runner, s
     assert [s.label.rsplit(":", 1)[1] for s in runner.specs] == [
         "G3",
         "G4",
+        "G6",
     ]  # G2 needs none without requirements
-    assert all(s.network == "none" and not s.decoys for s in runner.specs)
+    assert all(s.network == "none" for s in runner.specs)
+    assert {s.label.rsplit(":", 1)[1]: s.decoys for s in runner.specs} == {
+        "G3": False,
+        "G4": False,
+        "G6": True,
+    }
     assert all(h.closed for h in runner.handles)
 
 
@@ -233,3 +240,54 @@ def test_the_ledger_events_hold_no_source_and_no_secret_text(runner, settings) -
     with Registry.from_settings(settings) as registry:
         Forge(settings, registry, runner, ledger_factory=ledgers).submit_package(package, "agent")
     assert "DISTINCTIVE_SOURCE_TEXT" not in json.dumps(ledgers.events)
+
+
+# --- The Blast Radius report after a run (P08) ---------------------------------------------------------------------------------------
+
+
+@pytest.mark.usefixtures("minilocker")
+def test_a_finished_run_stores_a_blast_radius_report_that_does_not_claim_what_it_could_not_see(
+    runner, settings
+) -> None:
+    with Registry(settings.home) as registry:
+        report = Pipeline(settings, runner, registry, ledger_factory=ToolforgeLedger, fuzz_inputs=5).run(
+            ToolPackage.from_dir(EXAMPLES / "word_count"), "test"
+        )
+        assert report.registered and report.status == lifecycle.VERIFIED_BASIC, report.text()
+    stored = settings.home / "ledgers" / "word_count@1.0.0" / "blast-radius.json"
+    assert stored.is_file()
+    document = json.loads(stored.read_text())
+    assert document["ledger_verified"] is True
+    assert (
+        document["verdict"]["status"] == "not_measured"
+    )  # the stand-in runner audits nothing; no zeros are shown
+    assert all(
+        d["status"] == "not_measured" for name, d in document["dimensions"].items() if name != "persistence"
+    )
+    assert not [w for w in report.warnings if "Blast Radius" in w]
+
+
+def test_an_in_memory_ledger_stores_no_report(runner, settings) -> None:
+    ledgers = MemoryLedgers()
+    with Registry(settings.home) as registry:
+        Pipeline(settings, runner, registry, ledger_factory=ledgers, fuzz_inputs=5).run(
+            ToolPackage.from_dir(EXAMPLES / "word_count"), "test"
+        )
+    assert not list((settings.home).glob("ledgers/**/blast-radius.json"))
+
+
+@pytest.mark.usefixtures("minilocker")
+def test_a_report_that_cannot_be_built_is_a_warning_not_a_failure(runner, settings, monkeypatch) -> None:
+    from toolforge.report import blast_radius
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("disk full: /secret/path")
+
+    monkeypatch.setattr(blast_radius, "generate", boom)
+    with Registry(settings.home) as registry:
+        report = Pipeline(settings, runner, registry, ledger_factory=ToolforgeLedger, fuzz_inputs=5).run(
+            ToolPackage.from_dir(EXAMPLES / "word_count"), "test"
+        )
+    assert report.status == lifecycle.VERIFIED_BASIC and report.registered
+    (warning,) = [w for w in report.warnings if "Blast Radius" in w]
+    assert "toolforge report word_count@1.0.0" in warning and "/secret/path" not in warning

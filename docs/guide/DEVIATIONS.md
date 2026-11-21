@@ -2,6 +2,18 @@
 
 Where reality differed from the guide, newest first: what the guide said, what is true, what was done.
 
+* 2026-11-22 (P08): the guide says G6 checks "no undeclared egress". G6 runs with the network closed, so no connection can be attempted and egress
+  is reported as `not applicable`, never `clean`. Egress against approved hosts is measured at run time in P09.
+* 2026-11-22 (P08): `tests/test_import_boundary.py` allow-list gains `toolforge/report/blast_radius.py`, which loads MiniLocker's `ledger.report`
+  by name through `_ml_path.load`. This is the extension the test's own docstring provides for P08.
+* 2026-11-22 (P08): the Blast Radius report is stored at `ledgers/<tool>@<version>/blast-radius.json` and found by that path, not through a new
+  registry column, so no migration is needed. It is a derived copy: `toolforge report` rebuilds it from the ledgers.
+* 2026-11-22 (P08): a G6 that could not observe the run (no decoys planted, hardening unreadable, incomplete audit, nothing to run) is `skipped`, not
+  `passed`, so the version stays `verified_basic`. With the local stand-in runner G6 is therefore always skipped.
+* 2026-11-22 (P08): `FakeRunner` and `FakeHandle` take `events=` (a list of `(type, payload)`) so tests can script `canary.*` and `egress.*` events.
+  `ledger.py` gains `read_ledger`, `verify_chain` and `version_ledger_dir` for the report; the report never needs Docker.
+* 2026-11-22 (P08): G6 does not use the author's test literals as inputs (the spec allows it); it uses the non-live manifest examples and 10 generated inputs.
+
 * 2026-11-21 (P07): the guide says the SDK class is `FastMCP`. In the pinned `mcp` 2.3.0 it is `mcp.server.mcpserver.MCPServer` (tools are added with
   `add_tool`, progress is `Context.report_progress`, the HTTP app is `streamable_http_app()`, the test client is `mcp.Client(server)`, which speaks
   the 2026-07-28 protocol by default and the 2025-11-25 one with `mode="legacy"`). `mcp` also needs `httpx2`, `starlette` and `uvicorn`, which

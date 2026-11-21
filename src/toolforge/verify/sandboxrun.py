@@ -45,9 +45,18 @@ def limits_of(ctx: GateContext) -> dict[str, int]:
 
 
 def open_sandbox(
-    ctx: GateContext, gate: str, *, network: Any = "none", memory_mb: int | None = None
+    ctx: GateContext,
+    gate: str,
+    *,
+    network: Any = "none",
+    memory_mb: int | None = None,
+    decoys: bool = False,
 ) -> SandboxHandle:
-    """A new sandbox for one gate. Raises `SandboxUnavailable` when there is none (the operator's problem, not the package's)."""
+    """A new sandbox for one gate. Raises `SandboxUnavailable` when there is none (the operator's problem, not the package's).
+
+    `decoys=True` (gate G6 only) plants MiniLocker's decoy credentials and starts its `Watch`; the real runner refuses to open
+    the sandbox when it cannot plant them, so a containment run never passes without having been watched.
+    """
     if ctx.runner is None:
         raise SandboxUnavailable(
             "verification needs a sandbox and none is configured",
@@ -59,7 +68,7 @@ def open_sandbox(
         network=network,
         workspace_mb=WORKSPACE_MB,
         memory_mb=memory_mb or limits_of(ctx)["memory_mb"],
-        decoys=False,
+        decoys=decoys,
         ledger_path=ctx.ledger_path,
         label=f"verify:{ctx.label}:{gate}",
     )

@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from toolforge.verify import g2_build, g3_selftest, g4_fuzz
+from toolforge.verify import g2_build, g3_selftest, g4_fuzz, g6_containment
 from toolforge.verify.g1_static import FINDING_CODES, StaticGate, finding_codes_markdown
 from toolforge.verify.pipeline import GATE_INFO, default_gates, gates_markdown
 from toolforge.verify.secretscan import PATTERN_NAMES, patterns_markdown
@@ -56,6 +56,7 @@ def test_the_documented_time_budgets_are_the_real_ones() -> None:
         in text
     )
     assert f"| G4 | {budgets['G4']} seconds (inputs {g4_fuzz.BUDGET_S}) |" in text
+    assert f"| G6 | {budgets['G6']} seconds (inputs {g6_containment.BUDGET_S}) |" in text
     assert f"(1 to {g4_fuzz.MAX_INPUTS}, default {g4_fuzz.DEFAULT_INPUTS})" in text
 
 
@@ -73,5 +74,5 @@ def test_the_documented_pip_command_is_the_real_one() -> None:
 
 
 def test_the_gate_listing_in_the_docs_has_the_right_status() -> None:
-    assert {g.id for g in GATE_INFO if g.status == "built"} == {"G1", "G2", "G3", "G4"}
+    assert {g.id for g in GATE_INFO if g.status == "built"} == {"G1", "G2", "G3", "G4", "G6"}
     assert StaticGate.id == "G1"
