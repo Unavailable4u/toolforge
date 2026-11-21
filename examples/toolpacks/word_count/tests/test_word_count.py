@@ -25,3 +25,9 @@ def test_case_and_punctuation_do_not_split_words():
 
 def test_lines_counts_each_line_once():
     assert run({"text": "one\ntwo\nthree\n"})["lines"] == 3
+
+
+def test_a_very_long_word_is_shown_shortened_but_still_counted_in_full():
+    result = run({"text": "y" * 5000})
+    assert result["top_words"] == [{"word": "y" * 64, "count": 1}]
+    assert result["characters"] == 5000

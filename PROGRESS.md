@@ -12,7 +12,7 @@ patch" in the same patch. Never tick a box for work that is not in the patch. Bo
 | [x] | P03 | Registry: lifecycle, blobs, search | P02 |
 | [x] | P04 | Sandbox seam and MiniLocker runner | P01 |
 | [x] | P05 | Execution contract and `run` path | P02, P04 |
-| [ ] | P06 | Verification pipeline: gates G1 to G4 | P03, P05 |
+| [x] | P06 | Verification pipeline: gates G1 to G4 | P03, P05 |
 | [ ] | P07 | MCP server v1 | P03, P05, P06 |
 | [ ] | P08 | Containment gate G6 and Blast Radius per tool | P06 |
 | [ ] | P09 | Permissions, approvals, egress and brokered secrets | P07, P08 |
@@ -34,8 +34,8 @@ Milestones (M0 to M7) and what can be dropped: `docs/guide/05-milestones.md`.
 
 ## Notes for the next patch
 
-Done: P01 (skeleton), P02 (package spec), P03 (registry), P04 (sandbox seam), P05 (execution contract and `run`). Next: P06 (needs P03 and
-P05, both done). P07 needs P03, P05 and P06. Decisions and interfaces that later patches must respect:
+Done: P01 (skeleton), P02 (package spec), P03 (registry), P04 (sandbox seam), P05 (execution contract and `run`), P06 (gates G1 to G4).
+Next: P07 (MCP server v1; needs P03, P05 and P06, all done). Decisions and interfaces that later patches must respect:
 
 * Language is Python 3.12. Do not propose another. Runtime pins: pydantic 2.14.3, pydantic-settings 2.16.3, jsonschema 4.26.0; dev:
   pytest 9.2.0, ruff 0.17.5 (line length 110, rules E4 E7 E9 F I). Build backend setuptools 84.2.1, src layout.
@@ -65,9 +65,39 @@ P05, both done). P07 needs P03, P05 and P06. Decisions and interfaces that later
 * P05 settled the reference-pack question: the harness's working directory is `/workspace`, so `inputs/data.csv` resolves as given and
   `toolforge_sdk.input_path` accepts the same string; both packs are unchanged. `tests/test_run_path_local.py` runs both through
   `ToolRunner` and the real harness (stand-in sandbox, our own code only) and they return exactly their manifest examples.
-* P06: `toolforge new` scaffolds `tests/test_tool.py` with three tests that fail against a `None`-returning stub (checked in
-  `tests/test_cli_package.py`); the reference packs have five tests each. Both example packs return exactly their manifest example outputs (checked by
-  `tests/test_run_path_local.py`); P06 still has to check them inside a sandbox with the real gates.
+* P06 interfaces. `toolforge.verify.pipeline`: `GATE_INFO` (the one list of gates; `gates_markdown()`), `GATE_CLASS_PATHS` (which gates are
+  built), `PIPELINE_GATE_IDS` (G1 to G6; unbuilt gates are recorded `skipped`), `Pipeline(settings, runner, registry=None, ledger_factory=,
+  gates=, fuzz_inputs=).run(package, submitted_by, version=None) -> VerificationReport` (`status`, `ok`, `gates`, `warnings`, `next_action`,
+  `registered`, `dry_run`, `version_id`, `as_dict()`, `text()`), `report_from_registry`, `GateResult` and `passed/failed/skipped`. A gate is a
+  class with `id`, `budget_s` and `run(ctx) -> GateResult`; register it in `GATE_CLASS_PATHS` by dotted path (P08 adds G6, P10 G5) and the
+  status in `GATE_INFO` turns to `built` by itself (a drift test checks that). `toolforge.services.forge.Forge(settings, registry, runner,
+  ledger_factory=).submit(payload, submitted_by)` / `.submit_package(package, by)` is what the P07 `forge_submit` tool must call and
+  return (a `VerificationReport`, `as_dict()` for JSON). Do not call the pipeline from the server directly: `Forge` keeps the concurrency
+  limit (`max_concurrent_verifications`), refuses a changed package under an existing version and resumes a stuck one.
+* P06 behaviour P07 to P09 depend on. A rejected package that was valid stays registered as `rejected` and its version number is used
+  up; an invalid one is not registered. A sandbox failure raises `SandboxUnavailable` / `SandboxError` and leaves the version `verifying`
+  (submitting the same content resumes it); `forge_submit` should turn that into a plain "try again later". Every verified version has
+  a blob (G2 attaches it, `blob_sha == code_sha` when there are no requirements), but **promote (P07) must still refuse a version that has
+  no blob or whose G2 row is not `passed`**, and P09 must check G1 to G4 rows before moving anything to `pending_approval`.
+* P06 gate details. G1 findings: `FINDING_CODES` in `verify/g1_static.py` (four reject, four warn); secret patterns: `secretscan.PATTERNS`
+  (`scan(text) -> [Finding(pattern, file, line)]`, never the matched text; P10 reuses it before anything goes to a model provider).
+  `schemagen.generate(schema, examples, seed=, count=)` makes deterministic inputs and validates them through `schemacheck` (never
+  `jsonschema` on the host). G3 uses `--tests`, the examples through `--batch`, then `--tests --stub`. G4's input count is the
+  `FuzzGate(fuzz_inputs=)` argument. `verify/sandboxrun.py` is what G2 to G4 share; anything a sandbox prints is read through
+  `read_test_report` / `read_batch_report` (a forged or malformed report fails the gate, never passes it). P08 (G6) should reuse it.
+* P06 harness: `sandbox/assets/harness.py` gained `--tests [--stub]` and `--batch`; `HARNESS_SOURCE` is synced (test checks it).
+  `services.runner.sdk_source()` is public. The tests runner supports top-level `test_*` functions and `unittest.TestCase` methods only
+  (no fixtures, parametrize, conftest, async); documented in `docs/verification.md` and `package-format.md`.
+* P06 test helpers: `tests/local_sandbox.py` (`LocalRunner`: a stand-in with NO isolation that runs the real harness; trusted code only,
+  never a submitted package), `tests/verify_helpers.py` (`valid_package`, `MemoryLedgers`, `ScriptedGate`), `tests/sandbox_scripts.py`.
+  `tests/test_verify_local.py` runs both reference packs through G1 to G4 with the real harness; `tests/docker/test_verification.py`
+  does the same through MiniLocker.
+* P06 not run (no Docker daemon where it was written): `tests/docker/test_verification.py` (six tests, including the real pip build for
+  G2), `toolforge submit examples/toolpacks/csv_summary` through Docker, and the real timing of G2 to G4 in containers. The G4 run of
+  `csv_summary` ends with a warning ("main path was not exercised") because every fuzz input is a handled refusal; that is a fact about
+  the pack, not a fault. The word_count pack was changed (see `DEVIATIONS.md`) because G4 found an unbounded output.
+* P06 known environment failure that is not caused by this patch: `tests/test_runner_with_stand_in.py::test_a_factory_failure_releases_the_pool_and_is_explained`
+  fails on a clean checkout where the `docker` Python package is not the real one (`docker.errors` missing); it failed before P06 too.
 * P03 interfaces. `from toolforge.registry import Registry`; `Registry(home)` or `Registry.from_settings(settings)`, a context manager.
   Versions: `add_version(package, created_by=)` (status `submitted`; the package must already be valid; `version_exists` on a repeat),
   `get_version`, `find_version`, `list_versions(name=, status=)`, `active_version`, `list_tools`, `get_tool`. State changes only through
@@ -80,9 +110,6 @@ P05, both done). P07 needs P03, P05 and P06. Decisions and interfaces that later
 * P03 rules the callers must follow. Pass `actor="operator"` for promote, approve, release and rollback, and a reason for the last three
   and for promote; no other actor is accepted, so the pipeline and any server code must use another name (`pipeline`, `builder`,
   `timeout`). `verified` and `verified_basic` versions that declare network or secrets can only go `pending_approval -> active`.
-* P06: G2 stores the blob with `registry.blobs.put(...)` then `registry.attach_blob(version_id, sha)` (allowed once, only while the
-  version is `submitted` or `verifying`). With no `requirements` the blob is `package.to_tar()`, so `blob_sha == code_sha`. Gate detail
-  over 64 KB is replaced by a size marker; keep details small and sanitised.
 * P07/P09: keep `Registry.transition`, `decide_approval` and `attach_blob` out of the MCP server; P09 adds the `ast` test. The registry
   cannot authenticate the "operator" string. A registry never records who made past moves: the ledger does, so append every event.
 * P12: search ranking is `search.search`/`BM25_WEIGHTS`; `Hit` has name, version, description, score, status, uses, success_rate. Without

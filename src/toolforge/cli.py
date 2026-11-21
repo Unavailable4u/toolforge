@@ -16,6 +16,7 @@ from toolforge import cli_doctor as doctor_commands
 from toolforge import cli_package as package_commands
 from toolforge import cli_registry as registry_commands
 from toolforge import cli_run as run_commands
+from toolforge import cli_verify as verify_commands
 from toolforge.config import load_settings
 from toolforge.errors import ToolForgeError
 
@@ -45,6 +46,7 @@ REGISTRARS: list[Callable[[argparse._SubParsersAction], None]] = [
     package_commands.register,
     registry_commands.register,
     run_commands.register,
+    verify_commands.register,
 ]
 
 

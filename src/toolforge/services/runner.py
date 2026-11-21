@@ -230,6 +230,11 @@ def _sdk_source() -> bytes:
     return resources.files("toolforge").joinpath("sdk.py").read_bytes()
 
 
+def sdk_source() -> bytes:
+    """The text of `toolforge.sdk`, which every sandbox gets as `/workspace/.tf/toolforge_sdk.py` (also used by the gates)."""
+    return _sdk_source()
+
+
 def _plain(text: object, limit: int) -> str:
     """Untrusted text made safe to show: valid Unicode, no control or invisible characters, at most `limit` long."""
     raw = text if isinstance(text, str) else ""
@@ -777,4 +782,5 @@ __all__ = [
     "ToolRunner",
     "parse_envelope",
     "repack_blob",
+    "sdk_source",
 ]

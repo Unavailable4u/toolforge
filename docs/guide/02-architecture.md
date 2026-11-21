@@ -97,7 +97,15 @@ The code keeps this list once, as `GATE_INFO` (P06). Docs and the site read it.
 `forge.verified`, `forge.rejected`, `forge.approval.requested`, `forge.approval.granted`, `forge.approval.denied`, `forge.promoted`,
 `forge.deprecated`, `forge.quarantined`, `forge.released`, `forge.call.started`, `forge.call.finished`,
 `forge.build.finished`, `forge.session.opened`, `forge.session.step`, `forge.session.rewound`, `forge.session.closed`,
-`forge.repaired`, `forge.rolled_back`. MiniLocker-native events from `Watch` and the sandbox are kept as is.
+`forge.repaired`, `forge.rolled_back`, `forge.verification.aborted`. MiniLocker-native events from `Watch` and the sandbox are kept as is.
+
+### Verification events (P06)
+
+One ledger file per run, `ledgers/<tool>@<version>/verify-<run id>.jsonl`. `forge.submitted` carries the `code_sha`, who submitted, a
+summary of the declared permissions, the run id and whether the run resumed an earlier one. `forge.verifying`, `forge.verified` and
+`forge.rejected` are the lifecycle moves. Each gate writes `forge.gate.started` and then `forge.gate.passed`, `forge.gate.failed` or
+`forge.gate.skipped` with its summary and numbers. `forge.verification.aborted` means the sandbox was unavailable: the version stays
+`verifying` and the same submission resumes it. Hashes, counts and labels only; never source text, secret matches or sandbox output.
 
 ### Call events (P05)
 

@@ -124,13 +124,18 @@ def test_the_harness_imports_only_the_standard_library() -> None:
     roots |= {n.module.split(".")[0] for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) and n.module}
     allowed = {
         "__future__",
+        "ast",
         "importlib",
         "io",
         "json",
         "os",
+        "select",
+        "shutil",
+        "signal",
         "sys",
         "time",
         "traceback",
+        "unittest",
         "resource",
         "toolforge_sdk",
     }

@@ -2,6 +2,41 @@
 
 Where reality differed from the guide, newest first: what the guide said, what is true, what was done.
 
+* 2026-11-21 (P06): the guide puts the forge in `src/toolforge/core/forge.py`. It is `src/toolforge/services/forge.py`, next to the
+  runner (see the P05 entry on `core/`). The gates are in `src/toolforge/verify/` as the guide says.
+* 2026-11-21 (P06): the guide's pip command for G2 is `pip install --no-input --disable-pip-version-check --no-deps --only-binary=:all:
+  --target /workspace/pkg/.deps -r requirements.txt`. The command also has `--no-compile` and `--no-cache-dir`, so the frozen package holds no
+  `.pyc` files or cache and is the same every time. The requirements file is `/workspace/requirements.txt`, written by the host.
+* 2026-11-21 (P06): G4's number of inputs is a constructor argument of the gate (`FuzzGate(fuzz_inputs=30)`, `toolforge verify
+  --fuzz-inputs N`, 1 to 200), not a setting, so `.env.example` did not change. The guide says "configurable" without saying where.
+* 2026-11-21 (P06): the guide lists the harness modes `--tests`, `--batch` and `--stub`; `--stub` is a flag of `--tests`. `--batch` runs
+  every input in its own forked process with its own time limit and a rebuilt `inputs/` folder; items share workspace files, never memory.
+  A test that cannot be discovered by reading the syntax tree (a fixture, `parametrize`, async) is reported as an error, not skipped.
+* 2026-11-21 (P06): the guide says gates that are not built are skipped. G5 and G6 are recorded as `skipped` rows in every run (so the
+  report lists six gates and a version ends `verified_basic`); G7 is not part of the pipeline because it is the operator's approval
+  (P09), not a step the pipeline runs. `PIPELINE_GATE_IDS` is G1 to G6.
+* 2026-11-21 (P06): the guide does not say what happens when the sandbox itself is unavailable. `SandboxUnavailable` and `SandboxError`
+  are raised to the caller, `forge.verification.aborted` is written, the version stays `verifying`, and submitting the same content again
+  resumes it (all gates run again from G1). The package is not blamed for an infrastructure failure.
+* 2026-11-21 (P06): the guide says an invalid package is rejected. It is rejected with the pipeline's report but is not registered,
+  because the registry holds only valid manifests; so nothing is stored about it and it can be fixed and submitted again under the
+  same version. A package that is valid but fails a gate is registered as `rejected` and its version number is used up.
+* 2026-11-21 (P06): G4 found a real fault in the reference pack `word_count`: a single very long word made `top_words` return an
+  unbounded string. The pack now shows at most `MAX_SHOWN_CHARS = 64` characters of a word (counts are still exact) and has a new test.
+  Its manifest example is unchanged. The pack's behaviour for ordinary text is the same.
+* 2026-11-21 (P06): `GateResult.detail["warnings"]` carries a gate's warnings (G1's advisory findings, G4's "every input was
+  refused"); the pipeline collects them into `VerificationReport.warnings`. Warnings never change a gate's status.
+* 2026-11-21 (P06): scope additions the guide does not list: `verify/sandboxrun.py` (what G2 to G4 share: opening a sandbox, running
+  the harness, reading reports defensively), `src/toolforge/cli_verify.py` (registered through `cli.REGISTRARS`), `services.runner.sdk_source()`
+  (public), `docs/verification.md`, and the test helpers `tests/local_sandbox.py`, `tests/verify_helpers.py`, `tests/sandbox_scripts.py`.
+  `tests/test_harness.py`'s import allow-list for the harness gained `ast`, `select`, `shutil`, `signal` and `unittest`.
+* 2026-11-21 (P06): the guide says G3's pass criteria use the manifest examples "when `output` is present". Examples marked `live` are
+  skipped even when they have an output, because a live example needs the network.
+* 2026-11-21 (P06): P06 delivers the whole patch in one file although the guide calls it a likely candidate for splitting
+  (`AGENTS.md`: propose a split before writing code). It was not split; the patch is large (`git apply --stat` shows how large).
+* 2026-11-21 (P06): not run where the patch was written (no Docker daemon): the `docker`-marked tests in `tests/docker/test_verification.py`,
+  the real G2 pip step with network, and `toolforge submit examples/toolpacks/csv_summary` through Docker. The gates were run end to end
+  through the real harness with a stand-in sandbox (`tests/test_verify_local.py`), which runs trusted code only and has no isolation.
 * 2026-11-20 (P05): the guide puts the runner in `src/toolforge/core/runner.py` and lists `core/` (forge, approvals, sessions, repair,
   builder) in the architecture. P05 puts it in `src/toolforge/services/runner.py` (`services/__init__.py` says why: these modules sit
   between the MCP server and the registry) and `02-architecture.md` now lists `services/`. The patch files P06 to P13 still say

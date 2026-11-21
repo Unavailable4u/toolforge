@@ -70,7 +70,12 @@ give the same package and the same hash.
 
 Put at least three top-level `def test_*` functions in files named `tests/test_*.py`; they are counted by reading the syntax tree.
 Write them to assert on **values the tool returns**, because a later gate runs your tests against a stand-in that returns nothing and
-rejects the package if they still pass (see "Not built yet"). Plain `assert` statements work best.
+rejects the package if they still pass. Plain `assert` statements work best.
+
+Gate G3 runs the tests with ToolForge's own runner, not pytest, so the supported subset is small: top-level `def test_*` functions and
+`unittest.TestCase` methods, plain `assert`, helper modules imported from `tests/`, and `import tool`. There are no fixtures, no
+`parametrize`, no `conftest.py` and no async tests. Each test runs in its own process with a 10 second limit. `docs/verification.md`
+describes every gate.
 
 ## Validating
 
@@ -258,6 +263,5 @@ that fan out) can otherwise keep the checker busy for hours; if it cannot finish
 
 These parts of the format are described in the guide but are not implemented, so nothing above depends on them:
 
-* Running your tests, the stand-in test-strength check, building `requirements`, and schema fuzzing: patch P06.
 * Sessions (`kind: session`): patch P13.
 * The browser permission, and delivering the files a tool writes with `output_path`: patch P14.

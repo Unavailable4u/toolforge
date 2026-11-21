@@ -1,6 +1,7 @@
 """ToolForge harness: runs ONE tool call inside a sandbox and prints ONE result envelope. Standard library only.
 
-Usage: `python /workspace/.tf/harness.py <nonce>`. The host (toolforge.services.runner) has put these next to it before the call:
+Usage: `python /workspace/.tf/harness.py <nonce> [--tests [--stub] | --batch]`. Without a flag it runs one call (below). The host
+(toolforge.services.runner) has put these next to it before the call:
 
     <workspace>/pkg/            the unpacked tool package (and pkg/.deps when it has requirements)
     <workspace>/inputs/         files the caller provided for this call
@@ -12,15 +13,25 @@ tails inside the envelope and are never mixed into it. The tool runs in this pro
 it report a different result for itself, which it could return honestly, so the host treats the envelope as untrusted data and
 checks it. Nothing here is a security boundary: the container is.
 
+`--tests` runs the package's own tests (tests/test_*.py, top-level `test_*` functions and unittest.TestCase methods, no pytest, no
+fixtures) one per forked process and reports counts and the first failures as the envelope's result; with `--stub` the entrypoint
+function is replaced by one that returns None first, which shows whether the tests constrain behaviour at all. `--batch` runs the
+entrypoint once per item of in.json's "items", each in a forked process with its own timeout, and reports one outcome per item
+(gate G3 uses it for the manifest examples, gate G4 for schema fuzzing). Items share the workspace's files, never memory.
+
 The contract is documented in docs/guide/package-format.md ("How a tool runs"). Keep this file dependency free.
 """
 
 from __future__ import annotations
 
+import ast
 import importlib.util
 import io
 import json
 import os
+import select
+import shutil
+import signal
 import sys
 import time
 import traceback
@@ -38,6 +49,14 @@ KEEP_CHARS = (
 DEFAULT_OUTPUT_KB = 64  # used when the request carries no output limit
 FSIZE_BYTES = 32 * 1024 * 1024  # no single file the tool writes may be larger than this
 CPU_BACKSTOP_S = 10  # CPU seconds beyond the wall-clock timeout; the host's timeout always fires first, this is a second net
+TEST_TIMEOUT_S = 10  # one test, unless the request says otherwise
+TESTS_DEADLINE_S = 120  # all tests together, unless the request says otherwise
+MAX_TESTS = 500
+MAX_TEST_FILES = 50
+MAX_LISTED = 20  # failures and errors listed in a test report (the counts are always complete)
+MAX_BATCH_ITEMS = 500
+ITEM_TEXT_CHARS = 600  # a batch item's message and trace tail
+CHILD_RESULT_BYTES = 256 * 1024  # a test child reports a few lines; more than this is a bug or an attack
 
 
 class _ByteSink:
@@ -236,6 +255,403 @@ def _run_tool(request: dict, workspace: str, tf_dir: str, out: _Tail, err: _Tail
     }
 
 
+# --- Forked children: one test or one batch item per process ----------------------------------------------------------------
+
+
+def _positive(value: object, default: int) -> int:
+    return value if isinstance(value, int) and not isinstance(value, bool) and value > 0 else default
+
+
+def _spawn(job, timeout_s: float, max_bytes: int) -> tuple[str, object]:
+    """Run `job()` in a forked child and return what it reported.
+
+    `("done", value)` when the child wrote a JSON value in time, `("timeout", None)` when it did not finish, `("died", text)` when it
+    ended without a result (killed by a signal, out of memory, `os._exit`), `("toolarge", None)` when it wrote more than
+    `max_bytes`. The child is its own process group leader and the whole group is killed afterwards, so nothing a tool started
+    outlives its call. A tool that is stuck cannot stall the harness: the parent only reads, waits and kills.
+    """
+    read_fd, write_fd = os.pipe()
+    pid = os.fork()
+    if pid == 0:  # the child: never returns
+        try:
+            os.setsid()
+            os.close(read_fd)
+            try:
+                body = json.dumps(job(), ensure_ascii=True, allow_nan=False).encode("ascii")
+            except BaseException as exc:  # includes SystemExit from the tool
+                body = json.dumps({"__crash": _crash(exc)}).encode("ascii")
+            view = memoryview(body)
+            while view:
+                view = view[os.write(write_fd, view) :]
+        finally:
+            os._exit(0)
+    os.close(write_fd)
+    chunks: list[bytes] = []
+    total = 0
+    kind = "done"
+    deadline = time.monotonic() + timeout_s
+    try:
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                kind = "timeout"
+                break
+            ready, _, _ = select.select([read_fd], [], [], min(remaining, 0.25))
+            if not ready:
+                continue
+            data = os.read(read_fd, 65536)
+            if not data:
+                break
+            total += len(data)
+            if total > max_bytes:
+                kind = "toolarge"
+                break
+            chunks.append(data)
+    finally:
+        os.close(read_fd)
+        for kill in (lambda: os.killpg(pid, signal.SIGKILL), lambda: os.kill(pid, signal.SIGKILL)):
+            try:
+                kill()
+            except OSError:
+                pass
+        try:
+            _, status = os.waitpid(pid, 0)
+        except OSError:
+            status = 0
+    if kind != "done":
+        return kind, None
+    if not chunks:
+        if os.WIFSIGNALED(status):
+            return "died", f"killed by signal {os.WTERMSIG(status)}"
+        return "died", "the process ended without a result"
+    try:
+        return "done", json.loads(b"".join(chunks))
+    except ValueError:
+        return "died", "the process reported something that is not JSON"
+
+
+def _prepare_inputs(workspace: str, files: object) -> None:
+    """Make `inputs/` hold exactly `files` ({"inputs/name": "text"}), so one item's files never leak into the next."""
+    inputs = os.path.join(workspace, "inputs")
+    shutil.rmtree(inputs, ignore_errors=True)
+    os.makedirs(inputs, exist_ok=True)
+    if files is None:
+        return
+    if not isinstance(files, dict):
+        raise ValueError("files must be an object")
+    for path, text in files.items():
+        parts = path.split("/") if isinstance(path, str) else []
+        if (
+            len(parts) < 2
+            or parts[0] != "inputs"
+            or any(p in ("", ".", "..") for p in parts)
+            or "\x00" in path
+        ):
+            raise ValueError(f"the input file name {path!r} is not 'inputs/<relative path>'")
+        if not isinstance(text, str):
+            raise ValueError(f"the content of {path!r} must be text")
+        target = os.path.join(workspace, path)
+        os.makedirs(os.path.dirname(target), exist_ok=True)
+        with open(target, "w", encoding="utf-8", errors="replace") as handle:
+            handle.write(text)
+
+
+def _item_job(request: dict, workspace: str, tf_dir: str) -> dict:
+    out, err = _Tail(), _Tail()
+    return _run_tool(request, workspace, tf_dir, out, err, time.monotonic())
+
+
+def _item_error(kind: str, message: str, trace: str = "") -> dict:
+    return {"type": kind, "message": _clip(message, ITEM_TEXT_CHARS), "trace_tail": trace[-ITEM_TEXT_CHARS:]}
+
+
+def _batch_item(
+    index: int, kind: str, data: object, include_results: bool, started: float, timeout_s: int
+) -> dict:
+    item: dict = {"index": index, "ok": False, "error": None, "result_bytes": 0, "stderr_tail": ""}
+    if kind == "done" and isinstance(data, dict) and "__crash" in data:
+        crash = data["__crash"] if isinstance(data["__crash"], dict) else {}
+        item["error"] = _item_error(
+            "Crash", str(crash.get("message", "crashed")), str(crash.get("trace_tail", ""))
+        )
+    elif kind == "done" and isinstance(data, dict) and data.get("ok") is True:
+        item["ok"] = True
+        try:
+            item["result_bytes"] = len(
+                json.dumps(data.get("result"), ensure_ascii=False).encode("utf-8", "replace")
+            )
+        except (TypeError, ValueError):
+            item["result_bytes"] = 0
+        if include_results:
+            item["result"] = data.get("result")
+    elif kind == "done" and isinstance(data, dict) and isinstance(data.get("error"), dict):
+        error = data["error"]
+        name = error.get("type") if error.get("type") in ERROR_TYPES else "Crash"
+        item["error"] = _item_error(name, str(error.get("message", "")), str(error.get("trace_tail", "")))
+        item["stderr_tail"] = str(data.get("stderr_tail", ""))[-ITEM_TEXT_CHARS:]
+    elif kind == "timeout":
+        item["error"] = _item_error("Timeout", f"no result within {timeout_s} seconds")
+    elif kind == "toolarge":
+        item["error"] = _item_error("OutputTooLarge", "the call wrote far more than limits.output_kb allows")
+    else:
+        item["error"] = _item_error(
+            "Crash", str(data) if kind == "died" else "the call reported nothing usable"
+        )
+    item["duration_ms"] = int((time.monotonic() - started) * 1000)
+    return item
+
+
+def _run_batch(request: dict, workspace: str, tf_dir: str) -> dict:
+    items = request.get("items")
+    if not isinstance(items, list) or len(items) > MAX_BATCH_ITEMS:
+        raise ValueError(f"items must be a list of at most {MAX_BATCH_ITEMS} calls")
+    limits = request.get("limits") or {}
+    timeout_s = _positive(limits.get("timeout_s"), 10)
+    limit_kb = _positive(limits.get("output_kb"), DEFAULT_OUTPUT_KB)
+    include_results = request.get("include_results") is True
+    deadline = time.monotonic() + _positive(request.get("deadline_s"), 3600)
+    reported: list[dict] = []
+    not_run = 0
+    for index, item in enumerate(items):
+        if time.monotonic() >= deadline:
+            not_run = len(items) - index
+            break
+        started = time.monotonic()
+        try:
+            if not isinstance(item, dict) or not isinstance(item.get("args"), dict):
+                raise ValueError("each item needs an args object")
+            _prepare_inputs(workspace, item.get("files"))
+        except ValueError as exc:
+            reported.append(
+                _batch_item(
+                    index,
+                    "done",
+                    {"ok": False, "error": _error("Crash", str(exc))},
+                    False,
+                    started,
+                    timeout_s,
+                )
+            )
+            continue
+        call = {"args": item["args"], "entrypoint": request["entrypoint"], "limits": limits}
+        kind, data = _spawn(
+            lambda call=call: _item_job(call, workspace, tf_dir),
+            timeout_s,
+            limit_kb * 1024 * 6 + CHILD_RESULT_BYTES,
+        )
+        reported.append(_batch_item(index, kind, data, include_results, started, timeout_s))
+    return {"items": reported, "not_run": not_run}
+
+
+# --- The tests of a package ----------------------------------------------------------------------------------------------------
+
+
+def _is_test_case(node: ast.ClassDef) -> bool:
+    for base in node.bases:
+        name = base.attr if isinstance(base, ast.Attribute) else getattr(base, "id", "")
+        if name in ("TestCase", "IsolatedAsyncioTestCase"):
+            return True
+    return False
+
+
+def _discover(package: str) -> tuple[list[dict], list[dict], int]:
+    """(tests, problems, files): found by reading the files with `ast`; no test code is imported here."""
+    root = os.path.join(package, "tests")
+    found: list[str] = []
+    for folder, dirs, names in os.walk(root):
+        dirs[:] = sorted(d for d in dirs if not d.startswith((".", "__")))
+        found += [
+            os.path.join(folder, n) for n in sorted(names) if n.startswith("test_") and n.endswith(".py")
+        ]
+    tests: list[dict] = []
+    problems: list[dict] = []
+    for path in found[:MAX_TEST_FILES]:
+        rel = os.path.relpath(path, package).replace(os.sep, "/")
+        try:
+            with open(path, encoding="utf-8") as handle:
+                tree = ast.parse(handle.read(), filename=rel)
+        except (SyntaxError, ValueError, UnicodeDecodeError, OSError) as exc:
+            problems.append(
+                {
+                    "id": rel,
+                    "error": _clip(f"cannot read the test file: {type(exc).__name__}: {_safe_str(exc)}", 300),
+                }
+            )
+            continue
+        for node in tree.body:
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name.startswith("test_"):
+                entry = {"id": f"{rel}::{node.name}", "file": rel, "kind": "function", "name": node.name}
+                if isinstance(node, ast.AsyncFunctionDef):
+                    entry["error"] = "async tests are not supported; call the tool function directly"
+                elif node.args.args or node.args.kwonlyargs or node.args.vararg or node.args.kwarg:
+                    entry["error"] = (
+                        "the test takes arguments; fixtures and parametrize are not supported, use plain functions"
+                    )
+                tests.append(entry)
+            elif isinstance(node, ast.ClassDef) and _is_test_case(node):
+                for member in node.body:
+                    if isinstance(member, (ast.FunctionDef, ast.AsyncFunctionDef)) and member.name.startswith(
+                        "test"
+                    ):
+                        tests.append(
+                            {
+                                "id": f"{rel}::{node.name}.{member.name}",
+                                "file": rel,
+                                "kind": "method",
+                                "cls": node.name,
+                                "name": member.name,
+                            }
+                        )
+    if len(tests) > MAX_TESTS:
+        problems.append({"id": "tests/", "error": f"more than {MAX_TESTS} tests; keep the suite small"})
+        tests = tests[:MAX_TESTS]
+    return tests, problems, min(len(found), MAX_TEST_FILES)
+
+
+def _where(exc: BaseException, package: str) -> str:
+    """` (tests/test_x.py:12)` for the innermost frame inside the package, or nothing."""
+    try:
+        frames = [
+            f for f in traceback.extract_tb(exc.__traceback__) if f.filename.startswith(package + os.sep)
+        ]
+        if frames:
+            return f" ({os.path.relpath(frames[-1].filename, package)}:{frames[-1].lineno})"
+    except BaseException:
+        pass
+    return ""
+
+
+def _describe(exc: BaseException, package: str) -> str:
+    message = _safe_str(exc).strip().splitlines()
+    first = message[0] if message else ""
+    return _clip(f"{type(exc).__name__}: {first}{_where(exc, package)}", 300)
+
+
+def _install_stub(entrypoint: str) -> None:
+    """Import the entrypoint's module under its natural name and replace the function with one that returns None."""
+    path, _, function = entrypoint.rpartition(":")
+    name = path[: -len(".py")].replace("/", ".") if path.endswith(".py") else ""
+    if not name or not function or name.split(".")[0] in sys.stdlib_module_names:
+        raise ValueError(f"cannot stub the entrypoint {entrypoint!r}")
+    module = importlib.import_module(name)
+    if not callable(getattr(module, function, None)):
+        raise ValueError(f"{path} has no function {function}")
+    setattr(module, function, lambda *args, **kwargs: None)
+
+
+def _test_job(package: str, workspace: str, test: dict, request: dict, stub: bool) -> dict:
+    import unittest  # before the package's folders are on the path, so a package cannot replace it
+
+    import toolforge_sdk
+
+    toolforge_sdk._configure(workspace)
+    _apply_limits({"timeout_s": _positive(request.get("test_timeout_s"), TEST_TIMEOUT_S)})
+    folder = os.path.dirname(os.path.join(package, test["file"]))
+    sys.path[:0] = [package, os.path.join(package, ".deps"), folder]
+    os.chdir(workspace)
+    sys.argv[:] = [os.path.join(package, test["file"])]
+    sys.stdout, sys.stderr = _Tail(), _Tail()
+    try:
+        if stub:
+            _install_stub(request["entrypoint"])
+        name = os.path.splitext(os.path.basename(test["file"]))[0]
+        if name in sys.modules or name.split(".")[0] in sys.stdlib_module_names:
+            name = "__tf_test_" + name
+        spec = importlib.util.spec_from_file_location(name, os.path.join(package, test["file"]))
+        if spec is None or spec.loader is None:
+            raise ImportError(f"cannot load {test['file']}")
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[name] = module
+        spec.loader.exec_module(module)
+        if test["kind"] == "function":
+            getattr(module, test["name"])()
+            return {"outcome": "passed"}
+        case = getattr(module, test["cls"])(test["name"])
+        result = unittest.TestResult()
+        case.run(result)
+        if result.errors:
+            return {"outcome": "error", "error": _clip(_first_line(result.errors[0][1]), 300)}
+        if result.failures:
+            return {"outcome": "failed", "error": _clip(_first_line(result.failures[0][1]), 300)}
+        if result.skipped:
+            return {"outcome": "skipped"}
+        return {"outcome": "passed"}
+    except unittest.SkipTest:
+        return {"outcome": "skipped"}
+    except AssertionError as exc:
+        return {"outcome": "failed", "error": _describe(exc, package)}
+    except BaseException as exc:
+        return {"outcome": "error", "error": _describe(exc, package)}
+
+
+def _first_line(trace: str) -> str:
+    """The last line of a unittest traceback is `ExceptionName: message`."""
+    lines = [line for line in trace.strip().splitlines() if line.strip()]
+    return lines[-1] if lines else "failed"
+
+
+def _run_tests(request: dict, workspace: str, stub: bool) -> dict:
+    package = os.path.join(workspace, "pkg")
+    per_test = _positive(request.get("test_timeout_s"), TEST_TIMEOUT_S)
+    deadline = time.monotonic() + _positive(request.get("deadline_s"), TESTS_DEADLINE_S)
+    tests, problems, files = _discover(package)
+    failed: list[dict] = []
+    errors: list[dict] = list(problems)
+    passed = skipped = ran = not_run = 0
+    for index, test in enumerate(tests):
+        if time.monotonic() >= deadline:
+            not_run = len(tests) - index
+            break
+        if "error" in test:
+            errors.append({"id": test["id"], "error": test["error"]})
+            continue
+        ran += 1
+        kind, data = _spawn(
+            lambda test=test: _test_job(package, workspace, test, request, stub),
+            max(1.0, min(per_test, deadline - time.monotonic())),
+            CHILD_RESULT_BYTES,
+        )
+        outcome = data.get("outcome") if kind == "done" and isinstance(data, dict) else None
+        if outcome == "passed":
+            passed += 1
+        elif outcome == "skipped":
+            skipped += 1
+        elif outcome == "failed":
+            failed.append({"id": test["id"], "error": _clip(str(data.get("error", "failed")), 300)})
+        elif kind == "timeout":
+            failed.append({"id": test["id"], "error": f"timed out after {per_test} seconds"})
+        elif outcome == "error":
+            errors.append({"id": test["id"], "error": _clip(str(data.get("error", "error")), 300)})
+        else:
+            crash = data.get("__crash") if kind == "done" and isinstance(data, dict) else None
+            note = crash.get("message") if isinstance(crash, dict) else (data if kind == "died" else kind)
+            errors.append({"id": test["id"], "error": _clip(f"the test process failed: {note}", 300)})
+    return {
+        "stub": stub,
+        "files": files,
+        "ran": ran,
+        "passed": passed,
+        "skipped": skipped,
+        "failed_count": len(failed),
+        "error_count": len(errors),
+        "failed": failed[:MAX_LISTED],
+        "errors": errors[:MAX_LISTED],
+        "not_run": not_run,
+    }
+
+
+def _wrapped(result: dict, started: float) -> dict:
+    return {
+        "ok": True,
+        "result": result,
+        "error": None,
+        "stdout_tail": "",
+        "stderr_tail": "",
+        "duration_ms": int((time.monotonic() - started) * 1000),
+        "truncated": False,
+    }
+
+
 def _emit(channel: int, nonce: str, envelope: dict) -> None:
     """Write the envelope on the private copy of fd 1, with `<` and `>` escaped so the markers can never occur inside it."""
     try:
@@ -273,7 +689,20 @@ def main(argv: list[str]) -> None:
     try:
         with open(os.path.join(tf_dir, "in.json"), encoding="utf-8") as handle:
             request = json.load(handle)
-        envelope = _run_tool(request, workspace, tf_dir, out, err, started)
+        flags = argv[2:]
+        unknown = [flag for flag in flags if flag not in ("--tests", "--stub", "--batch")]
+        if (
+            unknown
+            or ("--stub" in flags and "--tests" not in flags)
+            or ("--tests" in flags and "--batch" in flags)
+        ):
+            raise ValueError(f"unusable options {flags!r}: use nothing, --tests [--stub] or --batch")
+        if "--batch" in flags:
+            envelope = _wrapped(_run_batch(request, workspace, tf_dir), started)
+        elif "--tests" in flags:
+            envelope = _wrapped(_run_tests(request, workspace, "--stub" in flags), started)
+        else:
+            envelope = _run_tool(request, workspace, tf_dir, out, err, started)
     except (
         BaseException
     ) as exc:  # the request itself was unreadable: a bug in the host or a damaged workspace
