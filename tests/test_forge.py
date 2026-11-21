@@ -185,3 +185,57 @@ def test_no_more_runs_than_the_limit_are_in_flight_at_once(tmp_path: Path) -> No
             t.join(timeout=10)
     assert state["peak"] <= 2
     assert sorted(results) == [lifecycle.VERIFIED_BASIC] * 5
+
+
+# --- P07: the new-version rule and the queue timeout -------------------------------------------------------------------------------------
+
+
+def test_a_new_version_of_an_active_tool_must_name_it_as_its_parent(settings, registry) -> None:
+    forge, _ = make(settings, registry)
+    first = valid_package()
+    forge.submit_package(first, "agent")
+    record = registry.find_version("my_tool", "0.1.0")
+    registry.transition(record.id, lifecycle.ACTIVE, actor="operator", reason="test")
+    for parent in (None, "0.0.9"):
+        with pytest.raises(RegistryError) as caught:
+            forge.submit_package(valid_package(version="0.2.0", parent_version=parent), "agent")
+        assert caught.value.code == "name_collision" and "0.1.0" in str(caught.value)
+    assert registry.find_version("my_tool", "0.2.0") is None  # refused before anything was registered
+    report = forge.submit_package(valid_package(version="0.2.0", parent_version="0.1.0"), "agent")
+    assert report.registered
+
+
+def test_a_tool_that_is_not_active_has_no_parent_rule(settings, registry) -> None:
+    forge, _ = make(settings, registry)
+    forge.submit_package(valid_package(), "agent")  # verified_basic, not active
+    assert forge.submit_package(valid_package(version="0.2.0"), "agent").registered
+
+
+def test_a_submission_that_waits_too_long_for_a_slot_gets_busy(registry, tmp_path) -> None:
+    from toolforge.errors import Busy
+
+    release, started = threading.Event(), threading.Event()
+
+    def hold(ctx) -> None:
+        started.set()
+        release.wait(10)
+
+    one_slot = Settings(home=tmp_path / "home", max_concurrent_verifications=1)
+    forge = Forge(
+        one_slot,
+        registry,
+        None,
+        gates=[ScriptedGate("G1", action=hold), *[ScriptedGate(g) for g in ("G2", "G3", "G4")]],
+        queue_timeout_s=0.1,
+    )
+    worker = threading.Thread(target=lambda: forge.submit_package(valid_package(name="slow_tool"), "a"))
+    worker.start()
+    try:
+        assert started.wait(10)
+        with pytest.raises(Busy) as caught:
+            forge.submit_package(valid_package(name="late_tool"), "b")
+        assert caught.value.code == "busy" and "again" in str(caught.value)
+        assert registry.find_version("late_tool", "0.1.0") is None
+    finally:
+        release.set()
+        worker.join(10)

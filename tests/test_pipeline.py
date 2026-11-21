@@ -306,3 +306,44 @@ def test_warnings_from_gates_are_collected(settings, registry) -> None:
     result = passed("fine", detail={"warnings": ["tool.py:3 reads os.environ", 5]})
     report = build(settings, registry, [ScriptedGate("G1", result)]).run(valid_package(), "agent")
     assert report.warnings == ("tool.py:3 reads os.environ",)
+
+
+# --- P07: progress reports -------------------------------------------------------------------------------------------------------------
+
+
+def test_progress_is_reported_around_every_gate_and_never_changes_the_result(tmp_path: Path) -> None:
+    settings = Settings(home=tmp_path / "home")
+    seen: list[tuple[str, str, str | None]] = []
+    gates = [ScriptedGate("G1"), ScriptedGate("G2", pipeline.failed("no build", ["fix"])), ScriptedGate("G3")]
+    plain = pipeline.Pipeline(settings, None, None, gates=gates).run(valid_package(), "a")
+    reported = pipeline.Pipeline(
+        settings,
+        None,
+        None,
+        gates=[
+            ScriptedGate("G1"),
+            ScriptedGate("G2", pipeline.failed("no build", ["fix"])),
+            ScriptedGate("G3"),
+        ],
+    ).run(valid_package(), "a", progress=lambda gate, phase, status: seen.append((gate, phase, status)))
+    assert (reported.status, [g.status for g in reported.gates]) == (
+        plain.status,
+        [g.status for g in plain.gates],
+    )
+    assert seen[:4] == [
+        ("G1", "started", None),
+        ("G1", "finished", "passed"),
+        ("G2", "started", None),
+        ("G2", "finished", "failed"),
+    ]
+
+
+def test_a_progress_callback_that_raises_is_ignored(tmp_path: Path) -> None:
+    def broken(gate: str, phase: str, status: str | None) -> None:
+        raise RuntimeError("the client went away")
+
+    settings = Settings(home=tmp_path / "home")
+    report = pipeline.Pipeline(
+        settings, None, None, gates=[ScriptedGate(g) for g in ("G1", "G2", "G3", "G4")]
+    ).run(valid_package(), "a", progress=broken)
+    assert report.status == lifecycle.VERIFIED_BASIC

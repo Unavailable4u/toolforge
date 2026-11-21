@@ -107,6 +107,12 @@ summary of the declared permissions, the run id and whether the run resumed an e
 `forge.gate.skipped` with its summary and numbers. `forge.verification.aborted` means the sandbox was unavailable: the version stays
 `verifying` and the same submission resumes it. Hashes, counts and labels only; never source text, secret matches or sandbox output.
 
+### Operator events (P07)
+
+`toolforge promote` writes `forge.promoted` (with the operator's reason) to `ledgers/<tool>@<version>/operator.jsonl`, and `forge.deprecated` to the
+same file of the version that the promotion replaced. The actor is `operator`. Later operator commands (release, quarantine, rollback) use the same
+file.
+
 ### Call events (P05)
 
 Each call writes `forge.call.started` before its sandbox exists and `forge.call.finished` after it is gone, to

@@ -358,6 +358,18 @@ def permission_summary(package: ToolPackage) -> dict[str, Any]:
 
 # --- The pipeline --------------------------------------------------------------------------------------------------------
 
+ProgressFn = Callable[[str, str, str | None], None]
+
+
+def _notify(progress: ProgressFn | None, gate_id: str, phase: str, status: str | None) -> None:
+    """Tell an observer where the run is. An observer that breaks (a client that went away) must not stop a verification."""
+    if progress is None:
+        return
+    try:
+        progress(gate_id, phase, status)
+    except Exception:
+        log.debug("a progress observer failed on %s %s", gate_id, phase, exc_info=True)
+
 
 def _next_action(status: str, failing: GateReport | None, registered: bool) -> str:
     if status == lifecycle.REJECTED and failing is not None:
@@ -402,9 +414,18 @@ class Pipeline:
     # -- running -------------------------------------------------------------------------------------------------------
 
     def run(
-        self, package: ToolPackage, submitted_by: str, *, version: VersionRecord | None = None
+        self,
+        package: ToolPackage,
+        submitted_by: str,
+        *,
+        version: VersionRecord | None = None,
+        progress: ProgressFn | None = None,
     ) -> VerificationReport:
-        """Verify `package`. With a registry the version is created (or `version`, left `submitted` or `verifying`, is resumed)."""
+        """Verify `package`. With a registry the version is created (or `version`, left `submitted` or `verifying`, is resumed).
+
+        `progress(gate_id, phase, status)` is called with phase `started` (status None) before each gate and `finished` (status
+        `passed`, `failed` or `skipped`) after it. It runs on the calling thread and a failure in it never affects the run.
+        """
         registry = self._registry
         record = version
         if registry is not None and record is None:
@@ -439,7 +460,9 @@ class Pipeline:
                     GateReport(gate_id, gate_name(gate_id), NOT_RUN, "not run: an earlier gate failed")
                 )
                 continue
+            _notify(progress, gate_id, "started", None)
             result = self._run_gate(gate_id, ctx, record, registry, ledger)
+            _notify(progress, gate_id, "finished", result.status)
             warnings += [clip(w, 300) for w in result.detail.get("warnings", []) if isinstance(w, str)][:20]
             report = GateReport(
                 gate_id,
@@ -677,6 +700,7 @@ __all__ = [
     "GateReport",
     "GateResult",
     "Pipeline",
+    "ProgressFn",
     "VerificationReport",
     "clip",
     "default_gates",

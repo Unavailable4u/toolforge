@@ -13,7 +13,7 @@ patch" in the same patch. Never tick a box for work that is not in the patch. Bo
 | [x] | P04 | Sandbox seam and MiniLocker runner | P01 |
 | [x] | P05 | Execution contract and `run` path | P02, P04 |
 | [x] | P06 | Verification pipeline: gates G1 to G4 | P03, P05 |
-| [ ] | P07 | MCP server v1 | P03, P05, P06 |
+| [x] | P07 | MCP server v1 | P03, P05, P06 |
 | [ ] | P08 | Containment gate G6 and Blast Radius per tool | P06 |
 | [ ] | P09 | Permissions, approvals, egress and brokered secrets | P07, P08 |
 | [ ] | P10 | Independent challenger, gate G5 | P06 |
@@ -34,9 +34,37 @@ Milestones (M0 to M7) and what can be dropped: `docs/guide/05-milestones.md`.
 
 ## Notes for the next patch
 
-Done: P01 (skeleton), P02 (package spec), P03 (registry), P04 (sandbox seam), P05 (execution contract and `run`), P06 (gates G1 to G4).
-Next: P07 (MCP server v1; needs P03, P05 and P06, all done). Decisions and interfaces that later patches must respect:
+Done: P01 (skeleton), P02 (package spec), P03 (registry), P04 (sandbox seam), P05 (execution contract and `run`), P06 (gates G1 to G4), P07 (MCP server v1).
+Next: P08 (containment gate G6 and Blast Radius per tool; needs P06, done). P09 needs P07 and P08. Decisions and interfaces that later patches must respect:
 
+* P07 interfaces. `toolforge.server.tools`: `META_TOOLS` (tuple of `MetaTool(name, summary, inputs, returns, since, description)`; append your tool
+  here, add its handler to `server/app.py::_handlers` (a mismatch stops the server from starting), and refresh the tables in `README.md` and
+  `docs/clients.md` with `tools_markdown()`; `tests/test_docs_clients.py` checks both), `OPERATOR_ONLY` (functions the server package may never
+  import; extend it and the ast test in `tests/test_server_tools.py` for release, quarantine (P08), decide (P09), rollback (P12); that test also bans
+  `transition`, `decide_approval`, `attach_blob` and `add_approval` in the server package), `ToolService` (the logic, plain blocking code returning
+  dicts), `STATUS_NEXT_STEP` (what to say per status). `toolforge.server.app`: `build_server(settings, registry=, sandbox=, ledger_factory=, forge=,
+  tool_runner=, runtime_probe=, watch_interval_s=) -> ForgeApp`, `build_http_app`, `serve_stdio`, `serve_http`, `blocking(tool, fn)` (the error
+  wrapper every handler uses: a `ToolForgeError` becomes its message, hint, code and a `ref`; anything else "an internal error" and a `ref`; server-side
+  failures are never forwarded). `toolforge.server.fences`: `run_response(CallResult, label)`, `Fencer`, `clean_text`, `clean_json`, `description_flags`
+  (everything a tool author or a tool run says to a model goes through these). `toolforge.netguard`: `NetGuard`, `require_token`, `is_loopback`,
+  `origin_allowed`; P17 wraps the dashboard in it with `TOOLFORGE_DASHBOARD_*` values (add `dashboard_allowed_hosts` and `..._origins` settings or reuse
+  the server ones, and say which in `DEVIATIONS.md`). `toolforge.services.operator_actions.promote(settings, registry, "name@version", reason,
+  ledger_factory=)`: P08 adds `release` and `quarantine` beside it, P09 `decide`, P12 `rollback`; write their ledger events the same way
+  (`_write_ledger`, file `ledgers/<tool>@<version>/operator.jsonl`). The CLI commands are `cli_promote.py` and `cli_serve.py`.
+* P07 behaviour. `forge_find` lists active versions only; `confidence` is query-word coverage (P12 replaces it). `forge_run` runs `active` only and
+  names the status and next step otherwise. `forge_submit` waits at most 30 s for a verification slot (`Forge(queue_timeout_s=)`), then answers
+  `busy`; resubmitting identical content is safe; a new version of an active name must set `parent_version` to the active version or it is
+  refused as `name_collision`. Reports go to the model as summaries and hints only, flagged by `textsafety.scan`, never raw gate `detail`.
+  `promote` refuses a version without a blob or whose latest G2 row is not `passed`, and any version with network or secrets (P09 changes that path).
+  `Pipeline.run` and `Forge.submit` take `progress=` (`ProgressFn(gate_id, phase, status)`), used for MCP progress notifications. `expose_direct`
+  adds `tf_<name>` tools (stateless tools without caller files) and a registry-polling watcher; see `DEVIATIONS.md`.
+* P07 test helpers: `tests/server_helpers.py` (`make_env` builds an in-memory server over a real registry with scripted gates and a stand-in tool
+  runner; `Env.add_tool` verifies and promotes a tool; `Env.call` and `Env.session` run a real `mcp.Client`), and in `tests/verify_helpers.py`
+  `scripted_gates()` / `BuildingGate` (a scripted G2 that stores the blob, which `promote` requires). `tests/test_server_tools.py` also runs one
+  end-to-end test with the real harness through the stand-in sandbox.
+* P07 not run (no Docker daemon where it was written): every `docker`-marked test, including `tests/docker/test_server_runtime_probe.py`;
+  `toolforge submit examples/toolpacks/csv_summary` through real containers followed by `toolforge promote` and a client call; and any real MCP
+  client program. Client configuration snippets in `docs/clients.md` are untested against those programs.
 * Language is Python 3.12. Do not propose another. Runtime pins: pydantic 2.14.3, pydantic-settings 2.16.3, jsonschema 4.26.0; dev:
   pytest 9.2.0, ruff 0.17.5 (line length 110, rules E4 E7 E9 F I). Build backend setuptools 84.2.1, src layout.
 * `toolforge.config.Settings` is the only reader of the environment (`TOOLFORGE_` prefix, `.env` read from the current directory).

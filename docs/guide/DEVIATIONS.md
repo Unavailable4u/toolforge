@@ -2,6 +2,47 @@
 
 Where reality differed from the guide, newest first: what the guide said, what is true, what was done.
 
+* 2026-11-21 (P07): the guide says the SDK class is `FastMCP`. In the pinned `mcp` 2.3.0 it is `mcp.server.mcpserver.MCPServer` (tools are added with
+  `add_tool`, progress is `Context.report_progress`, the HTTP app is `streamable_http_app()`, the test client is `mcp.Client(server)`, which speaks
+  the 2026-07-28 protocol by default and the 2025-11-25 one with `mode="legacy"`). `mcp` also needs `httpx2`, `starlette` and `uvicorn`, which
+  `pip` installs with it. The code and the tests use the real names.
+* 2026-11-21 (P07): `MetaTool` has the fields the guide names (`name, summary, inputs, returns, since`) and one more, `description`: the text a
+  model reads for that tool. It lives next to the row so the table and the registration cannot drift apart. `build_server` refuses to start
+  when `META_TOOLS` and the handlers differ.
+* 2026-11-21 (P07): what the SDK already did for HTTP, and what was added. For a loopback host the SDK checks `Host` and `Origin` against exact
+  values (`127.0.0.1:PORT`, `localhost:PORT`, `[::1]:PORT`) and answers 421 or 403; for any other host it checks nothing. It has no token check.
+  ToolForge switches the SDK's check off (`TransportSecuritySettings(enable_dns_rebinding_protection=False)`) and puts `netguard.NetGuard` in front
+  instead, so the rules are the same for every bind address, a configured name or proxy works
+  (`TOOLFORGE_SERVER_ALLOWED_HOSTS`, `TOOLFORGE_SERVER_ALLOWED_ORIGINS`, two settings the guide does not list), the token is required beyond
+  loopback, and the dashboard (P17) uses the same code. The SDK still checks the content type.
+* 2026-11-21 (P07): the guide says to leave `expose_direct` off if the SDK cannot add and remove tools at runtime. It can, but not through its
+  tool registry: `ForgeServer` overrides `list_tools` and `call_tool` (public methods) and reads the registry on every listing. The
+  tools-list-changed notification is sent through the SDK's `InMemorySubscriptionBus` by a small watcher that polls the registry every two
+  seconds, because `toolforge promote` runs in another process and cannot call into the server. Only clients on the 2026-07-28 protocol (the
+  `subscriptions/listen` stream) receive it; the SDK has no such channel for the 2025-11-25 protocol, whose clients see a change the next time they
+  list. Tools that take caller files and tools that are not `stateless` are not offered directly.
+* 2026-11-21 (P07): the SDK formats an argument that fails its schema as a pydantic message that echoes the caller's own value (shortened) and
+  names a pydantic URL. It contains no paths or stack, so it is passed through. Everything that raises inside a handler is caught first: a
+  `ToolForgeError` becomes its own message, hint, `code` and a `ref`; anything else becomes "an internal error" with a `ref`, and the details
+  go to the log under that `ref`. Failures of the machine (`SandboxUnavailable`, `SandboxError`, `LedgerError`, `ConfigError`) are never forwarded.
+* 2026-11-21 (P07): `forge_find`'s `confidence` is the share of the query's words found in the tool's name, description and `when_to_use`
+  (`high` from 75 %, `medium` from 40 %). bm25 scores from a small index cannot be compared between queries, so they are not used as thresholds.
+  The response says so in `confidence_basis`; P12 replaces it.
+* 2026-11-21 (P07): the guide says promote refuses `rejected`, `quarantined` and `active` versions. It refuses every status other than
+  `verified_basic` and `verified`, with a message for each, and (from the P06 notes) a version without a stored blob or whose latest G2 row is
+  not `passed`. It also needs a reason, and it writes `forge.promoted` and the `forge.deprecated` events of displaced versions to
+  `ledgers/<tool>@<version>/operator.jsonl`.
+* 2026-11-21 (P07): scope additions the guide does not list: `Busy` in `errors.py` (a `forge_submit` that waited 30 s for a verification slot);
+  `queue_timeout_s` on `Forge`; a `progress` callback on `Pipeline.run` and `Forge.submit` (`ProgressFn`; it never changes a result and a callback
+  that raises is ignored); `services/operator_actions.py` (the operator-only actions; the server never imports it), `server/direct.py`,
+  `server/runtime_info.py`, `adapters/__init__.py` (reads the recipes), `cli_serve.py`, `cli_promote.py`, and the new-version rule from P12 (a
+  new version of an active name must have `parent_version` equal to the active version, else `name_collision`) in `Forge`.
+* 2026-11-21 (P07): the guide's `forge_run` takes `files: object | null`. It is an object that maps a file name to its text, or to
+  `{"base64": "..."}`; the file lands at `inputs/<name>`. The Python version in `forge_runtime_info` is read from the runtime image like the library
+  list (the guide's "Python version" with no source); it is `null` when the image cannot be read. The server's own Python is shown separately.
+* 2026-11-21 (P07): not run where the patch was written: everything marked `docker`, `toolforge submit examples/toolpacks/csv_summary` through
+  real containers, `forge_runtime_info` against a real image, and any real MCP client program (Claude Code, Claude Desktop, Cursor). The tests use
+  the SDK's own client against the server in memory, over a real loopback HTTP port and over a real stdio subprocess.
 * 2026-11-21 (P06): the guide puts the forge in `src/toolforge/core/forge.py`. It is `src/toolforge/services/forge.py`, next to the
   runner (see the P05 entry on `core/`). The gates are in `src/toolforge/verify/` as the guide says.
 * 2026-11-21 (P06): the guide's pip command for G2 is `pip install --no-input --disable-pip-version-check --no-deps --only-binary=:all:

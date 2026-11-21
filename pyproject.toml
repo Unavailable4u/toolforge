@@ -13,6 +13,7 @@ dependencies = [
     "pydantic==2.14.3",
     "pydantic-settings==2.16.3",
     "jsonschema==4.26.0",
+    "mcp==2.3.0",
 ]
 
 [project.optional-dependencies]
@@ -30,6 +31,9 @@ toolforge = "toolforge.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+"toolforge.adapters" = ["recipes/*.md"]
 
 [tool.ruff]
 line-length = 110

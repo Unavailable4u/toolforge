@@ -56,11 +56,14 @@ class Settings(BaseSettings):
     server_host: str = "127.0.0.1"
     server_port: int = Field(8765, ge=1, le=65535)
     server_token: SecretStr | None = None
+    # Extra `Origin` and `Host` values the HTTP listener accepts beyond loopback and its own bound address (P07, shared with P17).
+    server_allowed_origins: Annotated[list[str], NoDecode] = Field(default_factory=list)
+    server_allowed_hosts: Annotated[list[str], NoDecode] = Field(default_factory=list)
     dashboard_host: str = "127.0.0.1"
     dashboard_port: int = Field(8787, ge=1, le=65535)
     dashboard_token: SecretStr | None = None
 
-    @field_validator("build_allow", mode="before")
+    @field_validator("build_allow", "server_allowed_origins", "server_allowed_hosts", mode="before")
     @classmethod
     def _split_hosts(cls, value: object) -> object:
         if isinstance(value, str):

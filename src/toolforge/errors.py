@@ -64,3 +64,9 @@ class IllegalTransition(ToolForgeError):
 
 class GateFailed(ToolForgeError):
     code = "gate_failed"
+
+
+class Busy(ToolForgeError):
+    """The server is working at its limit and a caller waited its turn in vain. Retrying later is the right response."""
+
+    code = "busy"

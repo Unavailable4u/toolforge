@@ -54,6 +54,25 @@ sandbox, always, and carries a signed-off list of what it is allowed to touch.
 You do not need any API key to begin. A language model is needed only for the challenger gate, the builder, the benchmark and
 the live demo (see `docs/guide/04-optional-resources.md`; every resource listed there is optional).
 
+## Connect an MCP client
+
+`toolforge serve` runs the MCP server (stdio by default, `--transport http` for a local HTTP listener). After `toolforge submit <dir>`
+verifies a tool, the operator runs `toolforge promote <name>@<version> --reason "..."` to make it active. Setup, client
+configuration, and the security rules are in `docs/clients.md`.
+
+<!-- tools:begin -->
+| Tool | Input | Returns | Since |
+| --- | --- | --- | --- |
+| `forge_find` | `query: str`, `limit: int = 5` | ranked active tools with `confidence`, `uses`, `success_rate` (or null) and permissions | P07 |
+| `forge_describe` | `name: str`, `version: str | null` | the sanitised manifest, examples, status, lineage and gate summaries | P07 |
+| `forge_run` | `name: str`, `args: object`, `files: object | null` | the call result: `ok`, the fenced `output` or `error`, `stdout`, `stderr`, `flags` | P07 |
+| `forge_submit` | `package: {manifest, files}` | the verification report: status, gates with summaries and hints, `next_action` | P07 |
+| `forge_status` | `name: str`, `version: str | null` | status, `next_step`, gate summaries and approval state | P07 |
+| `forge_list` | `status: str | null` | versions with name, version, status and a short description (capped) | P07 |
+| `forge_recipe` | `kind: str` | the documentation text (v1 ships `package-format`) | P07 |
+| `forge_runtime_info` | none | Python version, runtime image, sandbox limits, preinstalled libraries (or null: not measured) | P07 |
+<!-- tools:end -->
+
 ## Working on this repository with an AI agent
 
 The build plan is split into patches. Give any coding agent the repository link and a prompt such as:

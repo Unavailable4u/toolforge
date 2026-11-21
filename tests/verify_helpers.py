@@ -85,3 +85,25 @@ class ScriptedGate:
         if self.raises is not None:
             raise self.raises
         return self.result
+
+
+class BuildingGate(ScriptedGate):
+    """A scripted G2 that also stores the package as the version's blob, as the real G2 does. Promote needs one."""
+
+    def __init__(self) -> None:
+        super().__init__("G2", action=self._store)
+
+    @staticmethod
+    def _store(ctx: GateContext) -> None:
+        if ctx.registry is not None and ctx.version is not None:
+            ctx.registry.attach_blob(ctx.version.id, ctx.registry.blobs.put(ctx.package.to_tar()))
+
+
+def scripted_gates(*, blob: bool = True) -> list[ScriptedGate]:
+    """G1 to G4, all passing; G2 stores the blob unless `blob=False`."""
+    return [
+        ScriptedGate("G1"),
+        BuildingGate() if blob else ScriptedGate("G2"),
+        ScriptedGate("G3"),
+        ScriptedGate("G4"),
+    ]

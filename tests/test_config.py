@@ -69,3 +69,14 @@ def test_env_file_is_read(tmp_path: Path) -> None:
     env = tmp_path / ".env"
     env.write_text("TOOLFORGE_RUNTIME_IMAGE=custom:1\n", encoding="utf-8")
     assert Settings(_env_file=env).runtime_image == "custom:1"  # type: ignore[call-arg]
+
+
+def test_server_allowed_hosts_and_origins_are_comma_separated_and_normalised(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    assert load_settings().server_allowed_hosts == [] and load_settings().server_allowed_origins == []
+    monkeypatch.setenv("TOOLFORGE_SERVER_ALLOWED_HOSTS", " Tools.Internal , proxy.example.com:443,,")
+    monkeypatch.setenv("TOOLFORGE_SERVER_ALLOWED_ORIGINS", "https://App.Example.com")
+    s = load_settings()
+    assert s.server_allowed_hosts == ["tools.internal", "proxy.example.com:443"]
+    assert s.server_allowed_origins == ["https://app.example.com"]
