@@ -178,3 +178,27 @@ def decoys_planted(events: Iterable[dict]) -> int:
             items = (event.get("payload") or {}).get("items")
             return len(items) if isinstance(items, list) else 0
     return 0
+
+
+# `docker diff` lists the directory that a tmpfs is mounted on as modified, because mounting touches the image's own copy of it. The
+# real run showed `/workspace` as the one change of a tool that wrote nothing. Those entries are the sandbox's own mount points, not
+# something the tool changed, so they are not counted. Every other path counts, including a file below a mount point's parent.
+MOUNT_POINTS = (WORKSPACE, "/tmp")
+
+
+def real_rootfs_changes(count: object, listed: object, mounts: object = ()) -> tuple[int, list[dict], int]:
+    """`(changes, shown, ignored)` for a sandbox audit: container file changes without the sandbox's own mount points.
+
+    `count` is MiniLocker's `rootfs_changes`, `listed` its `rootfs_changed` entries (`{"path", "kind"}`, only the first few) and
+    `mounts` the tmpfs paths it reported. Only an entry that is exactly a mount point and is "modified" is ignored; an added or
+    deleted entry with that path, and every other path, still counts. Anything that is not a number or a list is read as empty, so a
+    garbled audit can lower nothing it did not name: `changes` is the reported count minus the entries that were ignored.
+    """
+    raw = count if isinstance(count, int) and not isinstance(count, bool) and count >= 0 else 0
+    entries = [e for e in listed if isinstance(e, dict)] if isinstance(listed, list) else []
+    points = set(MOUNT_POINTS)
+    if isinstance(mounts, (list, tuple, set)):
+        points |= {m for m in mounts if isinstance(m, str)}
+    shown = [e for e in entries if not (e.get("path") in points and e.get("kind") == "modified")]
+    ignored = len(entries) - len(shown)
+    return max(raw - ignored, 0), shown, ignored

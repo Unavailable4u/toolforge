@@ -252,3 +252,66 @@ def test_a_missing_blob_fails_without_opening_a_sandbox() -> None:
 
 def test_the_gate_budget_covers_the_run_and_the_grace() -> None:
     assert ContainmentGate.budget_s == BUDGET_S + 90
+
+
+# --- The sandbox's own mount points (found on a real Docker daemon) -------------------------------------------------------------------
+
+MOUNT_ONLY = {
+    "rootfs_changes": 1,
+    "rootfs_changed": [{"path": "/workspace", "kind": "modified"}],
+    "tmpfs": ["/tmp", "/workspace"],
+}
+
+
+def test_docker_listing_the_workspace_mount_point_as_modified_is_not_a_change_by_the_tool() -> None:
+    result, _ = run_gate(measured=with_measured(fs=MOUNT_ONLY))
+    assert result.status == "passed", (result.summary, result.hints)
+    assert result.metrics["rootfs_changes"] == 0
+
+
+def test_a_mount_point_is_ignored_even_when_the_audit_does_not_list_the_tmpfs() -> None:
+    fs = {
+        "rootfs_changes": 2,
+        "rootfs_changed": [{"path": "/workspace", "kind": "modified"}, {"path": "/tmp", "kind": "modified"}],
+    }
+    result, _ = run_gate(measured=with_measured(fs=fs))
+    assert result.status == "passed", (result.summary, result.hints)
+
+
+def test_a_real_change_next_to_a_mount_point_still_fails_and_is_the_one_named() -> None:
+    fs = {
+        **MOUNT_ONLY,
+        "rootfs_changes": 2,
+        "rootfs_changed": [*MOUNT_ONLY["rootfs_changed"], {"path": "/etc/passwd", "kind": "modified"}],
+    }
+    result, _ = run_gate(measured=with_measured(fs=fs))
+    assert result.status == "failed" and "1 changes" in result.summary and "/etc/passwd" in result.summary
+    assert "/workspace" not in result.summary
+
+
+@pytest.mark.parametrize("kind", ["added", "deleted", "?"])
+def test_only_a_modified_mount_point_is_ignored(kind: str) -> None:
+    fs = {**MOUNT_ONLY, "rootfs_changed": [{"path": "/workspace", "kind": kind}]}
+    result, _ = run_gate(measured=with_measured(fs=fs))
+    assert result.status == "failed" and "/workspace" in result.summary
+
+
+def test_a_count_with_no_listed_entries_is_trusted_not_dropped() -> None:
+    result, _ = run_gate(
+        measured=with_measured(
+            fs={"rootfs_changes": 3, "rootfs_changed": [], "tmpfs": ["/tmp", "/workspace"]}
+        )
+    )
+    assert result.status == "failed" and "3 changes" in result.summary
+
+
+def test_real_rootfs_changes_reads_garbage_as_empty() -> None:
+    from toolforge.sandbox.base import real_rootfs_changes
+
+    assert real_rootfs_changes("x", "y", 5) == (0, [], 0)
+    assert real_rootfs_changes(True, [None, 3, {"path": "/a", "kind": "added"}], None) == (
+        0,
+        [{"path": "/a", "kind": "added"}],
+        0,
+    )
+    assert real_rootfs_changes(1, [{"path": "/workspace", "kind": "modified"}]) == (0, [], 1)

@@ -39,6 +39,7 @@ from typing import TYPE_CHECKING, Any
 from toolforge import ledger as ledger_io
 from toolforge import textsafety
 from toolforge.sandbox import _ml_path
+from toolforge.sandbox.base import real_rootfs_changes
 
 if TYPE_CHECKING:
     from toolforge.config import Settings
@@ -129,15 +130,36 @@ class _Analysis:
     head_hash: str | None
     events: int
     window_events: int
+    window_found: bool = (
+        True  # False: the ledger holds no start of the containment gate, so no part of it was measured
+    )
 
 
 def slice_from_gate(events: Sequence[dict[str, Any]], gate: str = CONTAINMENT_GATE) -> list[dict[str, Any]]:
-    """The events from the start of the last run of `gate` on; all of them when the ledger holds no such start (a dry run)."""
+    """The events from the start of the last run of `gate` on; all of them when the ledger holds no such start.
+
+    `build` does not use that fallback: a verification ledger without a start of G6 is reported as not measured."""
     start = 0
     for index, event in enumerate(events):
         if event.get("type") == "forge.gate.started" and (event.get("payload") or {}).get("gate") == gate:
             start = index
     return list(events[start:])
+
+
+def has_gate_start(events: Sequence[dict[str, Any]], gate: str = CONTAINMENT_GATE) -> bool:
+    return any(
+        e.get("type") == "forge.gate.started" and (e.get("payload") or {}).get("gate") == gate for e in events
+    )
+
+
+def _own_changes(dim: dict[str, Any]) -> dict[str, Any]:
+    """The filesystem dimension without the sandbox's own mount points, which `docker diff` lists as modified."""
+    if "rootfs_changes" not in dim:
+        return dim
+    changes, shown, ignored = real_rootfs_changes(
+        dim.get("rootfs_changes"), dim.get("rootfs_changed"), dim.get("writable_mounts")
+    )
+    return {**dim, "rootfs_changes": changes, "rootfs_changed": shown, "mount_points_ignored": ignored}
 
 
 def _finished(events: Iterable[dict[str, Any]]) -> bool:
@@ -204,17 +226,29 @@ def _analyse(source: LedgerSource, task_id: str, *, from_gate: str | None) -> _A
     verified, detail = ledger_io.verify_chain(source.events)
     if source.problem:
         verified, detail = False, source.problem
-    window = slice_from_gate(source.events, from_gate) if from_gate else list(source.events)
+    found = not from_gate or has_gate_start(source.events, from_gate)
+    # A ledger without the start of the gate (a version verified before the gate existed, or a run that ended before it) has no
+    # run to measure; measuring the build and test sandboxes instead would describe a different run under this report's name.
+    window = (
+        (slice_from_gate(source.events, from_gate) if from_gate else list(source.events)) if found else []
+    )
     built = _ml_report().build_report(task_id, window)
     finished = _finished(window)
     ml = built["dimensions"]
     dims: dict[str, dict[str, Any]] = {
         "network": _network(window),
-        "filesystem": _settle(ml["filesystem"], finished),
+        "filesystem": _own_changes(_settle(ml["filesystem"], finished)),
         "secrets": _secrets(_settle(ml["secrets"], finished)),
         "compute": _settle(ml["compute"], finished),
         "persistence": _settle(ml["persistence"], finished),
     }
+    if (
+        not found
+    ):  # MiniLocker would still show persistence as measured, with zero sandboxes; that is a gap, not a zero
+        dims = {
+            name: {"status": NOT_MEASURED_STATUS, "note": f"the {from_gate} gate did not run"}
+            for name in DIMENSIONS
+        }
     return _Analysis(
         name=source.name,
         dims=dims,
@@ -224,6 +258,7 @@ def _analyse(source: LedgerSource, task_id: str, *, from_gate: str | None) -> _A
         head_hash=source.events[-1].get("hash") if source.events else None,
         events=len(source.events),
         window_events=len(window),
+        window_found=found,
     )
 
 
@@ -308,6 +343,10 @@ def _violations(dims: dict[str, dict[str, Any]], where: str) -> list[str]:
 def _gaps(analysis: _Analysis) -> list[str]:
     gaps: list[str] = []
     dims = analysis.dims
+    if not analysis.window_found:
+        return [
+            f"the containment gate ({CONTAINMENT_GATE}) did not run for this version, so nothing was measured"
+        ]
     for name in ("network", "filesystem", "secrets", "compute"):
         if not _measured(dims[name]):
             gaps.append(f"{name} was not measured")
@@ -385,7 +424,11 @@ def build(
     runtime = _runtime(analyses, calls_found if calls_found is not None else len(analyses))
     if ver is not None:
         dimensions = {name: ver.dims[name] for name in DIMENSIONS}
-        scope = "the containment run (gate G6) of the verification ledger"
+        scope = (
+            "the containment run (gate G6) of the verification ledger"
+            if ver.window_found
+            else "none: the verification ledger holds no containment run (gate G6 did not run)"
+        )
     else:
         dimensions = {
             name: {"status": "not_measured", "note": "no verification ledger"} for name in DIMENSIONS

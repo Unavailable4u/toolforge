@@ -127,7 +127,8 @@ reads what the audit found. It **fails** when:
 * a decoy was read, shown in output, copied into a file or used. No tool has a reason to look for credentials;
 * the sandbox was not locked down as it should be (a runner problem, but a tool must never be verified in a weaker box than the one it
   runs in);
-* the container's own files changed, a host folder was mounted, or a real secret was found inside;
+* the container's own files changed, a host folder was mounted, or a real secret was found inside. The sandbox's own tmpfs mount points
+  (`/workspace`, `/tmp`) are not counted: Docker lists them as modified even when nothing was written;
 * memory, process count or CPU went past the limits, or an input hit the time limit.
 
 It is **skipped, never passed,** when the sandbox could not observe what it needs to: no decoys were planted, the hardening could not
@@ -162,6 +163,8 @@ MiniLocker's policy, time, browser and artifact dimensions describe an agent's s
   The whole ledger is still checked for tampering.
 * **A gap is not a zero.** A dimension that nothing observed says `not measured`. `network` says `no_route` only when Docker itself
   reported no network for every sandbox.
+* **No G6, no measurement.** A version whose verification ledger holds no containment run (verified before G6 existed, or stopped
+  before it) is reported as `not_measured`; the build and test sandboxes are never read in its place.
 * **Finished means destroyed.** A run is finished when every sandbox it created has a matching `sandbox.destroyed` event.
 * **A sample of real calls** (the newest 20 call ledgers) is added as `runtime_sample`.
 

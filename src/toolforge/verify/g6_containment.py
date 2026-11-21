@@ -28,7 +28,7 @@ from __future__ import annotations
 from typing import Any
 
 from toolforge import schemacheck
-from toolforge.sandbox.base import AuditSummary, decoy_violations, decoys_planted
+from toolforge.sandbox.base import AuditSummary, decoy_violations, decoys_planted, real_rootfs_changes
 from toolforge.verify import g4_fuzz, sandboxrun, schemagen
 from toolforge.verify.pipeline import GateContext, GateResult, clip, failed, passed, skipped
 
@@ -243,17 +243,15 @@ class ContainmentGate:
         fs: dict[str, Any] = measured["fs"] if isinstance(measured.get("fs"), dict) else {}
         secrets: dict[str, Any] = measured["secrets"] if isinstance(measured.get("secrets"), dict) else {}
         stats: dict[str, Any] = measured["stats"] if isinstance(measured.get("stats"), dict) else {}
-        changes = sandboxrun.count(fs.get("rootfs_changes"))
+        changes, changed_entries, _ = real_rootfs_changes(
+            sandboxrun.count(fs.get("rootfs_changes")), fs.get("rootfs_changed"), fs.get("tmpfs")
+        )
         binds = fs.get("host_binds") if isinstance(fs.get("host_binds"), list) else []
         found = secrets.get("found") if isinstance(secrets.get("found"), list) else []
         if measured and fs:
             metrics["rootfs_changes"] = changes
             if changes:
-                changed = [
-                    clip(c.get("path"), 80)
-                    for c in (fs.get("rootfs_changed") or [])[:MAX_NAMED]
-                    if isinstance(c, dict)
-                ]
+                changed = [clip(c.get("path"), 80) for c in changed_entries[:MAX_NAMED]]
                 problems.append(
                     f"the container's own files changed ({changes} changes, for example {', '.join(changed) or 'unknown'})"
                 )

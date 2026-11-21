@@ -327,3 +327,52 @@ def test_nothing_in_the_report_module_imports_minilocker_by_name_at_module_level
             assert not any(a.name.startswith("minilocker") for a in node.names)
         elif isinstance(node, ast.ImportFrom):
             assert not (node.module or "").startswith("minilocker")
+
+
+# --- Found on a real Docker daemon -------------------------------------------------------------------------------------------------------
+
+
+def test_the_workspace_mount_point_listed_as_modified_is_not_a_violation(settings: Settings) -> None:
+    fs = {
+        **FS,
+        "rootfs_changes": 1,
+        "rootfs_changed": [{"path": "/workspace", "kind": "modified"}],
+        "tmpfs": ["/tmp", "/workspace"],
+    }
+    verification_ledger(settings, sandbox_events(fs=fs))
+    doc = report(settings)
+    assert doc["dimensions"]["filesystem"]["rootfs_changes"] == 0
+    assert doc["dimensions"]["filesystem"]["mount_points_ignored"] == 1
+    assert doc["verdict"]["status"] != "violation_seen", doc["verdict"]
+
+
+def test_a_real_change_beside_a_mount_point_is_still_a_violation(settings: Settings) -> None:
+    fs = {
+        **FS,
+        "rootfs_changes": 2,
+        "rootfs_changed": [{"path": "/workspace", "kind": "modified"}, {"path": "/etc/x", "kind": "added"}],
+        "tmpfs": ["/workspace"],
+    }
+    verification_ledger(settings, sandbox_events(fs=fs))
+    doc = report(settings)
+    assert doc["dimensions"]["filesystem"]["rootfs_changes"] == 1
+    assert any("1 changes" in v for v in doc["verdict"]["violations"])
+
+
+def test_a_verification_ledger_with_no_g6_start_is_not_measured_not_judged_on_other_gates(
+    settings: Settings,
+) -> None:
+    # a version verified before G6 existed: build and test sandboxes only, one of them with a changed mount point
+    fs = {**FS, "rootfs_changes": 2, "rootfs_changed": [{"path": "/etc/x", "kind": "added"}]}
+    events = [
+        ("forge", "forge.verifying", {}),
+        ("forge", "forge.gate.started", {"gate": "G3"}),
+    ] + sandbox_events(fs=fs, decoys=False)
+    write_ledger(Path(settings.home) / "ledgers" / LABEL / "verify-old.jsonl", events)
+    doc = report(settings)
+    assert doc["verdict"]["status"] == "not_measured" and doc["verdict"]["violations"] == []
+    assert any("did not run" in g for g in doc["verdict"]["not_measured"])
+    assert all(d["status"] == "not_measured" for d in doc["dimensions"].values() if "status" in d)
+    assert doc["sources"]["verification"]["events_measured"] == 0
+    assert doc["sources"]["verification"]["verified"] is True  # the chain itself is still checked
+    assert "gate G6 did not run" in doc["sources"]["verification"]["scope"]
