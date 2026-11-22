@@ -2,6 +2,26 @@
 
 How the guide itself changed, newest first. A patch author uses this to tell a deliberate refinement from an accident.
 
+## Revision 4 (2026-11-23)
+
+Written after P09 was built, in response to the Code Mode and programmatic tool calling discussion. Guide only; no code, no change to the
+language, the gate list, the seam or the order of P10 onward. The post's numbers were not verified and nothing here relies on them.
+
+### Added
+
+| # | Idea | Where it lives | Why there |
+| --- | --- | --- | --- |
+| 1 | Typed signatures: `forge_describe` returns a Python and a TypeScript stub built only from the schema, with strict handling of hostile property names, enum values and size. | P12 (`server/signature.py`) | P12 already reshapes find and describe. A signature is a code position a model reads, so it must carry no author text. |
+| 2 | A response size budget with a test that `tools/list` and `forge_find` do not grow with the registry. | P12 (`server/budget.py`) | The point of `forge_find` is that context cost stays flat; a test keeps it so. |
+| 3 | Context cost per response, with estimate versus measured labelled, from 10 to 1000 synthetic tools. | P16 (`bench context`), P19 (site) | It checks the context benefit instead of assuming it. No other system's numbers are quoted. |
+| 4 | Composition as a data-only chain of verified, network-free, secret-free tools, one sandbox per step, one fence per response. | S02 (optional) | Composition widens reach, so it comes after approvals (P09) and containment (P08), and the narrow version is the only one specified. |
+
+### Checked and not changed
+
+* A model-written script run by the server, and a tool that calls other tools from inside a sandbox, were considered and left out of S02. Both create
+  a code path or a channel the threat model does not cover.
+* P10 and P11 are untouched.
+
 ## Revision 3 (2026-11-19)
 
 Reviewed the whole starter once more against its own rules, with `scripts/check_guide.py` and a line-by-line read of P12 and P13.

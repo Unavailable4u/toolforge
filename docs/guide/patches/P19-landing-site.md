@@ -70,6 +70,7 @@ writes `site/data/results.json`:
 ```json
 {"generated_at": "2026-..", "attacks": {"run_id": "...", "contained": 17, "total": 18, "per_attack": {"decoy_read": "contained"}} | null,
  "bench": {"run_id": "...", "model": "...", "runs": 5, "configs": {"baseline": {...}, "forge_cold": {...}, "forge_warm": {...}}} | null,
+ "context": {"method": "estimate" | "measured", "date": "...", "sizes": {"10": {"meta": {...}, "direct": {...}}}} | null,
  "demo": {"recorded_at": "...", "toolforge_version": "..."} | null}
 ```
 
@@ -108,7 +109,8 @@ CSS; total `dist` size under 400 KB excluding the social image.
 
 `tests/test_site_data.py`: tool table equals `META_TOOLS`; gate cards equal `GATE_INFO`; attack table ids equal the catalogue;
 with `null` results no percentage appears in the evidence section; with sample results every figure on the page appears in
-`results.json`.
+`results.json`. The context-cost figures (P16) appear only when `context` is not `null`, each with its `method` word (`estimate` or
+`measured`) next to it and the sentence that they come from synthetic tools; no figure about another project appears anywhere.
 
 `tests/browser/test_site_browser.py` (marker `browser`, skipped without Playwright): loads `dist` over a local static server at
 375 px and 1280 px; no console errors; no failed requests; no horizontal scroll at 375 px; the GitHub button is visible at both

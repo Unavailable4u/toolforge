@@ -86,7 +86,7 @@ Other prompts that work:
 
 * A patch is too big for one pass: "Read `AGENTS.md`. P06 looks too big: propose how to split it, then generate P06a."
 * Something broke: "Read `AGENTS.md`. Patch P05 is applied but `<command>` fails with `<output>`. Generate a fix patch."
-* An optional patch: "Read `AGENTS.md` and generate S01."
+* An optional patch: "Read `AGENTS.md` and generate S01." (or S02, declarative tool chains).
 
 If `git am` fails, run `git am --abort`, make sure the working tree is clean and `core.autocrlf` is `false`, and retry. Use
 `git am --3way` only after reading what conflicted.

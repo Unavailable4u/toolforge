@@ -61,6 +61,7 @@ Read `PROGRESS.md` for status and `05-milestones.md` for the route. Each patch h
 | P20 | `P20-guided-tour.md` | The interactive tour, driven by a recorded real run |
 | P21 | `P21-hardening-and-release.md` | Final pass and release |
 | S01 | `S01-bundles-and-attestations.md` | Optional: portable bundles and signed provenance |
+| S02 | `S02-chains.md` | Optional: declarative tool chains |
 
 ## Other documents in this folder
 

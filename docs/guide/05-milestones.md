@@ -1,6 +1,6 @@
 # Milestones and cut lines
 
-Twenty-one patches (plus one optional) is a lot for one person. This page groups them into milestones that each end with something you can run
+Twenty-one patches (plus two optional) is a lot for one person. This page groups them into milestones that each end with something you can run
 and show, and says honestly what can be dropped if time runs short.
 
 Sizes are rough relative effort from reading the specs (S, M, L), not hours. Re-estimate after P04, which is the first patch
@@ -28,7 +28,7 @@ that touches Docker and MiniLocker for real.
 | M5 | Software and games | P13, P14 | Stateful sessions, the runtime image, recipes, reference packs for SQLite, formats, HTTP, a browser plan and games. |
 | M6 | Proof | P15, P16, P17 | Attack Lab verdicts, benchmark numbers with intervals, and the operator dashboard. |
 | M7 | Show it | P18, P19, P20, P21 | Demo and docs, the landing site and tour, the hardening pass and a tagged release. |
-| S | Optional | S01 | Portable bundles and signed provenance. |
+| S | Optional | S01, S02 | Portable bundles and signed provenance (S01); declarative tool chains (S02). |
 
 ## Smallest version that still tells the whole story
 

@@ -9,7 +9,7 @@ and whether reuse makes later tasks cheaper. Report intervals, not anecdotes.
 
 ## Scope
 
-`bench/{tasks/,agent.py,harness.py,stats.py,report.py,__main__.py}`, `tests/test_bench_*.py`, `docs/BENCHMARK.md`.
+`bench/{tasks/,agent.py,harness.py,stats.py,report.py,context.py,synthetic.py,__main__.py}`, `tests/test_bench_*.py`, `docs/BENCHMARK.md`.
 
 ## Configurations
 
@@ -51,6 +51,28 @@ median tool calls and tokens; time; for forge runs, tool reuse rate, builds atte
 counts (policy violations, decoy events). Aggregate per tier and overall. Add the Attack Lab containment rate as a separate
 line.
 
+## Context cost (no LLM, no Docker)
+
+The idea behind `forge_find` is that a model pays for the tools it uses and not for every tool that exists. Measure it instead of
+assuming it. `python -m bench context --sizes 10,100,1000 --seed 1` builds a seeded **synthetic** registry of that many active tools
+(`bench/synthetic.py`: tools generated from a few templates with typical manifest sizes, registered with scripted gates; `bench` may not
+import from `tests/`, so the helpers are small and local) and, using the real server in memory through the official MCP client, records
+for each size:
+
+* `meta`: the `tools/list` payload of the default server, one `forge_find` at the default limit, and one `forge_describe` of the top hit
+  (the realistic "find, read, use" path);
+* `direct`: the `tools/list` payload with `TOOLFORGE_EXPOSE_DIRECT=true`, which is what a server that lists every tool costs;
+* `chain` (only if S02 is built): the request and response of a three-step `forge_chain` against the same three steps as separate `forge_run` calls.
+
+Each figure is bytes and tokens. Tokens are `server/budget.py:estimate_tokens` (an estimate, labelled `"method": "estimate"`) unless
+`--endpoint` is given, in which case the payload is sent as tool definitions in one request with `max_tokens` 1, once with and once
+without, and the difference in `usage.prompt_tokens` is recorded with `"method": "measured"`. `summary.json` gets a `context` block
+(`null` when not run, never zeros). The report says what the numbers are: synthetic tools of the stated sizes, one model's tokenizer or
+an estimate, and **nothing about any other system**; do not put another project's numbers next to ours.
+
+Hypotheses to write in `docs/BENCHMARK.md` before running: the `meta` payload for `tools/list` does not grow with registry size and
+`forge_find` stays inside its budget; `direct` grows roughly in proportion to the number of tools. Report whichever way it falls.
+
 ## Report
 
 `python -m bench --config all --runs 5 --out runs/bench/<timestamp>/` writes raw JSON per run (with ledgers),
@@ -62,7 +84,9 @@ metrics are unaffected) and report results whichever way they fall. Small sample
 
 ## Tests (no Docker, no LLM)
 
-Wilson interval against known values; checkers accept a correct answer and reject several wrong ones for every task; seeded
+Context cost: `estimate_tokens` on known strings; the same seed gives byte-identical synthetic registries and measurements; `meta`
+`tools/list` is the same for 10 and 1000 tools; `direct` grows with size; a missing measurement is `null` in `summary.json`; the report
+builder labels `estimate` and `measured` correctly (with a fake endpoint that returns `usage`). Wilson interval against known values; checkers accept a correct answer and reject several wrong ones for every task; seeded
 generators are deterministic; the report builder with synthetic results; the agent loop with a scripted fake LLM and a fake
 MCP backend.
 

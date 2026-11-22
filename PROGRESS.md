@@ -29,6 +29,7 @@ patch" in the same patch. Never tick a box for work that is not in the patch. Bo
 | [ ] | P20 | Guided tour | P19 |
 | [ ] | P21 | Hardening pass and release | P01 to P20 |
 | [ ] | S01 | Optional: portable bundles and signed provenance | P12 |
+| [ ] | S02 | Optional: declarative tool chains | P09, P12 |
 
 Milestones (M0 to M7) and what can be dropped: `docs/guide/05-milestones.md`.
 
@@ -36,6 +37,12 @@ Milestones (M0 to M7) and what can be dropped: `docs/guide/05-milestones.md`.
 
 Done: P01 (skeleton), P02 (package spec), P03 (registry), P04 (sandbox seam), P05 (execution contract and `run`), P06 (gates G1 to G4), P07 (MCP server v1), P08 (gate G6 and Blast Radius), P09 (approvals, egress, brokered secrets).
 Next: P10 (gate G5; needs only P06). P11 needs P07 and P10. Decisions and interfaces that later patches must respect:
+
+* Revision 4 additions (guide only, no code yet), picked up by the patch that owns them: **P12** adds `forge_describe.signature` (typed Python and TypeScript
+  stubs built only from the schema; no author text in a code position) and a response size budget (`server/budget.py`, `tests/test_context_budget.py`);
+  **P16** adds `python -m bench context` (tokens per `tools/list`, `forge_find` and `forge_describe` at 10, 100 and 1000 synthetic tools, labelled estimate or
+  measured); **P19** shows those figures only when `results.json` has them; **S02** (optional) is `forge_chain`, a data-only chain of verified, network-free,
+  secret-free tools. Nothing in P10 or P11 changes. See `docs/guide/REVISIONS.md`, Revision 4.
 
 * P09 interfaces. `services/approvals.py` (everything about an approval except the decision, safe for the server: `open_request`, `deny`, `expire_overdue`,
   `permission_diff`, `render_text`, `request_path`; requests are rows in `approvals` and `approvals/<id>.json`), `verify/g7_approval.py::ApprovalGate`

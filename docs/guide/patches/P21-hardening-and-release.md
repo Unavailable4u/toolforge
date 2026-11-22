@@ -1,6 +1,6 @@
 # P21: Hardening pass and release
 
-Depends on: all earlier patches (P01 to P20). S01 is optional; if it was built, it is included in the checks below.
+Depends on: all earlier patches (P01 to P20). S01 and S02 are optional; if either was built, it is included in the checks below.
 
 ## Goal
 

@@ -97,7 +97,7 @@ The code keeps this list once, as `GATE_INFO` (P06). Docs and the site read it.
 `forge.verified`, `forge.rejected`, `forge.approval.requested`, `forge.approval.granted`, `forge.approval.denied`, `forge.promoted`,
 `forge.deprecated`, `forge.quarantined`, `forge.released`, `forge.call.started`, `forge.call.finished`,
 `forge.build.finished`, `forge.session.opened`, `forge.session.step`, `forge.session.rewound`, `forge.session.closed`,
-`forge.repaired`, `forge.rolled_back`, `forge.verification.aborted`. MiniLocker-native events from `Watch` and the sandbox are kept as is.
+`forge.repaired`, `forge.rolled_back`, `forge.verification.aborted`, `forge.chain.started`, `forge.chain.finished` (optional, S02). MiniLocker-native events from `Watch` and the sandbox are kept as is.
 
 ### Verification events (P06)
 
@@ -150,9 +150,9 @@ src/toolforge/
   sandbox/      base.py  fake.py  minilocker_runner.py  harness.py  assets/harness.py  images.py
   sdk.py        (written into every sandbox as toolforge_sdk.py)
   verify/       pipeline.py  g1_static.py  g2_build.py  g3_selftest.py  g4_fuzz.py  g5_challenger.py  g6_containment.py
-  services/     runner.py  forge.py  approvals.py  sessions.py  repair.py  builder.py
+  services/     runner.py  forge.py  approvals.py  sessions.py  repair.py  builder.py  chain.py (optional, S02)
   llm/          client.py  prompts/
-  server/       app.py  tools.py  fences.py
+  server/       app.py  tools.py  fences.py  signature.py  budget.py   (signature and budget: P12)
   report/       blast_radius.py
   adapters/     recipes/  (markdown recipes the agent can fetch)
   attacks/      catalog.py  runner.py
