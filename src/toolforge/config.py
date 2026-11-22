@@ -51,6 +51,11 @@ class Settings(BaseSettings):
     challenger_base_url: str | None = None
     challenger_model: str | None = None
     challenger_api_key: SecretStr | None = None
+    # Requests per minute the client allows itself (0 = no limit), and how long one request may take. The challenger's own limit
+    # falls back to the builder's only while the challenger shares the builder's endpoint (P10, docs/guide/04-optional-resources.md).
+    llm_max_rpm: int = Field(0, ge=0)
+    challenger_max_rpm: int = Field(0, ge=0)
+    llm_timeout_s: int = Field(60, ge=1, le=600)
 
     # Network listeners; a token is required on any non-loopback host (enforced in P07 and P17)
     server_host: str = "127.0.0.1"
@@ -95,6 +100,20 @@ class Settings(BaseSettings):
     @property
     def effective_challenger_api_key(self) -> SecretStr | None:
         return self.challenger_api_key or self.llm_api_key
+
+    @property
+    def effective_challenger_max_rpm(self) -> int:
+        """The challenger's own limit; when it has no endpoint of its own (it uses the builder's), the builder's limit applies."""
+        if self.challenger_max_rpm:
+            return self.challenger_max_rpm
+        return self.llm_max_rpm if not self.challenger_base_url else 0
+
+    @property
+    def challenger_shares_builder_model(self) -> bool:
+        """True when the challenger would run the same model id as the builder, which makes G5 weaker evidence."""
+        challenger = (self.effective_challenger_model or "").strip().lower()
+        builder = (self.llm_model or "").strip().lower()
+        return bool(challenger) and challenger == builder
 
     def masked(self) -> dict[str, object]:
         """Effective settings for display. Secrets show `***` when set and `None` when not; values are never revealed."""

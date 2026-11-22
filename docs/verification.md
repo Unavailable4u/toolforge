@@ -6,7 +6,8 @@ list of gates in the repository; `tests/test_verification_docs.py` fails when th
 
 ## The gates
 
-Gates G1 to G4, G6 and G7 are built. G5 is planned and is recorded as `skipped` for now, which caps a passing version at `verified_basic`.
+All seven gates are built. G5 needs a language model; with none configured, or when the provider cannot be used, it is recorded as `skipped`, which caps a passing
+version at `verified_basic` (an operator can still `promote` it, with a reason).
 G7 is the operator's approval of network hosts and secrets. It is not a step the pipeline waits in: after G1 to G6, a version that asks for
 either goes to `pending_approval` and a person decides ([approvals](approvals.md)).
 
@@ -17,7 +18,7 @@ either goes to `pending_approval` and a person decides ([approvals](approvals.md
 | G2 | Build | built | Installs the tool's declared dependencies from ready-made wheels only and freezes everything into one sealed file. | Dependencies that cannot be installed without running their setup scripts, versions that do not exist, undeclared dependencies, and packages too big for the sandbox. | A pinned library that only exists as source code has no wheel, so the build fails instead of running its setup script. |
 | G3 | Self-tests | built | Runs the tool's own tests and its manifest examples in a sandbox with no network, then checks that the tests really check something. | Tests that fail, examples whose answer is wrong, and tests that would still pass if the tool returned nothing. | A suite made only of `assert True` still passes when the tool returns nothing, so it is rejected. |
 | G4 | Schema fuzz | built | Feeds the tool generated inputs that are valid by its own input schema: empty text, long text, zero, big numbers, empty lists. | Crashes, hangs and oversized or non-JSON answers on inputs the schema says are allowed. Refusing with a clear message (`ToolError`) is fine; crashing is not. | A tool that crashes on an empty list fails, with the input that broke it. |
-| G5 | Challenger | planned | A second AI model, not the one that wrote the tool, tries to break it with inputs the author did not think of. | Mistakes the author's own tests missed. | The challenger finds that the tool miscounts words that contain an apostrophe. |
+| G5 | Challenger | built | A second AI model, not the one that wrote the tool, tries to break it with inputs the author did not think of. | Mistakes the author's own tests missed. | The challenger finds that the tool miscounts words that contain an apostrophe. |
 | G6 | Containment | built | Runs the tool with the network closed and decoy secrets planted (fake keys, an SSH key, an .env file), and watches what it touches. | Reading, printing or copying the decoy credentials, going past the memory, process or CPU limits, changing the container's own files, and a sandbox that is less locked down than it should be. The network is closed for this run, so it cannot show what a tool does with network access; a clean run is evidence, not proof. | A tool that opens `/tmp/.aws/credentials` is caught by the decoy planted there. |
 | G7 | Approval | built | A human operator decides on tools that ask for network access or secrets. | Permissions nobody agreed to. | A tool that asks to call `api.example.org` waits until the operator approves exactly that host. |
 <!-- gates:end -->
@@ -32,6 +33,7 @@ time budget fails, unless it had already failed with its own message. The first 
 | G2 | 300 seconds (the pip step itself is limited to 240) |
 | G3 | 360 seconds (tests 120, examples 60, strength check 120) |
 | G4 | 210 seconds (inputs 120) |
+| G5 | 300 seconds (model call and retries 120, cases 95) |
 | G6 | 180 seconds (inputs 90) |
 
 ## Running it
@@ -71,7 +73,7 @@ around any static check, and the sandbox (G6) is the real boundary.
 ### Secret patterns
 
 One list of named patterns, in `toolforge/verify/secretscan.py`. The report names the pattern, the file and the line, never the matched
-text. The same scan is meant to be the last check before any text is sent to a model provider (P10).
+text. The same scan is the last check before any text is sent to a model provider (G5, below).
 
 <!-- secret-patterns:begin -->
 | Pattern | What it looks for |
@@ -118,6 +120,50 @@ only the required fields, and the manifest examples with one property changed at
 * Returning a result or raising `ToolError` (a handled refusal) is fine.
 * A crash, a timeout, an oversized result or a result that is not JSON fails the gate, and the hint names the input that did it.
 * If every input was refused, the gate passes with a warning that the main path was not exercised.
+
+## G5: the independent challenger
+
+An author writes its own tests, so its tests share its blind spots. G5 asks a second language model, which sees the specification and the
+code but not how the tool was made, to find what the author missed. It is the only gate that needs a model; without one it is `skipped`.
+
+**Setting it up.** A challenger is any OpenAI-compatible chat endpoint (a hosted model, Gemini through its OpenAI-compatible address,
+or an open model behind a local server): set `TOOLFORGE_CHALLENGER_BASE_URL`, `TOOLFORGE_CHALLENGER_MODEL` and, if the server wants one,
+`TOOLFORGE_CHALLENGER_API_KEY` in `.env`. Any of them left unset falls back to the `TOOLFORGE_LLM_*` value. A different model from
+the builder's is better: two copies of one model tend to miss the same things. When both have the same model id, `toolforge doctor` warns and
+the G5 summary says "challenger shares the builder's model: weaker independence". Rate limits are `TOOLFORGE_LLM_MAX_RPM` and
+`TOOLFORGE_CHALLENGER_MAX_RPM` (0 means no limit), and one request may take `TOOLFORGE_LLM_TIMEOUT_S` seconds. See
+`docs/guide/04-optional-resources.md` for providers and for what leaves your machine.
+
+**What the model is shown, and what is sent.** The manifest, the source files and the author's tests, each fenced as untrusted data, cut
+to a fixed size with a visible marker where a file is long. They are sent to the provider you configured. Before any request the whole
+prompt goes through the secret scan (above); if a secret-shaped string is found nothing is sent and G5 is `skipped`, naming the pattern
+and never the text. The ledger records the model id, token counts and case counts, never the prompt or the code. Use a locally hosted
+model when the tools or their data are private.
+
+**What the model returns, and what is done with it.** A list of cases, each an `input`, a `check`, a `confidence` (`high` or `medium`) and a
+one-sentence rationale, plus a short review. A `check` is one of eight shapes that the host evaluates itself (`equals`,
+`json_path_equals`, `type_is`, `keys_present`, `numeric_close`, `length_between`, `no_error`, `tool_error`); a reply that names anything
+else, including code, loses that case. An `input` the tool's own `input_schema` forbids loses it too. Nothing a model returns is ever run.
+
+**The run.** The surviving cases, plus the host's own boundary inputs (always, so a model that returns nothing cannot make the gate
+empty), run through the same in-sandbox batch mode as G4, with the network closed.
+
+**The verdict.**
+
+| Outcome | Effect |
+| --- | --- |
+| No model configured, the provider unreachable or rate limited past the retry budget, the key refused, two unusable replies in a row, or a prompt that holds a secret-shaped string | `skipped`: nothing was learned, so the version stays `verified_basic` |
+| A case ends in a crash, a timeout, too much output or non-JSON (for any input the schema allows) | `failed` |
+| A `high` confidence case whose check does not hold | `failed`, with the input, what was expected, what happened and the model's reason |
+| `permission_findings`: the model says the code does something the manifest does not declare | `failed` |
+| Fewer than 8 usable cases from the model (after the invalid, forbidden and duplicate ones are dropped) | `failed`: "challenger produced too few usable cases" (the host cases are still judged first) |
+| A `medium` confidence case whose check does not hold; any `risk_flags` | a warning for the operator, shown in the report and stored with the gate result |
+
+Limits to know about. The challenger can be wrong, and a wrong `high` blocks a good tool: there is no appeal in this version, only a new
+version with the code, the manifest or the tests changed. A tool whose input schema allows only a few distinct inputs may not give the
+model room for 8 cases. The model reads code that its author wrote, so a comment aimed at it can steer it: the host cases, the closed check
+vocabulary and the schema check keep that from passing a broken tool, but a model that is talked into reporting nothing wrong still
+reports nothing wrong. A passing G5 is a second opinion, not proof.
 
 ## G6: containment
 
@@ -199,6 +245,7 @@ cleaned before it is shown. The ledger for a run (`ledgers/<tool>@<version>/veri
 ## Not measured
 
 Gate G6 has run only against the tools in this repository and, once `pytest -m docker` has been run, the Docker tests; it has not been
-measured against hostile tools yet: that is the attack lab (P15). G5 (a second model) arrives in P10. Network behaviour is measured only
+measured against hostile tools yet: that is the attack lab (P15). G5 has been run only against scripted replies and, where `pytest -m llm` was run with an endpoint, against that one model; how often a challenger
+finds a real defect is not measured (the benchmark, P16, is where that belongs). Network behaviour is measured only
 on real calls of an approved tool, from the proxy's log, and only for the hosts that proxy saw (see [approvals](approvals.md)); G6
 itself has no network to observe.

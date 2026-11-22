@@ -2,6 +2,22 @@
 
 Where reality differed from the guide, newest first: what the guide said, what is true, what was done.
 
+* 2026-11-23 (P10): the guide says the client is "an OpenAI-compatible chat client (`openai` SDK or plain `httpx`)". Neither is a declared dependency: `httpx` only arrives
+  through `mcp`, and the pinned `mcp` 2.3.0 installs it as `httpx2`. The client therefore uses the standard library (`urllib.request`) behind a small `Transport` protocol, with no
+  redirects (a redirect would forward the bearer token) and a response size cap. No dependency was added to `pyproject.toml`.
+* 2026-11-23 (P10): the guide says "at least `min_cases` valid cases must remain" without saying whose. The threshold counts the challenger's own usable cases (after the invalid,
+  schema-forbidden and duplicate ones are dropped), not the host's, because counting the host's cases would let a model that returns nothing pass. The host cases are always run and
+  judged first, whatever the model returned. Fewer than `min_cases` is `failed` ("challenger produced too few usable cases"); an LLM error is `skipped`.
+* 2026-11-23 (P10): the guide says a `high` confidence failure blocks and a `medium` one warns. A crash, timeout, oversized or non-JSON result on a schema-valid input blocks whatever the case's
+  confidence or check, because the input was checked against the tool's own schema on the host and no expectation can make a crash acceptable. A `ToolError` is a handled refusal, as in G4.
+* 2026-11-23 (P10): the guide lists three new settings. `challenger_max_rpm` falls back to `llm_max_rpm` only while the challenger has no endpoint of its own (a different endpoint is a
+  different quota). Limiters are shared per process by role, endpoint and rate, so two verifications that run at once share one schedule. `llm_timeout_s` is bounded 1 to 600.
+* 2026-11-23 (P10): scope additions the guide does not list: `LLMError`, `LLMUnavailable`, `LLMRefused` and `LLMBadReply` in `errors.py`; `llm/__init__.py`; the `toolforge.llm` package-data
+  line in `pyproject.toml` for the prompt file; a `challenger model` check in `toolforge doctor` (the guide asks for the same-model warning there; the check also reports "not configured" and a
+  bad base URL, and makes no request); `Settings.effective_challenger_max_rpm` and `.challenger_shares_builder_model`; a G5 section in `docs/verification.md`; and the tests `test_llm_client.py`,
+  `test_checks_dsl.py`, `test_g5_challenger.py`, `test_g5_prompt.py` and `test_llm_live.py`. The harness was not changed: `--batch` with `include_results` already does what G5 needs.
+* 2026-11-23 (P10): the model id goes to the ledger as a metric of the `forge.gate.*` event (`metrics.model`, token counts and case counts), not as a new event type, so the catalogue in
+  `02-architecture.md` is unchanged. `tests/test_llm_live.py` reads `TOOLFORGE_LLM_*` when the file is collected, because `tests/conftest.py` removes them from the environment before every test.
 * 2026-11-22 (P09): scope additions the guide does not list. `SandboxSpec.broker` (the service names a sandbox may call; a sandbox with brokered
   services is attached to the egress proxy even with `network="none"`, because the broker is a path on the proxy). `ToolRunner.run(record_stats=)`
   (the live smoke run must not count as a use). `ToolRunner(broker_services=)`. `report_view`/`forge_status` show the approval state. `Pipeline.hand_over`

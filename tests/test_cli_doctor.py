@@ -351,6 +351,7 @@ def test_the_checks_list_is_the_one_place_to_add_a_check() -> None:
         "egress proxy image",
         "leftover containers",
         "data directory",
+        "challenger model",
     ]
     required = {check.name for check in cli_doctor.CHECKS if check.required}
     assert required == {"python", "docker daemon", "minilocker", "data directory"}
@@ -379,3 +380,84 @@ def test_the_command_is_wired_to_main_with_a_clean_flag(
     monkeypatch.setattr(cli_doctor, "run_doctor", lambda env, checks=None: seen.append(env.clean) or 0)
     assert main(["doctor"]) == 0 and main(["doctor", "--clean"]) == 0
     assert seen == [False, True]
+
+
+# -- the challenger model (P10) ----------------------------------------------------------------------------------------------
+
+
+def challenger_result(monkeypatch: pytest.MonkeyPatch, **env: str) -> CheckResult:
+    for name, value in env.items():
+        monkeypatch.setenv(f"TOOLFORGE_{name.upper()}", value)
+    check = next(c for c in cli_doctor.CHECKS if c.name == "challenger model")
+    return check.run(env_for(None))
+
+
+def test_no_challenger_is_a_skip_that_says_what_it_means(monkeypatch: pytest.MonkeyPatch) -> None:
+    result = challenger_result(monkeypatch)
+    assert (
+        result.status == "skip"
+        and "G5 is skipped" in result.message
+        and "TOOLFORGE_CHALLENGER_BASE_URL" in (result.hint or "")
+    )
+
+
+def test_a_half_configured_challenger_is_a_warning_naming_the_missing_setting(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    result = challenger_result(monkeypatch, llm_base_url="https://llm.test/v1")
+    assert result.status == "warn" and "TOOLFORGE_CHALLENGER_MODEL" in result.message
+
+
+def test_the_challenger_model_equal_to_the_builder_is_a_warning(monkeypatch: pytest.MonkeyPatch) -> None:
+    result = challenger_result(
+        monkeypatch, llm_base_url="https://llm.test/v1", llm_model="same-model", challenger_model="Same-Model"
+    )
+    assert (
+        result.status == "warn" and "weaker evidence" in result.message and "different" in (result.hint or "")
+    )
+    fallback = challenger_result(monkeypatch, llm_base_url="https://llm.test/v1", llm_model="same-model")
+    assert fallback.status == "warn"  # no challenger of its own: it is the builder
+
+
+def test_a_different_challenger_is_ok_and_the_key_and_credentials_are_never_shown(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    result = challenger_result(
+        monkeypatch,
+        llm_base_url="https://llm.test/v1",
+        llm_model="builder-m",
+        challenger_model="other-m",
+        challenger_api_key="sk-very-secret-value",
+    )
+    assert (
+        result.status == "ok"
+        and "other-m at llm.test" in result.message
+        and "with an API key" in result.message
+    )
+    assert "sk-very-secret-value" not in result.message + (result.hint or "")
+
+
+def test_an_unusable_base_url_is_a_warning_and_never_echoes_credentials(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    result = challenger_result(
+        monkeypatch, challenger_base_url="https://user:hunter2@llm.test/v1", challenger_model="m"
+    )
+    assert result.status == "warn" and "hunter2" not in result.message + (result.hint or "")
+    assert (
+        challenger_result(monkeypatch, challenger_base_url="ftp://llm.test", challenger_model="m").status
+        == "warn"
+    )
+
+
+def test_doctor_makes_no_model_request(monkeypatch: pytest.MonkeyPatch) -> None:
+    def forbidden(*args: Any, **kwargs: Any) -> Any:
+        raise AssertionError("doctor must not contact the model provider")
+
+    monkeypatch.setattr("toolforge.llm.client.UrllibTransport.post", forbidden)
+    assert (
+        challenger_result(
+            monkeypatch, llm_base_url="https://llm.test/v1", llm_model="m", challenger_model="n"
+        ).status
+        == "ok"
+    )

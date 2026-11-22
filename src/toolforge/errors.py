@@ -70,3 +70,30 @@ class Busy(ToolForgeError):
     """The server is working at its limit and a caller waited its turn in vain. Retrying later is the right response."""
 
     code = "busy"
+
+
+class LLMError(ToolForgeError):
+    """Base class for everything that goes wrong between ToolForge and a language-model provider."""
+
+    code = "llm_error"
+
+
+class LLMUnavailable(LLMError):
+    """The model could not be used: not configured, unreachable, rate limited past the retry budget, or it refused our key.
+
+    A gate that sees this records `skipped`, never `failed` and never `passed`: nothing was learned about the tool.
+    """
+
+    code = "llm_unavailable"
+
+
+class LLMRefused(LLMError):
+    """ToolForge refused to send a prompt because it contains a secret-shaped string. Nothing left the process."""
+
+    code = "llm_refused"
+
+
+class LLMBadReply(LLMError):
+    """The provider answered, but not with one usable JSON object, even after one nudge. Treated like an outage by the gates."""
+
+    code = "llm_bad_reply"

@@ -59,14 +59,14 @@ def test_status_is_built_exactly_when_a_gate_class_is_registered() -> None:
     assert (
         {g.id for g in GATE_INFO if g.status == "built"}
         == set(GATE_CLASS_PATHS)
-        == {"G1", "G2", "G3", "G4", "G6", "G7"}
+        == {"G1", "G2", "G3", "G4", "G5", "G6", "G7"}
     )
-    assert {g.id for g in GATE_INFO if g.status == "planned"} == {"G5"}
+    assert {g.id for g in GATE_INFO if g.status == "planned"} == set()
 
 
 def test_every_registered_gate_class_exists_and_has_the_interface() -> None:
     built = default_gates()
-    assert [g.id for g in built] == ["G1", "G2", "G3", "G4", "G6"]
+    assert [g.id for g in built] == ["G1", "G2", "G3", "G4", "G5", "G6"]
     assert all(isinstance(g.budget_s, int) and g.budget_s > 0 and callable(g.run) for g in built)
 
 

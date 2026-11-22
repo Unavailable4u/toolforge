@@ -4,8 +4,8 @@ Three things live here and nowhere else:
 
 * `GATE_INFO`, the only list of gates in the repository (G1 to G7, in plain language, with `built` or `planned` derived from which
   gate classes are registered in `GATE_CLASS_PATHS`). Docs, the README and the drift tests read it; so will the site (P19).
-* `Gate`, `GateContext` and `GateResult`, the interface every gate implements. G5 plugs in by adding one line to
-  `GATE_CLASS_PATHS`; nothing else here changes.
+* `Gate`, `GateContext` and `GateResult`, the interface every gate implements. A gate plugs in by adding one line to
+  `GATE_CLASS_PATHS` (G5 did in P10); nothing else here changes.
 * `Pipeline.run`, which moves a version `submitted -> verifying -> rejected | verified_basic | verified`, persists one `gate_results`
   row per gate, and writes the ledger events (`forge.submitted`, `forge.gate.*`, `forge.verifying`, `forge.verified`, `forge.rejected`).
   A version that passed and asks for network hosts or secrets then goes on to `pending_approval` (G7, `g7_approval`) and the report
@@ -129,13 +129,14 @@ _GATE_TEXT: tuple[tuple[str, str, str, str, str], ...] = (
     ),
 )
 
-# Gate id -> "module:Class". The one place a gate becomes built: a later patch adds its line here (G5 in P10). G7 (P09) is built but
+# Gate id -> "module:Class". The one place a gate becomes built: a patch adds its line here (G5 in P10). G7 (P09) is built but
 # is not in `PIPELINE_GATE_IDS`: it is the operator's approval, which `Pipeline.run` starts and does not wait for.
 GATE_CLASS_PATHS: dict[str, str] = {
     "G1": "toolforge.verify.g1_static:StaticGate",
     "G2": "toolforge.verify.g2_build:BuildGate",
     "G3": "toolforge.verify.g3_selftest:SelfTestGate",
     "G4": "toolforge.verify.g4_fuzz:FuzzGate",
+    "G5": "toolforge.verify.g5_challenger:ChallengerGate",
     "G6": "toolforge.verify.g6_containment:ContainmentGate",
     "G7": "toolforge.verify.g7_approval:ApprovalGate",
 }

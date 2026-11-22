@@ -16,7 +16,7 @@ patch" in the same patch. Never tick a box for work that is not in the patch. Bo
 | [x] | P07 | MCP server v1 | P03, P05, P06 |
 | [x] | P08 | Containment gate G6 and Blast Radius per tool | P06 |
 | [x] | P09 | Permissions, approvals, egress and brokered secrets | P07, P08 |
-| [ ] | P10 | Independent challenger, gate G5 | P06 |
+| [x] | P10 | Independent challenger, gate G5 | P06 |
 | [ ] | P11 | Server-side builder | P07, P10 |
 | [ ] | P12 | Reuse ranking, self-repair, rollback | P07, P11 |
 | [ ] | P13 | Stateful sessions | P05, P08 |
@@ -35,8 +35,27 @@ Milestones (M0 to M7) and what can be dropped: `docs/guide/05-milestones.md`.
 
 ## Notes for the next patch
 
-Done: P01 (skeleton), P02 (package spec), P03 (registry), P04 (sandbox seam), P05 (execution contract and `run`), P06 (gates G1 to G4), P07 (MCP server v1), P08 (gate G6 and Blast Radius), P09 (approvals, egress, brokered secrets).
-Next: P10 (gate G5; needs only P06). P11 needs P07 and P10. Decisions and interfaces that later patches must respect:
+Done: P01 (skeleton), P02 (package spec), P03 (registry), P04 (sandbox seam), P05 (execution contract and `run`), P06 (gates G1 to G4), P07 (MCP server v1), P08 (gate G6 and Blast Radius), P09 (approvals, egress, brokered secrets), P10 (independent challenger, gate G5).
+Next: P11 (server-side builder; needs P07 and P10). P12 and P13 need P11 and P05/P08 respectively. Decisions and interfaces that later patches must respect:
+
+* P10 interfaces. `toolforge.llm.client`: `LLMClient(base_url, model, api_key, timeout_s=, limiter=, transport=, json_mode="prompt"|"native", wall_budget_s=, clock=, sleep=, rng=)`,
+  `client_from_settings(settings, "builder" | "challenger")` (None when no endpoint and model are set; the challenger falls back to the builder's values),
+  `JSONChatClient.complete_json(system, user, schema_hint=, check=) -> JsonReply(data, model, prompt_tokens, completion_tokens, latency_ms, requests, nudged)`,
+  `FakeLLM(replies, model=)` (strings, dicts or exception instances; goes through the same scan, parse and nudge; keeps `.requests`), `RateLimiter`,
+  `shared_limiter` / `reset_shared_limiters`, `parse_json_object`, `refuse_secrets`, `Transport` (`post(url, headers, body, timeout_s)`) and `UrllibTransport`.
+  New errors in `errors.py`: `LLMError`, `LLMUnavailable` (not configured, unreachable, rate limited past the budget, key refused), `LLMRefused` (secret-shaped prompt),
+  `LLMBadReply` (two unusable replies). A gate turns the last three into `skipped`. P11 (builder) and P16 (benchmark agent) should use `client_from_settings(settings,
+  "builder")` and `complete_json`; ask for plain text with a small `chat` wrapper rather than a second HTTP path. Everything a model returns is data: validate it with pydantic,
+  never run it. `verify/checks_dsl.py` is the closed check vocabulary (`parse_check`, `evaluate`, `describe`, `CHECK_KINDS`; the prompt file lists the same eight, a test checks it).
+  `verify/g5_challenger.py::ChallengerGate(client=None, min_cases=8, host_cases=12)` is registered in `GATE_CLASS_PATHS`; `build_user_prompt` and `system_prompt` are public.
+  Settings added: `llm_max_rpm`, `challenger_max_rpm`, `llm_timeout_s` (`Settings.effective_challenger_max_rpm`, `.challenger_shares_builder_model`). Doctor has a `challenger model` check.
+* P10 behaviour. No model, an outage, a refused key, two unusable replies or a secret-shaped prompt give G5 `skipped` (the version stays `verified_basic`; promote or approval
+  still work). G5 blocks on: any crash, timeout, oversized or non-JSON result for a schema-valid case (host or challenger), a `high` confidence check that fails, any
+  `permission_findings`, and fewer than `min_cases` usable challenger cases. `medium` failures and `risk_flags` are warnings in `detail["warnings"]`. The ledger gets model id,
+  token counts and case counts through the gate's metrics only. The challenger sees no files for cases (it cannot supply inputs), so a tool that needs `inputs/` files is
+  exercised only by the host's cases. Real calls to the batch mode use the unchanged harness. Not measured: how often the challenger finds a real defect (P16).
+* P10 not run: `pytest -m llm` (no endpoint where the patch was written), every `docker` test, and `toolforge submit examples/toolpacks/csv_summary` with a real model.
+  The urllib transport has been exercised only through mocks, never against a real server.
 
 * Revision 4 additions (guide only, no code yet), picked up by the patch that owns them: **P12** adds `forge_describe.signature` (typed Python and TypeScript
   stubs built only from the schema; no author text in a code position) and a response size budget (`server/budget.py`, `tests/test_context_budget.py`);

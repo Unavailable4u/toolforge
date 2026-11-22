@@ -34,6 +34,7 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 "toolforge.adapters" = ["recipes/*.md"]
+"toolforge.llm" = ["prompts/*.md"]
 
 [tool.ruff]
 line-length = 110

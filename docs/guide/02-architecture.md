@@ -107,6 +107,10 @@ summary of the declared permissions, the run id and whether the run resumed an e
 `forge.gate.skipped` with its summary and numbers. `forge.verification.aborted` means the sandbox was unavailable: the version stays
 `verifying` and the same submission resumes it. Hashes, counts and labels only; never source text, secret matches or sandbox output.
 
+G5 (P10) adds no event type. Its `forge.gate.*` event carries `metrics`: the challenger's `model` id, `tokens_in` and `tokens_out` (null when the provider gave none),
+`latency_ms`, `requests`, and the case counts `cases_proposed`, `cases_usable`, `cases_dropped`, `host_cases`, `cases_executed`, `cases_failed` and `cases_warned`. The prompt, the code
+and the model's text are never written to a ledger.
+
 ### Operator events (P07)
 
 `toolforge promote` writes `forge.promoted` (with the operator's reason) to `ledgers/<tool>@<version>/operator.jsonl`, and `forge.deprecated` to the

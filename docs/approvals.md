@@ -6,7 +6,7 @@ time, with `toolforge approvals`. This page says how that works, what the operat
 
 ## The flow
 
-1. An agent submits a package whose manifest has non-empty `network` or `secrets`. G1 to G4 run (and G5 and G6 when they exist).
+1. An agent submits a package whose manifest has non-empty `network` or `secrets`. G1 to G6 run (G5 is skipped when no challenger model is configured).
 2. If the package passed, the version does **not** go to `active` and `promote` refuses it. It becomes `pending_approval` (also when it
    is only `verified_basic`; otherwise a network tool could never be used without a model key). An **approval request** is opened.
 3. The operator reads the request and answers. Approve: the version becomes `active` (live examples run once first, below). Deny: it is
@@ -28,7 +28,7 @@ toolforge approvals deny <id> --reason "<why>"
 
 `show` prints, and the same text is printed again before `approve` and `deny` act:
 
-* a first line **`WEAKER EVIDENCE: G5, G6 did not run`** when gates were skipped (they usually are on a machine with no model key),
+* a first line **`WEAKER EVIDENCE: G5, G6 did not run`** when gates were skipped (G5 is skipped on a machine with no model configured, or when the model could not be reached),
 * the permissions asked for and a **permission diff** against the version that is active now: what is added, kept and removed,
 * for each secret, whether a broker service of that name is configured here,
 * the tool's description (cleaned and clipped; a warning when it reads like instructions to an AI), one line per gate, and the Blast

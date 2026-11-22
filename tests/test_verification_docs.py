@@ -74,5 +74,5 @@ def test_the_documented_pip_command_is_the_real_one() -> None:
 
 
 def test_the_gate_listing_in_the_docs_has_the_right_status() -> None:
-    assert {g.id for g in GATE_INFO if g.status == "built"} == {"G1", "G2", "G3", "G4", "G6", "G7"}
+    assert {g.id for g in GATE_INFO if g.status == "built"} == {"G1", "G2", "G3", "G4", "G5", "G6", "G7"}
     assert StaticGate.id == "G1"

@@ -272,6 +272,46 @@ def check_data_dir(env: DoctorEnv) -> CheckResult:
     return CheckResult("ok", f"data directory {home} is writable{suffix}")
 
 
+def check_challenger(env: DoctorEnv) -> CheckResult:
+    """Is gate G5 able to run, and is the challenger a different model from the builder? Reads settings only: no request is made."""
+    from urllib.parse import urlsplit
+
+    settings = env.settings
+    base_url = settings.effective_challenger_base_url
+    model = settings.effective_challenger_model
+    if not base_url and not model:
+        return CheckResult(
+            "skip",
+            "no challenger model is configured, so gate G5 is skipped and tools stop at verified_basic",
+            "set TOOLFORGE_CHALLENGER_BASE_URL and TOOLFORGE_CHALLENGER_MODEL (or the TOOLFORGE_LLM_* values); see docs/verification.md",
+        )
+    if not base_url or not model:
+        missing = "TOOLFORGE_CHALLENGER_BASE_URL" if not base_url else "TOOLFORGE_CHALLENGER_MODEL"
+        return CheckResult(
+            "warn",
+            f"the challenger model is only partly configured ({missing} is missing), so gate G5 is skipped",
+            f"set {missing} (or the matching TOOLFORGE_LLM_* value)",
+        )
+    parts = urlsplit(base_url)
+    if parts.scheme not in ("http", "https") or not parts.hostname or parts.username or parts.password:
+        return CheckResult(
+            "warn",
+            "the challenger base URL is not usable, so gate G5 is skipped",
+            "it must be an http or https address, without a user name or password in it",
+        )
+    where = f"{model} at {parts.hostname}"
+    if settings.challenger_shares_builder_model:
+        return CheckResult(
+            "warn",
+            f"the challenger uses the builder's model ({where}): G5 is weaker evidence, because both tend to miss the same things",
+            "use a different model family, or at least a different size, for TOOLFORGE_CHALLENGER_MODEL",
+        )
+    key = "with an API key" if settings.effective_challenger_api_key is not None else "without an API key"
+    return CheckResult(
+        "ok", f"challenger model {where}, {key} (not contacted: doctor makes no model requests)"
+    )
+
+
 # One list, in the order they are printed. Append to it to add a check; a required check that fails makes `doctor` exit 1.
 CHECKS: list[Check] = [
     Check("python", True, check_python),
@@ -281,6 +321,7 @@ CHECKS: list[Check] = [
     Check("egress proxy image", False, check_proxy_image),
     Check("leftover containers", False, check_leftovers),
     Check("data directory", True, check_data_dir),
+    Check("challenger model", False, check_challenger),
 ]
 
 
