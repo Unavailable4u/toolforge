@@ -607,7 +607,7 @@ def test_text_of_helper_is_usable(env: Env) -> None:
 def test_release_and_quarantine_are_operator_only_and_not_tools() -> None:
     from toolforge.server.tools import META_TOOLS, OPERATOR_ONLY
 
-    assert {"promote", "release", "quarantine"} <= set(OPERATOR_ONLY)
+    assert {"promote", "release", "quarantine", "decide"} <= set(OPERATOR_ONLY)
     assert not {"release", "quarantine", "forge_release", "forge_quarantine"} & {t.name for t in META_TOOLS}
 
 
@@ -658,3 +658,58 @@ def test_describe_survives_a_garbled_stored_report(env: Env) -> None:
         out["blast_radius"]["status"] == "not_measured"
         and "could not be read" in out["blast_radius"]["summary"]
     )
+
+
+# --- Approvals (P09) -------------------------------------------------------------------------------------------------------------------
+
+NETWORK_PERMISSIONS = {"network": ["pypi.org"], "secrets": [], "inputs": False, "browser": False}
+
+
+def test_a_network_tool_waits_for_approval_and_status_says_so(env: Env) -> None:
+    env.add_tool(promote=False, permissions=NETWORK_PERMISSIONS)
+    out = data(env.call("forge_status", {"name": "my_tool"}))
+    assert out["status"] == "pending_approval" and out["approval"] == {"state": "pending"}
+    assert "operator" in out["next_step"]
+
+
+def test_submit_names_the_operator_command_for_a_pending_version(env: Env) -> None:
+    out = data(
+        env.call(
+            "forge_submit",
+            {"package": payload_of(valid_package(permissions=NETWORK_PERMISSIONS))},
+        )
+    )
+    assert out["status"] == "pending_approval" and out["approval"] == {"state": "pending"}
+    assert out["operator_command"].startswith("toolforge approvals show ")
+    assert "promote" not in out["operator_command"]
+
+
+def test_a_denied_request_tells_the_agent_what_to_change(env: Env) -> None:
+    from toolforge.services import operator_actions
+
+    ref = env.add_tool(promote=False, permissions=NETWORK_PERMISSIONS)
+    operator_actions.decide(env.settings, env.registry, 1, "deny", "too broad")
+    out = data(env.call("forge_status", {"name": "my_tool"}))
+    assert out["status"] == "rejected" and out["approval"]["state"] == "denied"
+    assert "not granted" in out["next_step"] and "raise `version`" in out["next_step"]
+    assert ref == "my_tool@0.1.0"
+
+
+def test_looking_at_an_overdue_request_denies_it(env: Env) -> None:
+    env.add_tool(promote=False, permissions=NETWORK_PERMISSIONS)
+    with env.registry.db.transaction() as conn:
+        conn.execute(
+            "UPDATE approvals SET requested_json = json_set(requested_json, '$.expires_at', '2020-01-01T00:00:00.000Z')"
+        )
+    out = data(env.call("forge_status", {"name": "my_tool"}))
+    assert out["status"] == "rejected" and out["approval"]["state"] == "denied"
+
+
+def test_the_server_cannot_approve_by_any_route(env: Env) -> None:
+    env.add_tool(promote=False, permissions=NETWORK_PERMISSIONS)
+    for tool in ("forge_run", "forge_status", "forge_describe"):
+        env.call(
+            tool, {"name": "my_tool", "args": {"text": "x"}} if tool == "forge_run" else {"name": "my_tool"}
+        )
+    assert env.registry.get_approval(1).status == "pending"
+    assert env.registry.find_version("my_tool", "0.1.0").status == "pending_approval"

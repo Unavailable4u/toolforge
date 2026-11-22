@@ -3,7 +3,7 @@
 `promote` is the first one: it makes a verified version `active`, so agents can find and run it. It exists because an agent must
 not be able to put its own code in front of other agents. The server package may not import any function named in
 `toolforge.server.tools.OPERATOR_ONLY`; `tests/test_server_tools.py::test_server_never_imports_operator_actions` reads the server's
-source and fails if it does. P08 added `release` and `quarantine` here, P09 adds `decide`, P12 `rollback`.
+source and fails if it does. P08 added `release` and `quarantine` here, P09 added `decide`, P12 adds `rollback`.
 
 `quarantine` takes an active version out of use, and `release` puts a quarantined one back. Both need a reason, which goes to the
 version's `operator.jsonl`. `release_context` is what the operator should read before releasing: why the version was quarantined
@@ -25,7 +25,14 @@ The status change is `lifecycle.transition(..., actor="operator", reason=...)`, 
 gives better messages). The ledger event it returns (`forge.promoted`) is appended to the version's ledger, and so is the
 `forge.deprecated` event of the version that was replaced, to that version's own ledger.
 
-Proven by `tests/test_operator_actions.py`.
+`decide` answers an approval request (P09): `approve` makes a `pending_approval` version active, `deny` rejects it. Approving refuses,
+in this order: no reason; a request that was decided or has timed out; a version that is not `pending_approval` any more or whose
+`code_sha` is not the one the request recorded; a stored package that was never built; a secret with no broker service in this
+environment. Then any example marked `live` runs once in a sandbox with the approved network (and the brokered services) and its
+failure rejects the version instead; a sandbox that cannot start changes nothing. The decision and the move to `active` are one
+registry transaction. `promote` is never a way around it, and approval is the only way a version with network or secrets becomes active.
+
+Proven by `tests/test_operator_actions.py` and `tests/test_decide.py`.
 """
 
 from __future__ import annotations
@@ -40,6 +47,7 @@ from toolforge import ledger as ledger_mod
 from toolforge.config import Settings
 from toolforge.errors import IllegalTransition, LedgerError, RegistryError, ToolForgeError
 from toolforge.registry import Registry, lifecycle
+from toolforge.services import approvals
 
 log = logging.getLogger(__name__)
 
@@ -98,7 +106,7 @@ def _refuse_status(label: str, status: str) -> ToolForgeError:
         ),
         lifecycle.PENDING_APPROVAL: (
             f"{label} is waiting for approval and promote does not replace approval",
-            "approvals arrive in P09; the operator decides there",
+            "read the request with `toolforge approvals show <id>`, then `toolforge approvals approve|deny <id> --reason ...`",
         ),
         lifecycle.SUBMITTED: (
             f"{label} has not been verified yet (status submitted)",
@@ -166,9 +174,9 @@ def promote(
     _require_built(registry, record)
     if record.asks_network_or_secrets:
         raise IllegalTransition(
-            f"{record.label} asks for network access or secrets: tools that ask for network or secrets need approval, which arrives in P09",
+            f"{record.label} asks for network access or secrets: tools that ask for network or secrets need approval",
             code="needs_approval",
-            hint="promote does not replace approval; until P09 such a version cannot become active",
+            hint="promote does not replace approval; submit it so it reaches pending_approval, then use `toolforge approvals`",
         )
     event = registry.transition(record.id, lifecycle.ACTIVE, actor=OPERATOR, reason=text)
     written = _write_ledger(settings, event, ledger_factory)
@@ -361,11 +369,187 @@ def release_context(settings: Settings, registry: Registry, ref: str) -> Release
     )
 
 
+# --- Approvals (G7) -------------------------------------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class Decided:
+    """What `decide` did. `outcome` is `approved`, `denied` or `rejected_by_smoke` (approval was asked for and a live example failed)."""
+
+    label: str
+    approval_id: int
+    outcome: str
+    to_status: str
+    replaced: tuple[str, ...] = ()
+    smoke: tuple[str, ...] = ()
+    ledger_files: tuple[str, ...] = field(default=())
+
+    def text(self) -> str:
+        lines = {
+            "approved": f"{self.label} is approved and now active.",
+            "denied": f"{self.label} was denied and is rejected.",
+            "rejected_by_smoke": f"{self.label} was not approved: a live example failed, so it is rejected.",
+        }[self.outcome].splitlines()
+        lines += [f"live example: {item}" for item in self.smoke]
+        if self.replaced:
+            lines.append(f"deprecated: {', '.join(self.replaced)}")
+        return "\n".join(lines)
+
+
+ToolRunnerFactory = Callable[[], Any]
+BrokerLookup = Callable[[], Any]
+
+
+def _live_examples(record: Any) -> list[dict[str, Any]]:
+    return [e for e in record.manifest.get("examples") or [] if isinstance(e, dict) and e.get("live")]
+
+
+def _run_live(
+    registry: Registry, record: Any, factory: ToolRunnerFactory | None
+) -> tuple[bool, tuple[str, ...]]:
+    """Run each live example once. `(all passed, one line per example)`. A sandbox that cannot start raises: nothing was decided."""
+    examples = _live_examples(record)
+    if not examples:
+        return True, ()
+    if factory is None:
+        raise IllegalTransition(
+            f"{record.label} has live examples, which run once in a sandbox before it becomes active, and no sandbox was given",
+            code="smoke_needs_sandbox",
+            hint="run `toolforge approvals approve` from the command line with Docker available",
+        )
+    runner = factory()
+    lines: list[str] = []
+    passed = True
+    for number, example in enumerate(examples, start=1):
+        files = {str(k): str(v).encode("utf-8") for k, v in (example.get("files") or {}).items()}
+        result = runner.run(
+            record,
+            dict(example.get("input") or {}),
+            files=files or None,
+            allow_status=(lifecycle.PENDING_APPROVAL,),
+            record_stats=False,
+        )
+        if result.ok:
+            lines.append(f"#{number}: ok")
+        else:
+            passed = False
+            kind = result.error.type if result.error else "unknown"
+            message = result.error.message[:160] if result.error else ""
+            lines.append(f"#{number}: failed ({kind}) {message}".strip())
+    return passed, tuple(lines)
+
+
+def decide(
+    settings: Settings,
+    registry: Registry,
+    approval_id: int,
+    decision: str,
+    reason: str,
+    *,
+    tool_runner_factory: ToolRunnerFactory | None = None,
+    brokers: BrokerLookup | None = None,
+    ledger_factory: LedgerFactory | None = None,
+) -> Decided:
+    """Answer an approval request: `decision` is `approve` or `deny`. See the module docstring for what approving refuses.
+
+    `tool_runner_factory()` returns the `ToolRunner` that runs live examples (only called when there are any). `brokers()` says which
+    brokered services exist (`{name: host}`); the default asks MiniLocker. The ledger events go to the version's `operator.jsonl`.
+    """
+    if decision not in ("approve", "deny"):
+        raise IllegalTransition("a decision is approve or deny", code="bad_decision")
+    text = _need_reason(decision, reason)
+    approvals.expire_overdue(settings, registry, ledger_factory=ledger_factory)
+    approval = registry.get_approval(approval_id)
+    if approval is None:
+        raise RegistryError(
+            f"no approval request with id {approval_id}",
+            code="unknown_approval",
+            hint="list them with `toolforge approvals list`",
+        )
+    if approval.status != "pending":
+        raise IllegalTransition(
+            f"approval {approval_id} was already {approval.status}; a decision cannot be changed",
+            code="approval_decided",
+            hint="a denied or timed-out version is rejected for good: raise its version and submit it again",
+        )
+    record = registry.get_version(approval.version_id)
+    if record is None or record.status != lifecycle.PENDING_APPROVAL:
+        found = record.status if record is not None else "missing"
+        raise IllegalTransition(
+            f"approval {approval_id} belongs to a version that is {found}, not pending_approval",
+            code="not_pending",
+            hint="nothing to decide",
+        )
+    if decision == "deny":
+        event = approvals.deny(registry, approval_id, record.id, by=OPERATOR, reason=text)
+        written = approvals.write_operator_event(
+            settings, ledger_factory, event, {"approval_id": approval_id}
+        )
+        return Decided(
+            record.label,
+            approval_id,
+            "denied",
+            lifecycle.REJECTED,
+            ledger_files=(written,) if written else (),
+        )
+
+    recorded = (approval.requested or {}).get("code_sha")
+    if recorded != record.code_sha:
+        raise IllegalTransition(
+            f"approval {approval_id} was requested for different content than {record.label} has now",
+            code="code_changed",
+            hint="deny it; a changed package is a new version with a new request",
+        )
+    _require_built(registry, record)
+    approvals.require_gates(registry, record)
+    asked = approvals.requested_permissions(record.manifest)
+    if asked["secrets"]:
+        known, problem = (
+            (dict(brokers()), None) if brokers is not None else approvals.default_brokers(settings)
+        )
+        absent = approvals.missing_brokers(asked["secrets"], known)
+        if absent:
+            raise IllegalTransition(
+                f"{record.label} needs a brokered secret for {', '.join(absent)} and none is configured here"
+                + (f" ({problem})" if problem else ""),
+                code="broker_not_configured",
+                hint="export MINILOCKER_BROKER=<name>=<host> and MINILOCKER_BROKER_TOKEN_<NAME> in this shell, then approve again",
+            )
+    passed, smoke = _run_live(registry, record, tool_runner_factory)
+    if not passed:
+        why = f"a live example failed: {smoke[-1] if smoke else ''}"
+        event = approvals.deny(registry, approval_id, record.id, by=approvals.FORGE, reason=why)
+        written = approvals.write_operator_event(
+            settings, ledger_factory, event, {"approval_id": approval_id, "live_smoke": list(smoke)}
+        )
+        return Decided(
+            record.label,
+            approval_id,
+            "rejected_by_smoke",
+            lifecycle.REJECTED,
+            (),
+            smoke,
+            (written,) if written else (),
+        )
+    with registry.db.transaction():
+        registry.decide_approval(approval_id, "approved", decided_by=OPERATOR)
+        event = registry.transition(record.id, lifecycle.ACTIVE, actor=OPERATOR, reason=text)
+    written_files = _write_ledger(
+        settings, {**event, "approval_id": approval_id}, ledger_factory, what="approved and active"
+    )
+    replaced = tuple(f"{e['tool']}@{e['version']}" for e in event.get("related", []))
+    return Decided(
+        record.label, approval_id, "approved", lifecycle.ACTIVE, replaced, smoke, tuple(written_files)
+    )
+
+
 __all__ = [
+    "Decided",
     "Moved",
     "PROMOTABLE",
     "Promoted",
     "ReleaseContext",
+    "decide",
     "parse_label",
     "promote",
     "quarantine",

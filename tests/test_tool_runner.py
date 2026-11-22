@@ -143,6 +143,7 @@ class StandInRegistry:
         self.record_error: Exception | None = None
         self.reads: list[int] = []
         self.transitions: list[tuple] = []
+        self.approvals: list[Any] = []  # `Approval`-like rows; P09's permission tests fill it
 
     def add(self, record: VersionRecord) -> VersionRecord:
         self.records[record.id] = record
@@ -160,6 +161,9 @@ class StandInRegistry:
 
     def get_tool(self, name: str) -> Any:
         return next((r for r in self.records.values() if r.name == name), None)
+
+    def list_approvals(self, status: str | None = None) -> list[Any]:
+        return [a for a in self.approvals if status is None or a.status == status]
 
     def transition(
         self, version_id: int, to: str, *, actor: str, reason: str | None = None

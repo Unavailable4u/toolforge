@@ -4,10 +4,12 @@ Three things live here and nowhere else:
 
 * `GATE_INFO`, the only list of gates in the repository (G1 to G7, in plain language, with `built` or `planned` derived from which
   gate classes are registered in `GATE_CLASS_PATHS`). Docs, the README and the drift tests read it; so will the site (P19).
-* `Gate`, `GateContext` and `GateResult`, the interface every gate implements. G5 to G7 plug in by adding one line to
+* `Gate`, `GateContext` and `GateResult`, the interface every gate implements. G5 plugs in by adding one line to
   `GATE_CLASS_PATHS`; nothing else here changes.
 * `Pipeline.run`, which moves a version `submitted -> verifying -> rejected | verified_basic | verified`, persists one `gate_results`
   row per gate, and writes the ledger events (`forge.submitted`, `forge.gate.*`, `forge.verifying`, `forge.verified`, `forge.rejected`).
+  A version that passed and asks for network hosts or secrets then goes on to `pending_approval` (G7, `g7_approval`) and the report
+  says so; the pipeline never waits for the operator.
 
 Fail closed. A gate that raises is a failed gate. A gate that is not built yet is recorded as `skipped`, and a `skipped` gate caps the
 status at `verified_basic`; only a run in which G1 to G6 all passed is `verified`. A failure of the sandbox itself (Docker is down) is
@@ -18,6 +20,7 @@ sandbox that is open writes to the same chained file.
 
 Proven by `tests/test_pipeline.py`: order, stop at the first failure, skipped capping, the events and rows written, a crashing gate,
 an exceeded budget, a gate that tries to change the package, and that `GATE_INFO` lists G1 to G7 in order with the right status.
+`tests/test_g7_approval.py` proves the hand-over to approval.
 """
 
 from __future__ import annotations
@@ -34,6 +37,7 @@ from typing import TYPE_CHECKING, Any, Protocol
 from toolforge import textsafety
 from toolforge.errors import SandboxError, SandboxUnavailable
 from toolforge.registry import lifecycle
+from toolforge.services import approvals
 
 if TYPE_CHECKING:
     from toolforge.config import Settings
@@ -41,6 +45,7 @@ if TYPE_CHECKING:
     from toolforge.registry import Registry
     from toolforge.registry.db import VersionRecord
     from toolforge.sandbox.base import SandboxRunner
+    from toolforge.verify.g7_approval import ApprovalGate
 
 log = logging.getLogger(__name__)
 
@@ -124,16 +129,18 @@ _GATE_TEXT: tuple[tuple[str, str, str, str, str], ...] = (
     ),
 )
 
-# Gate id -> "module:Class". The one place a gate becomes built: a later patch adds its line here (G5 in P10, G7 in P09).
+# Gate id -> "module:Class". The one place a gate becomes built: a later patch adds its line here (G5 in P10). G7 (P09) is built but
+# is not in `PIPELINE_GATE_IDS`: it is the operator's approval, which `Pipeline.run` starts and does not wait for.
 GATE_CLASS_PATHS: dict[str, str] = {
     "G1": "toolforge.verify.g1_static:StaticGate",
     "G2": "toolforge.verify.g2_build:BuildGate",
     "G3": "toolforge.verify.g3_selftest:SelfTestGate",
     "G4": "toolforge.verify.g4_fuzz:FuzzGate",
     "G6": "toolforge.verify.g6_containment:ContainmentGate",
+    "G7": "toolforge.verify.g7_approval:ApprovalGate",
 }
 
-# The gates `Pipeline.run` goes through. G7 is an approval step run by P09, not part of a verification run.
+# The gates `Pipeline.run` goes through. G7 is the approval step `Pipeline.run` hands over to after these (see `g7_approval`).
 PIPELINE_GATE_IDS: tuple[str, ...] = ("G1", "G2", "G3", "G4", "G5", "G6")
 
 
@@ -291,12 +298,22 @@ class VerificationReport:
     dry_run: bool
     version_id: int | None = None
     run_id: str = ""
+    approval: dict[str, Any] | None = (
+        None  # `{"id", "state"}` once G7 opened a request; None when the version needs none
+    )
 
     @property
     def ok(self) -> bool:
-        return self.status in (lifecycle.VERIFIED_BASIC, lifecycle.VERIFIED)
+        """Not rejected: verified, verified with a gate skipped, or waiting for the operator's approval (G7)."""
+        return self.status in (lifecycle.VERIFIED_BASIC, lifecycle.VERIFIED, lifecycle.PENDING_APPROVAL)
 
     def as_dict(self) -> dict[str, Any]:
+        document = self._as_dict()
+        if self.approval is not None:
+            document["approval"] = dict(self.approval)
+        return document
+
+    def _as_dict(self) -> dict[str, Any]:
         return {
             "status": self.status,
             "tool": self.name,
@@ -375,8 +392,27 @@ def _notify(progress: ProgressFn | None, gate_id: str, phase: str, status: str |
 
 
 def _next_action(
-    status: str, failing: GateReport | None, registered: bool, skipped_ids: Sequence[str] = ()
+    status: str,
+    failing: GateReport | None,
+    registered: bool,
+    skipped_ids: Sequence[str] = (),
+    *,
+    asks_permissions: bool = False,
+    approval_id: int | None = None,
 ) -> str:
+    if status == lifecycle.PENDING_APPROVAL:
+        weaker = f" ({' and '.join(skipped_ids)} did not run, and the request says so)" if skipped_ids else ""
+        where = (
+            f"toolforge approvals show {approval_id}"
+            if approval_id is not None
+            else "toolforge approvals list"
+        )
+        return f"wait for the operator to decide on the network hosts or secrets it asks for{weaker}; they read `{where}`"
+    if status in (lifecycle.VERIFIED, lifecycle.VERIFIED_BASIC) and asks_permissions:
+        return (
+            "it asks for network hosts or secrets, so a real submission goes to the operator for approval; "
+            "promote does not apply to it"
+        )
     if status == lifecycle.REJECTED and failing is not None:
         first = failing.hints[0] if failing.hints else failing.summary
         again = (
@@ -410,6 +446,8 @@ class Pipeline:
         clock: Callable[[], float] = time.monotonic,
         new_id: Callable[[], str] | None = None,
         fuzz_inputs: int | None = None,
+        approval: ApprovalGate | None = None,
+        brokers: Callable[[], Any] | None = None,
     ) -> None:
         self._settings = settings
         self._runner = runner
@@ -419,6 +457,11 @@ class Pipeline:
         self._new_id = new_id or (lambda: uuid.uuid4().hex[:12])
         options = {} if fuzz_inputs is None else {"fuzz_inputs": fuzz_inputs}
         self._gates = {gate.id: gate for gate in (gates if gates is not None else default_gates(**options))}
+        self._approval = approval
+        if self._approval is None and registry is not None:
+            from toolforge.verify.g7_approval import ApprovalGate
+
+            self._approval = ApprovalGate(settings, registry, brokers=brokers)
 
     # -- running -------------------------------------------------------------------------------------------------------
 
@@ -495,6 +538,16 @@ class Pipeline:
             ledger.append(event.pop("type"), event)
             if any(r.id == "G6" and r.status != NOT_RUN for r in reports) and ledger.path is not None:
                 warnings += self._store_blast_radius(record, ledger.path)
+        approval: dict[str, Any] | None = None
+        next_action: str | None = None
+        if (
+            record is not None
+            and registry is not None
+            and status in (lifecycle.VERIFIED, lifecycle.VERIFIED_BASIC)
+            and self._approval is not None
+            and self._approval.needed(record)
+        ):
+            status, approval, next_action = self._hand_over(record, reports, ledger.append)
         return VerificationReport(
             status=status,
             name=record.name if record else self._name(package),
@@ -502,14 +555,92 @@ class Pipeline:
             code_sha=self._code_sha(package, record),
             gates=tuple(reports),
             warnings=tuple(warnings),
-            next_action=_next_action(
-                status, failing, record is not None, [r.id for r in reports if r.status == SKIPPED]
+            next_action=next_action
+            or _next_action(
+                status,
+                failing,
+                record is not None,
+                [r.id for r in reports if r.status == SKIPPED],
+                asks_permissions=self._asks_permissions(package),
+                approval_id=approval["id"] if approval else None,
             ),
             registered=record is not None,
             dry_run=self._registry is None,
             version_id=record.id if record else None,
             run_id=run_id,
+            approval=approval,
         )
+
+    @staticmethod
+    def _asks_permissions(package: ToolPackage) -> bool:
+        try:
+            return approvals.asks_for_permissions(package.manifest.model_dump(mode="json"))
+        except Exception:
+            return False
+
+    def _hand_over(
+        self,
+        record: VersionRecord,
+        reports: Sequence[GateReport],
+        append: Callable[[str, dict[str, Any]], None],
+    ) -> tuple[str, dict[str, Any], str]:
+        """G7: open the approval request of a verified version. Returns `(status, approval info, next action)`."""
+        assert self._approval is not None
+        requested = self._approval.request(record, [r.as_dict() for r in reports], append)
+        info = {"id": requested.approval_id, "state": requested.state}
+        if requested.state == "denied":
+            return (
+                lifecycle.REJECTED,
+                info,
+                clip(
+                    f"the approval request ended at once: {requested.reason}; fix that, raise `version` and submit it again",
+                    400,
+                ),
+            )
+        skipped = [r.id for r in reports if r.status == SKIPPED]
+        return (
+            lifecycle.PENDING_APPROVAL,
+            info,
+            _next_action(lifecycle.PENDING_APPROVAL, None, True, skipped, approval_id=requested.approval_id),
+        )
+
+    def hand_over(self, record: VersionRecord) -> VerificationReport:
+        """Open the approval request of a version that is verified and asks for permissions, and report on it.
+
+        For a version an earlier run verified but could not hand over (the registry write failed after the last gate): submitting the
+        same package again must not leave it stuck, because `promote` refuses it and nothing else moves it.
+        """
+        registry = self._registry
+        if registry is None or self._approval is None:
+            raise ValueError("hand_over needs a registry")
+        current = registry.get_version(record.id)
+        base = report_from_registry(registry, current if current is not None else record)
+        if current is None or current.status not in (lifecycle.VERIFIED, lifecycle.VERIFIED_BASIC):
+            return base
+        ledger = self._open_ledger_for(current)
+        status, approval, next_action = self._hand_over(current, base.gates, ledger.append)
+        return VerificationReport(
+            status=status,
+            name=base.name,
+            version=base.version,
+            code_sha=base.code_sha,
+            gates=base.gates,
+            warnings=base.warnings,
+            next_action=next_action,
+            registered=True,
+            dry_run=False,
+            version_id=current.id,
+            run_id=base.run_id,
+            approval=approval,
+        )
+
+    def _open_ledger_for(self, record: VersionRecord) -> _RunLedger:
+        run_id = self._new_id()
+        factory = self._ledger_factory
+        if factory is None:
+            return _RunLedger(None, run_id, lambda *_: None)
+        path = Path(self._settings.home) / "ledgers" / record.label / f"verify-{run_id}.jsonl"
+        return _RunLedger(str(path), f"verify:{record.label}:{run_id}", factory)
 
     def _store_blast_radius(self, record: VersionRecord, ledger_path: str) -> list[str]:
         """Build and store the Blast Radius report of the run that just ended. A report that cannot be built is a warning, never a failure."""
@@ -701,6 +832,33 @@ def report_from_registry(registry: Registry, record: VersionRecord) -> Verificat
         warnings += [clip(w, 300) for w in detail.get("warnings", []) if isinstance(w, str)][:20]
         if row.status == FAILED and failing is None:
             failing = report
+    skipped = [g.id for g in gates if g.status == SKIPPED]
+    latest = approvals.latest_approval(registry, record.id)
+    info = {"id": latest.id, "state": latest.status} if latest is not None else None
+    if record.status == lifecycle.PENDING_APPROVAL:
+        next_action = _next_action(
+            lifecycle.PENDING_APPROVAL, None, True, skipped, approval_id=latest.id if latest else None
+        )
+    elif (
+        record.status == lifecycle.REJECTED
+        and failing is None
+        and latest is not None
+        and latest.status == "denied"
+    ):
+        next_action = (
+            "the permissions it asked for were not granted (the operator denied them, the request timed out, or a brokered "
+            "service was not configured); change what it asks for, raise `version` and submit it again"
+        )
+    elif record.status in (lifecycle.REJECTED, lifecycle.VERIFIED_BASIC, lifecycle.VERIFIED):
+        next_action = _next_action(
+            record.status,
+            failing,
+            True,
+            skipped,
+            asks_permissions=approvals.asks_for_permissions(record.manifest),
+        )
+    else:
+        next_action = f"this version is {record.status}"
     return VerificationReport(
         status=record.status,
         name=record.name,
@@ -708,12 +866,11 @@ def report_from_registry(registry: Registry, record: VersionRecord) -> Verificat
         code_sha=record.code_sha,
         gates=tuple(gates),
         warnings=tuple(warnings),
-        next_action=_next_action(record.status, failing, True, [g.id for g in gates if g.status == SKIPPED])
-        if record.status in (lifecycle.REJECTED, lifecycle.VERIFIED_BASIC, lifecycle.VERIFIED)
-        else f"this version is {record.status}",
+        next_action=next_action,
         registered=True,
         dry_run=False,
         version_id=record.id,
+        approval=info,
     )
 
 

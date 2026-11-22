@@ -71,19 +71,22 @@ EDGES: dict[tuple[str, str], Edge] = {
     ),
     (VERIFIED_BASIC, PENDING_APPROVAL): Edge(
         "forge.approval.requested",
-        "The manifest asks for network or secrets and G5 was skipped (routed by P09).",
+        "The manifest asks for network or secrets and G5 was skipped; the request says so (G7).",
     ),
     (VERIFIED, PENDING_APPROVAL): Edge(
-        "forge.approval.requested", "The manifest asks for network or secrets."
+        "forge.approval.requested", "The manifest asks for network or secrets (G7)."
     ),
     (VERIFIED, ACTIVE): Edge(
         "forge.promoted",
         "Automatic promotion. Refused when the manifest declares network hosts or secrets.",
         refuse_network_or_secrets=True,
     ),
-    (PENDING_APPROVAL, ACTIVE): Edge("forge.approval.granted", "The operator approves.", operator_only=True),
+    (PENDING_APPROVAL, ACTIVE): Edge(
+        "forge.approval.granted", "The operator approves; live examples run first.", operator_only=True
+    ),
     (PENDING_APPROVAL, REJECTED): Edge(
-        "forge.approval.denied", "The operator denies, or the request times out."
+        "forge.approval.denied",
+        "The operator denies, the request times out, a live example fails, or a brokered secret has no broker service.",
     ),
     (ACTIVE, DEPRECATED): Edge(
         "forge.deprecated", "A newer version was promoted, or the operator retires it."

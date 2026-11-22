@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import copy
 import posixpath
+import re
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from types import TracebackType
@@ -20,6 +21,8 @@ from typing import Any, Literal, Protocol, Self
 WORKSPACE = "/workspace"
 WRITABLE_ROOTS = (WORKSPACE, "/tmp")
 _BAD_HOST_CHARS = set(" /:*\\\t\r\n")
+# A brokered service name: MiniLocker's own rule, and the manifest's rule for a secret name.
+SERVICE_NAME = re.compile(r"^[a-z][a-z0-9_]{0,23}$")
 
 
 @dataclass(frozen=True)
@@ -28,6 +31,10 @@ class SandboxSpec:
 
     image: str
     network: Literal["none"] | tuple[str, ...]  # "none" or the hostnames reachable through the egress proxy
+    # Names of credential-broker services the sandbox may call through the egress proxy (P09). The sandbox gets MiniLocker's
+    # placeholder variables for them and never a token. A spec with brokered services is attached to the proxy even when `network`
+    # is "none" (the broker is a path on the proxy, not a host the tool connects to).
+    broker: tuple[str, ...] = ()
     workspace_mb: int = 64
     memory_mb: int = 256
     pids: int = 128
@@ -50,6 +57,13 @@ class SandboxSpec:
                     'use "none" for no network'
                 )
             object.__setattr__(self, "network", cleaned)
+        services = self.broker
+        if isinstance(services, str) or not isinstance(services, Iterable):
+            raise ValueError("SandboxSpec.broker must be a tuple of service names")
+        names = tuple(dict.fromkeys(str(n).strip().lower() for n in services))
+        if any(not SERVICE_NAME.match(n) for n in names):
+            raise ValueError("SandboxSpec.broker names must match [a-z][a-z0-9_]{0,23}")
+        object.__setattr__(self, "broker", names)
         for name in ("workspace_mb", "memory_mb", "pids"):
             value = getattr(self, name)
             if isinstance(value, bool) or not isinstance(value, int) or value <= 0:

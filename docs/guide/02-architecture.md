@@ -119,7 +119,17 @@ file.
 `operator`) to the version's `operator.jsonl`; releasing also writes `forge.deprecated` to a sibling it displaced. The runtime tripwire writes
 `forge.quarantined` there too, with actor `forge`, the call id and the decoy labels, when a real call touches a decoy. G6 writes no event of its own
 beyond the usual `forge.gate.*` ones; the pipeline adds a Blast Radius report next to the ledgers, `blast-radius.json` (`report/blast_radius.py`).
-G6 runs with the network closed, so "no undeclared egress" in the table above is not measured by it; that arrives with approvals in P09.
+G6 runs with the network closed, so "no undeclared egress" in the table above is not measured by it; P09 measures it on real calls (below).
+
+### Approval events (P09)
+
+A verified version that asks for network hosts or secrets moves to `pending_approval` and the pipeline writes `forge.approval.requested` to the
+verification ledger (with `approval_id`, the requested permissions, the skipped gates and the expiry). The request ends in one of three
+ways, each written to the version's `operator.jsonl`: `forge.approval.granted` (actor `operator`, with the reason), or
+`forge.approval.denied` (actor `operator` with the reason; actor `forge` for a timeout, a failed live example, or a brokered secret with no
+broker service; the payload says which). `toolforge approvals` is the only way to grant or deny; no MCP tool can.
+`forge.call.started` carries `network` (`none` or the declared hosts) and `secrets` (the declared service names), and `forge.call.finished`
+carries `real_secret_audit` (`clean`, `found` or `not_measured`). See `docs/approvals.md`.
 
 ### Call events (P05)
 
@@ -127,7 +137,7 @@ Each call writes `forge.call.started` before its sandbox exists and `forge.call.
 `ledgers/<tool>@<version>/<call-id>.jsonl` (`ledgers/_dev/...` for `--dev-unverified`); the sandbox's own events go to the same chain
 while it is open. `started` carries the call id, tool label, `code_sha`, the SHA-256 and size of the arguments, the number and size
 of files, the limits and the network rule. `finished` carries `ok`, the error type, the host-measured `duration_ms`, `truncated`,
-`sandbox_timed_out`, `result_bytes` and the audit summary (`cleanup_ok`, `egress_attempts`, `decoy_events`). Argument values, file
+`sandbox_timed_out`, `result_bytes` and the audit summary (`cleanup_ok`, `egress_attempts`, `decoy_events`, `real_secret_audit`). Argument values, file
 names, results and output text never enter the ledger. A call that cannot write `started` does not run.
 
 ## Directory layout at the end

@@ -59,9 +59,9 @@ def test_status_is_built_exactly_when_a_gate_class_is_registered() -> None:
     assert (
         {g.id for g in GATE_INFO if g.status == "built"}
         == set(GATE_CLASS_PATHS)
-        == {"G1", "G2", "G3", "G4", "G6"}
+        == {"G1", "G2", "G3", "G4", "G6", "G7"}
     )
-    assert {g.id for g in GATE_INFO if g.status == "planned"} == {"G5", "G7"}
+    assert {g.id for g in GATE_INFO if g.status == "planned"} == {"G5"}
 
 
 def test_every_registered_gate_class_exists_and_has_the_interface() -> None:

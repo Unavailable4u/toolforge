@@ -149,7 +149,7 @@ def test_a_version_that_asks_for_network_or_secrets_is_never_promoted(settings, 
     ledgers = MemoryLedgers()
     with pytest.raises(IllegalTransition) as caught:
         operator_actions.promote(settings, registry, ref, "why", ledger_factory=ledgers)
-    assert caught.value.code == "needs_approval" and "P09" in str(caught.value)
+    assert caught.value.code == "needs_approval" and "toolforge approvals" in str(caught.value)
     assert registry.find_version("my_tool", "0.1.0").status == lifecycle.VERIFIED and ledgers.events == []
 
 

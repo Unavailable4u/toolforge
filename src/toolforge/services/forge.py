@@ -34,6 +34,7 @@ from toolforge.errors import Busy, RegistryError
 from toolforge.models.package import ToolPackage
 from toolforge.registry import Registry, lifecycle
 from toolforge.sandbox.base import SandboxRunner
+from toolforge.services import approvals
 from toolforge.verify.pipeline import (
     Gate,
     Pipeline,
@@ -130,6 +131,11 @@ class Forge:
         if record.status in IN_PROGRESS:
             with self._slot():
                 return self._pipeline.run(package, by, version=record, progress=progress)
+        if (
+            record.status in (lifecycle.VERIFIED, lifecycle.VERIFIED_BASIC)
+            and approvals.asks_for_permissions(record.manifest)
+        ):  # verified, but an earlier run could not open its approval request: do it now rather than leave it stuck
+            return self._pipeline.hand_over(record)
         return report_from_registry(self._registry, record)
 
 

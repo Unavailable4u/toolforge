@@ -18,7 +18,8 @@ toolforge promote csv_summary@1.0.0 --reason "local dev"
 ```
 
 `promote` is a command for you, not a tool for agents: the server cannot reach it. It refuses versions that ask for network access or
-secrets (those need approval, which arrives in P09), versions that were not built, and anything that is not `verified_basic` or `verified`.
+secrets (those wait as `pending_approval` for `toolforge approvals approve`, see [approvals](approvals.md)), versions that were not built,
+and anything that is not `verified_basic` or `verified`.
 
 ## 2. Start the server
 

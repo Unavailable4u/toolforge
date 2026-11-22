@@ -2,6 +2,23 @@
 
 Where reality differed from the guide, newest first: what the guide said, what is true, what was done.
 
+* 2026-11-22 (P09): scope additions the guide does not list. `SandboxSpec.broker` (the service names a sandbox may call; a sandbox with brokered
+  services is attached to the egress proxy even with `network="none"`, because the broker is a path on the proxy). `ToolRunner.run(record_stats=)`
+  (the live smoke run must not count as a use). `ToolRunner(broker_services=)`. `report_view`/`forge_status` show the approval state. `Pipeline.hand_over`
+  (a version that was verified but whose approval request could not be opened is handed over when the same package is submitted again, instead of
+  staying stuck). The guide put `decide` in `approvals.py`; it lives in `operator_actions.py` (where `promote`, `release` and `quarantine` are, and which
+  the server never imports), and `approvals.py` holds everything the server may safely call because it can only say no. G7 is a class in
+  `GATE_CLASS_PATHS` but not in `PIPELINE_GATE_IDS`: it hands over to the operator and does not wait.
+* 2026-11-22 (P09): the guide says broker configuration is `MINILOCKER_BROKER` and `MINILOCKER_BROKER_TOKEN_<NAME>`. Those are MiniLocker's variables,
+  read from the process environment, not by `Settings`, so `.env` (which holds only `TOOLFORGE_` settings) does not reach them. `docs/approvals.md` says to
+  export them. No new `Settings` field was added.
+* 2026-11-22 (P09): MiniLocker's proxy has one allowlist and one broker for every sandbox on it, and lets a host's subdomains through. The guide's
+  "approved hosts only" therefore holds for what the manifest declares and what the report measures, not for what the proxy enforces. Documented in
+  `docs/approvals.md`, the Blast Radius footer and `docs/upstream/minilocker-per-sandbox-allowlist.md`; a real fix is upstream.
+* 2026-11-22 (P09): `FOOTER` of the Blast Radius report was clipped to 300 characters by `clean()` in the stored and loaded document, so its last sentences
+  never reached a reader. The footer is now a constant that is set after cleaning and never taken from a stored file.
+* 2026-11-22 (P09): a dev run (`--dev-unverified`) of a package that declares network hosts or secrets is refused (it never gets either), instead of
+  running with no network and failing inside the tool. `tests/docker/test_egress.py` was written but not run: no Docker daemon was available.
 * 2026-11-22 (P08, found by `pytest -m docker`): MiniLocker's audit reports `rootfs_changes=1` for a tool that wrote nothing, because `docker diff` lists
   the tmpfs mount point `/workspace` in its diff. G6 and the Blast Radius report no longer count an entry whose path is exactly a mount point, of any
   kind (`sandbox.base.real_rootfs_changes`); any other path still counts. The first attempt ignored only "modified" entries and was wrong: the real kind

@@ -21,7 +21,7 @@ read-only. A missing measurement is printed as "not measured", never as 0.
 | `versions` | One row per version: status, `code_sha` (hash of the package archive), `blob_sha` (the frozen package, once built), the manifest as JSON, who created it, its parent version, timestamps. The tool source is **not** in this table; the blob is the source of truth. |
 | `gate_results` | One row per gate run: gate, `passed` / `failed` / `skipped`, detail (plain JSON, capped at 64 KB), start and finish time. |
 | `calls` | One row per finished call: ok, duration, error class, session id, time. |
-| `approvals` | One row per approval request. P03 stores them; the approval flow is patch P09. |
+| `approvals` | One row per approval request: its state (`pending`, `approved`, `denied`), who decided and the request document. The flow is in [approvals](approvals.md). |
 | `tool_search` | The full-text index over name, description, `when_to_use` and example text. It has rows only for `active` versions. |
 | `schema_version` | The migrations applied. |
 
@@ -42,11 +42,11 @@ a status changes; any move not in this table raises `IllegalTransition` and chan
 | `verifying` | `verified_basic` | `forge.verified` | Every gate that could run passed, but one was skipped. |
 | `verifying` | `verified` | `forge.verified` | Gates G1 to G6 passed. |
 | `verified_basic` | `active` | `forge.promoted` | Operator `promote` only, with a reason. Refused when the manifest declares network hosts or secrets. |
-| `verified_basic` | `pending_approval` | `forge.approval.requested` | The manifest asks for network or secrets and G5 was skipped (routed by P09). |
-| `verified` | `pending_approval` | `forge.approval.requested` | The manifest asks for network or secrets. |
+| `verified_basic` | `pending_approval` | `forge.approval.requested` | The manifest asks for network or secrets and G5 was skipped; the request says so (G7). |
+| `verified` | `pending_approval` | `forge.approval.requested` | The manifest asks for network or secrets (G7). |
 | `verified` | `active` | `forge.promoted` | Automatic promotion. Refused when the manifest declares network hosts or secrets. |
-| `pending_approval` | `active` | `forge.approval.granted` | The operator approves. |
-| `pending_approval` | `rejected` | `forge.approval.denied` | The operator denies, or the request times out. |
+| `pending_approval` | `active` | `forge.approval.granted` | The operator approves; live examples run first. |
+| `pending_approval` | `rejected` | `forge.approval.denied` | The operator denies, the request times out, a live example fails, or a brokered secret has no broker service. |
 | `active` | `deprecated` | `forge.deprecated` | A newer version was promoted, or the operator retires it. |
 | `active` | `quarantined` | `forge.quarantined` | A runtime violation or a failure rate over the threshold. |
 | `quarantined` | `active` | `forge.released` | Operator `release`, with a reason (P08). |
@@ -94,8 +94,8 @@ covers the last 50 calls and is `None` ("not measured") until there are at least
 * **History lives in the ledger, not here.** The registry keeps the current status and `updated_at`, not a log of past moves. The
   event that `transition` returns is the history; if a caller fails to append it, that move leaves no trace but the new status.
 * **The registry cannot tell who "operator" is.** It accepts the string. The protection is meant to be that no MCP tool
-  reaches `transition`, `decide_approval` or `attach_blob`. No MCP server exists yet; patch P09 is specified to add an `ast` test
-  that enforces it, and until then this is a rule, not a check.
+  reaches `transition`, `decide_approval` or `attach_blob`. `tests/test_server_tools.py` has an `ast` test that fails when the
+  server package imports `operator_actions` or uses a name in `OPERATOR_ONLY` (`promote`, `release`, `quarantine`, `decide`).
 * **Search without FTS5 is cruder.** If this SQLite has no FTS5 when the database is created, search falls back to counting the
   query words found in each tool (scores between 0 and 1, logged once). Scores from the two back ends are not comparable. A database
   created without FTS5 keeps using the fallback even if SQLite is upgraded later.

@@ -31,6 +31,7 @@ from toolforge.errors import RegistryError, ToolNotRunnable, ValidationError
 from toolforge.models.package import MEMORY_RANGE, OUTPUT_RANGE, TIMEOUT_RANGE
 from toolforge.registry import Registry, VersionRecord, lifecycle
 from toolforge.server import fences, runtime_info
+from toolforge.services import approvals
 from toolforge.services.forge import Forge
 from toolforge.services.runner import MAX_FILES, MAX_FILES_BYTES, ToolRunner
 from toolforge.verify.pipeline import GateReport, ProgressFn, VerificationReport, report_from_registry
@@ -151,7 +152,7 @@ META_TOOLS: tuple[MetaTool, ...] = (
 )
 
 # Functions that this package may never import. Each patch that adds an operator action extends this and its test.
-OPERATOR_ONLY: tuple[str, ...] = ("promote", "release", "quarantine")
+OPERATOR_ONLY: tuple[str, ...] = ("promote", "release", "quarantine", "decide")
 
 STATUS_NEXT_STEP: dict[str, str] = {
     lifecycle.SUBMITTED: "verification has not finished; submit the same package again to resume it",
@@ -298,7 +299,9 @@ class ToolService:
         runner: ToolRunner,
         *,
         runtime_probe: runtime_info.Probe | None = None,
+        ledger_factory: Any = None,
     ) -> None:
+        self._ledger_factory = ledger_factory
         self._settings = settings
         self._registry = registry
         self._forge = forge
@@ -447,16 +450,23 @@ class ToolService:
     def status(self, name: str, version: str | None = None) -> dict[str, Any]:
         base, pinned = _split_ref(name, version)
         record, note = self._version(base, pinned)
+        if record.status == lifecycle.PENDING_APPROVAL:
+            # An overdue request is denied when somebody looks. That can only say no, so it is safe from here.
+            approvals.expire_overdue(
+                self._settings, self._registry, ledger_factory=self._ledger_factory, version_id=record.id
+            )
+            record = self._registry.get_version(record.id) or record
         report = report_from_registry(self._registry, record)
         gates = [_gate_view(g) for g in report.gates]
-        approvals = [a for a in self._registry.list_approvals() if a.version_id == record.id]
-        latest = approvals[-1] if approvals else None
+        latest = approvals.latest_approval(self._registry, record.id)
         stats = self._registry.stats(record.id)
         response: dict[str, Any] = {
             "name": record.name,
             "version": record.version,
             "status": record.status,
-            "next_step": STATUS_NEXT_STEP.get(record.status, "none"),
+            "next_step": fences.clean_text(report.next_action)
+            if record.status == lifecycle.REJECTED and latest is not None and latest.status == "denied"
+            else STATUS_NEXT_STEP.get(record.status, "none"),
             "gates": gates,
             "approval": {"state": latest.status if latest else "none"},
             "uses": stats.uses,
@@ -601,7 +611,11 @@ def report_view(report: VerificationReport) -> dict[str, Any]:
         "notice": GATE_NOTICE,
         **_scanned(next_action, *(f"{g['summary']} {' '.join(g['hints'])}" for g in gates)),
     }
-    if report.ok:
+    if report.approval is not None:
+        response["approval"] = {"state": report.approval.get("state")}
+    if report.status == lifecycle.PENDING_APPROVAL and report.approval is not None:
+        response["operator_command"] = f"toolforge approvals show {report.approval['id']}"
+    elif report.ok:
         response["operator_command"] = f'toolforge promote {report.name}@{report.version} --reason "<why>"'
     return response
 

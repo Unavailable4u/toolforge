@@ -15,7 +15,7 @@ patch" in the same patch. Never tick a box for work that is not in the patch. Bo
 | [x] | P06 | Verification pipeline: gates G1 to G4 | P03, P05 |
 | [x] | P07 | MCP server v1 | P03, P05, P06 |
 | [x] | P08 | Containment gate G6 and Blast Radius per tool | P06 |
-| [ ] | P09 | Permissions, approvals, egress and brokered secrets | P07, P08 |
+| [x] | P09 | Permissions, approvals, egress and brokered secrets | P07, P08 |
 | [ ] | P10 | Independent challenger, gate G5 | P06 |
 | [ ] | P11 | Server-side builder | P07, P10 |
 | [ ] | P12 | Reuse ranking, self-repair, rollback | P07, P11 |
@@ -34,8 +34,21 @@ Milestones (M0 to M7) and what can be dropped: `docs/guide/05-milestones.md`.
 
 ## Notes for the next patch
 
-Done: P01 (skeleton), P02 (package spec), P03 (registry), P04 (sandbox seam), P05 (execution contract and `run`), P06 (gates G1 to G4), P07 (MCP server v1), P08 (gate G6 and Blast Radius).
-Next: P09 (permissions, approvals, egress and brokered secrets; needs P07 and P08, done). P10 (gate G5) needs only P06. Decisions and interfaces that later patches must respect:
+Done: P01 (skeleton), P02 (package spec), P03 (registry), P04 (sandbox seam), P05 (execution contract and `run`), P06 (gates G1 to G4), P07 (MCP server v1), P08 (gate G6 and Blast Radius), P09 (approvals, egress, brokered secrets).
+Next: P10 (gate G5; needs only P06). P11 needs P07 and P10. Decisions and interfaces that later patches must respect:
+
+* P09 interfaces. `services/approvals.py` (everything about an approval except the decision, safe for the server: `open_request`, `deny`, `expire_overdue`,
+  `permission_diff`, `render_text`, `request_path`; requests are rows in `approvals` and `approvals/<id>.json`), `verify/g7_approval.py::ApprovalGate`
+  (registered in `GATE_CLASS_PATHS`, not in `PIPELINE_GATE_IDS`), `operator_actions.decide(settings, registry, approval_id, "approve"|"deny", reason,
+  tool_runner_factory=, brokers=, ledger_factory=)`, CLI `toolforge approvals list|show|approve|deny`. `VerificationReport.approval` is `{id, state}` and `ok` is
+  true for `pending_approval`. `SandboxSpec.broker`; `ToolRunner.run(..., record_stats=)`; the runner refuses network or secrets unless the version is active with a
+  recorded approval for its `code_sha`, and a dev run gets neither. `EgressPool.acquire(hosts, services)`; `configured_broker_services` / `broker_service_hosts`
+  read MiniLocker's `MINILOCKER_BROKER*` from the process environment. Blast Radius now has `runtime_sample.egress` and `.real_secret_audit`, and judges real-call
+  egress against the hosts and services `forge.call.started` declared. `docs/approvals.md` is the operator's page.
+* P09 limits that later patches inherit. The proxy has one allowlist and one broker for all tools (`docs/upstream/minilocker-per-sandbox-allowlist.md`); expiry of a
+  pending request happens when someone looks (`approvals` commands, `forge_status`, `decide`); `tests/docker/test_egress.py` has not been run on a real daemon.
+  P12's `rollback` must only target a version that was active before (so it already has an approval); P15's attack lab should try the undeclared-host and
+  real-secret paths; P17's dashboard should call `approvals.render_text`/`expire_overdue` read-only and never `decide`.
 
 * P08 interfaces. `verify/g6_containment.py::ContainmentGate` (G6, registered in `GATE_CLASS_PATHS`); `sandbox.base.decoy_violations` and `decoys_planted`
   (one definition shared by G6 and the runtime tripwire); `sandboxrun.open_sandbox(..., decoys=)`; `FakeRunner(events=[(type, payload)])` scripts
@@ -43,7 +56,7 @@ Next: P09 (permissions, approvals, egress and brokered secrets; needs P07 and P0
   `render_text`, `render_html`; stored as `ledgers/<tool>@<version>/blast-radius.json` (no database column). `ledger.read_ledger`, `verify_chain`,
   `version_ledger_dir`, `OPERATOR_LEDGER`. `operator_actions.quarantine`, `release`, `release_context`; CLI `toolforge release|quarantine|report`;
   `forge_describe` returns `blast_radius`. `ToolRunner` quarantines the active version (actor `forge`) when a call touches a decoy and fails the call with
-  `PolicyViolation`. P09 must add egress to the report (G6 runs with the network closed, so egress there is `not applicable`, never `clean`).
+  `PolicyViolation`. Egress is in the report since P09 (G6 runs with the network closed, so egress there is `not applicable`, never `clean`).
   A skipped G6 keeps a version at `verified_basic`; with the local stand-in runner G6 is always skipped. Known limit: a caller who passes a decoy path to
   a tool that opens caller-chosen paths can force a quarantine (reversible with `release`).
 

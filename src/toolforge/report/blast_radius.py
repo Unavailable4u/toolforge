@@ -14,6 +14,11 @@ five rules, because that builder was written for an agent's task and a tool vers
   `no_route` only when Docker itself reported `network_mode: none` for every sandbox.
 * **Only what applies.** MiniLocker's policy, time, browser and artifact dimensions describe an agent's shell and browser, not a tool
   call; they are left out and listed under `not_applicable` instead of being shown as zeros.
+* **Egress is judged against what was declared (P09).** The containment run has no network, so it can only say `no_route`. A real call
+  of a tool with approved hosts does reach the network through the egress proxy; each connection the proxy logged for that sandbox is
+  compared with the hosts the call's own `forge.call.started` event declared, and only a host that was not declared is a violation.
+  A proxy that could not be read is `not measured`. The proxy has one allowlist for every tool and lets subdomains through, so
+  "declared" is the manifest, not what the proxy enforced; the footer says so.
 * **Hostile text.** File names, paths and anything else that came from the tool are cleaned (`textsafety.sanitize`) before they are
   stored, printed or turned into HTML.
 
@@ -65,7 +70,9 @@ NOT_APPLICABLE = {
 FOOTER = (
     "A clean report is evidence, not proof. It says what was observed in the runs listed here, inside the sandbox. Decoys are noticed "
     "by access time and by values that reach output or files; reading an environment variable and telling nobody is not seen. "
-    "'not measured' means nothing was observed and no claim is made. The container is the security boundary."
+    "'not measured' means nothing was observed and no claim is made. Egress is checked against the hosts the tool declared, but the egress "
+    "proxy has one allowlist for all tools (and passes subdomains of an allowed host), so a tool could reach a host approved for another "
+    "tool; the report shows the hosts that were actually contacted. The container is the security boundary."
 )
 
 # Verdict statuses, strongest first.
@@ -181,20 +188,65 @@ def _settle(dim: dict[str, Any], finished: bool) -> dict[str, Any]:
     return dim
 
 
-def _network(window: Sequence[dict[str, Any]]) -> dict[str, Any]:
+def _declared(window: Sequence[dict[str, Any]]) -> tuple[list[str], list[str]] | None:
+    """`(declared hosts, declared secrets)` from a call ledger's `forge.call.started` event; None when the ledger has none."""
+    for event in window:
+        if event.get("type") == "forge.call.started":
+            payload = event.get("payload") or {}
+            network = payload.get("network")
+            hosts = [str(h) for h in network] if isinstance(network, list) else []
+            secrets = [str(n) for n in payload.get("secrets") or []]
+            return hosts, secrets
+    return None
+
+
+def _covered(host: object, declared: Sequence[str]) -> bool:
+    """True when `host` is a declared host or a subdomain of one (the proxy lets subdomains through)."""
+    name = str(host or "").lower().rstrip(".")
+    return any(name == d or name.endswith("." + d) for d in declared)
+
+
+def _network(
+    window: Sequence[dict[str, Any]], declared: tuple[list[str], list[str]] | None = None
+) -> dict[str, Any]:
     created = [e for e in window if e.get("type") == "sandbox.created"]
-    egress = [e for e in window if e.get("type") in ("egress.allowed", "egress.blocked")]
+    egress = [e for e in window if e.get("type") in ("egress.allowed", "egress.blocked", "egress.brokered")]
     modes = [((e.get("payload") or {}).get("hardening") or {}).get("network_mode") for e in created]
+    unobserved = any(e.get("type") == "forge.egress.unobserved" for e in window)
     if egress:
         hosts = {(e.get("payload") or {}).get("host") for e in egress} - {None}
         allowed = sum(1 for e in egress if e.get("type") == "egress.allowed")
-        return {
+        brokered = sum(1 for e in egress if e.get("type") == "egress.brokered")
+        result: dict[str, Any] = {
             "status": "measured",
             "attempts": len(egress),
             "allowed": allowed,
-            "blocked": len(egress) - allowed,
+            "blocked": sum(1 for e in egress if e.get("type") == "egress.blocked"),
+            "brokered": brokered,
             "hosts": sorted(str(h) for h in hosts)[:LIST_CAP],
             "evidence": [e.get("id") for e in egress][:LIST_CAP],
+        }
+        if declared is not None:
+            hosts_declared, services = declared
+            # A brokered call goes to the service's own host, which is not in `network`; the service name is what was declared.
+            undeclared = {
+                str((e.get("payload") or {}).get("host"))
+                for e in egress
+                if not (
+                    _covered((e.get("payload") or {}).get("host"), hosts_declared)
+                    or str((e.get("payload") or {}).get("service"))
+                    in services  # a brokered request, even a refused one
+                )
+            }
+            result["declared_hosts"] = sorted(hosts_declared)
+            result["undeclared_hosts"] = sorted(undeclared)[:LIST_CAP]
+        if unobserved:
+            result["note"] = "the proxy log could not be read at some point, so this may be incomplete"
+        return result
+    if unobserved:
+        return {
+            "status": "not_measured",
+            "note": "the egress proxy could not be read, so connections may have happened that this report does not show",
         }
     if created and all(mode == "none" for mode in modes):
         return {
@@ -236,12 +288,20 @@ def _analyse(source: LedgerSource, task_id: str, *, from_gate: str | None) -> _A
     finished = _finished(window)
     ml = built["dimensions"]
     dims: dict[str, dict[str, Any]] = {
-        "network": _network(window),
+        "network": _network(window, _declared(window) if from_gate is None else None),
         "filesystem": _own_changes(_settle(ml["filesystem"], finished)),
         "secrets": _secrets(_settle(ml["secrets"], finished)),
         "compute": _settle(ml["compute"], finished),
         "persistence": _settle(ml["persistence"], finished),
     }
+    if from_gate is None:
+        for event in window:
+            if event.get("type") == "forge.call.finished":
+                state = (event.get("payload") or {}).get("real_secret_audit")
+                dims["secrets"] = {
+                    **dims["secrets"],
+                    "call_secret_audit": state if isinstance(state, str) else None,
+                }
     if (
         not found
     ):  # MiniLocker would still show persistence as measured, with zero sandboxes; that is a gap, not a zero
@@ -280,6 +340,33 @@ def _measured(dim: dict[str, Any]) -> bool:
 # --- The runtime sample ---------------------------------------------------------------------------------------------------
 
 
+def _egress_summary(analyses: Sequence[_Analysis]) -> dict[str, Any]:
+    """Network use across the sampled calls. Calls with no route out add nothing; a call whose proxy could not be read is counted."""
+    measured = [a.dims["network"] for a in analyses if a.dims["network"].get("status") == "measured"]
+    unread = sum(1 for a in analyses if a.dims["network"].get("status") == "not_measured")
+    hosts = sorted({h for d in measured for h in d.get("hosts") or []})[:LIST_CAP]
+    undeclared = sorted({h for d in measured for h in d.get("undeclared_hosts") or []})[:LIST_CAP]
+    return {
+        "calls_with_egress": len(measured),
+        "attempts": sum(int(d.get("attempts") or 0) for d in measured),
+        "allowed": sum(int(d.get("allowed") or 0) for d in measured),
+        "blocked": sum(int(d.get("blocked") or 0) for d in measured),
+        "brokered": sum(int(d.get("brokered") or 0) for d in measured),
+        "hosts_contacted": hosts,
+        "undeclared_hosts": undeclared,
+        "calls_proxy_unread": unread,
+    }
+
+
+def _secret_audit_summary(analyses: Sequence[_Analysis]) -> dict[str, int]:
+    """How many sampled calls the real-secret audit found nothing in (`clean`), found something in, or could not look at."""
+    counts = {"clean": 0, "found": 0, "not_measured": 0}
+    for analysis in analyses:
+        state = analysis.dims["secrets"].get("call_secret_audit")
+        counts[state if state in counts else "not_measured"] += 1
+    return counts
+
+
 def _runtime(analyses: Sequence[_Analysis], found: int) -> dict[str, Any]:
     if not analyses:
         return {
@@ -309,6 +396,8 @@ def _runtime(analyses: Sequence[_Analysis], found: int) -> dict[str, Any]:
             (int(c.get("peak_memory_bytes") or 0) for c in compute), default=NOT_MEASURED
         ),
         "peak_pids": max((int(c.get("peak_pids") or 0) for c in compute), default=NOT_MEASURED),
+        "egress": _egress_summary(analyses),
+        "real_secret_audit": _secret_audit_summary(analyses),
         "calls_not_audited": sum(
             1 for a in analyses if not (_measured(a.dims["filesystem"]) and _measured(a.dims["compute"]))
         ),
@@ -336,7 +425,14 @@ def _violations(dims: dict[str, dict[str, Any]], where: str) -> list[str]:
         reasons.append(f"{where}: the sandbox was killed for using too much memory")
     network = dims["network"]
     if network.get("status") == "measured" and network.get("attempts"):
-        reasons.append(f"{where}: the sandbox tried to reach the network ({network['attempts']} attempts)")
+        if "undeclared_hosts" not in network:  # a run that was meant to have no network
+            reasons.append(
+                f"{where}: the sandbox tried to reach the network ({network['attempts']} attempts)"
+            )
+        elif network["undeclared_hosts"]:
+            reasons.append(
+                f"{where}: the sandbox contacted hosts the tool did not declare ({', '.join(network['undeclared_hosts'])})"
+            )
     return reasons
 
 
@@ -370,6 +466,10 @@ def _verdict(
         gaps += _gaps(verification)
     for analysis in calls:
         violations += _violations(analysis.dims, f"call ledger {analysis.name}")
+        if analysis.dims["network"].get("status") == "not_measured" or analysis.dims["network"].get("note"):
+            gaps.append(
+                f"call ledger {analysis.name}: the egress proxy could not be read, so its connections may be incomplete"
+            )
     if runtime.get("status") == "not_measured":
         gaps.append("no real call has been sampled yet")
     elif runtime.get("decoy_watch") != "complete":
@@ -463,6 +563,9 @@ def build(
         "footer": FOOTER,
     }
     cleaned: dict[str, Any] = clean(document)
+    cleaned["footer"] = (
+        FOOTER  # a constant of this module, not text from a run: it is not clipped with the rest
+    )
     return cleaned
 
 
@@ -570,6 +673,7 @@ def load_stored(settings: Settings, label: str) -> tuple[dict[str, Any] | None, 
     ):
         return None, "the stored report has an unknown format"
     cleaned: dict[str, Any] = clean(data)
+    cleaned["footer"] = FOOTER  # never taken from a file: it is this module's own text
     return cleaned, None
 
 

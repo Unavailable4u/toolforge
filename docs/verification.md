@@ -6,7 +6,9 @@ list of gates in the repository; `tests/test_verification_docs.py` fails when th
 
 ## The gates
 
-Gates G1 to G4 and G6 are built. G5 and G7 are planned and are recorded as `skipped` for now, which caps a passing version at `verified_basic`.
+Gates G1 to G4, G6 and G7 are built. G5 is planned and is recorded as `skipped` for now, which caps a passing version at `verified_basic`.
+G7 is the operator's approval of network hosts and secrets. It is not a step the pipeline waits in: after G1 to G6, a version that asks for
+either goes to `pending_approval` and a person decides ([approvals](approvals.md)).
 
 <!-- gates:begin -->
 | Gate | Name | Status | What it does | What it catches | Example |
@@ -17,7 +19,7 @@ Gates G1 to G4 and G6 are built. G5 and G7 are planned and are recorded as `skip
 | G4 | Schema fuzz | built | Feeds the tool generated inputs that are valid by its own input schema: empty text, long text, zero, big numbers, empty lists. | Crashes, hangs and oversized or non-JSON answers on inputs the schema says are allowed. Refusing with a clear message (`ToolError`) is fine; crashing is not. | A tool that crashes on an empty list fails, with the input that broke it. |
 | G5 | Challenger | planned | A second AI model, not the one that wrote the tool, tries to break it with inputs the author did not think of. | Mistakes the author's own tests missed. | The challenger finds that the tool miscounts words that contain an apostrophe. |
 | G6 | Containment | built | Runs the tool with the network closed and decoy secrets planted (fake keys, an SSH key, an .env file), and watches what it touches. | Reading, printing or copying the decoy credentials, going past the memory, process or CPU limits, changing the container's own files, and a sandbox that is less locked down than it should be. The network is closed for this run, so it cannot show what a tool does with network access; a clean run is evidence, not proof. | A tool that opens `/tmp/.aws/credentials` is caught by the decoy planted there. |
-| G7 | Approval | planned | A human operator decides on tools that ask for network access or secrets. | Permissions nobody agreed to. | A tool that asks to call `api.example.org` waits until the operator approves exactly that host. |
+| G7 | Approval | built | A human operator decides on tools that ask for network access or secrets. | Permissions nobody agreed to. | A tool that asks to call `api.example.org` waits until the operator approves exactly that host. |
 <!-- gates:end -->
 
 A gate that crashes counts as failed, with a generic message (the details go to the log, not to the report). A gate that runs past its
@@ -136,7 +138,8 @@ be read, the audit was incomplete, or there was nothing to run. A skipped gate k
 without Docker the pipeline stops before any gate can use a sandbox, so G6 never reports a pass it did not earn.
 
 What G6 does not show: the network is closed during this run, so a tool cannot try to connect and **egress is "not applicable"**, never
-"clean". What a tool does with a network it was approved for is a matter for approvals (P09). A tool that reads an environment variable
+"clean". What a tool does with a network it was approved for is measured on its real calls instead: the Blast Radius report compares
+each connection the egress proxy logged with the hosts the call declared ([approvals](approvals.md)). A tool that reads an environment variable
 and tells nobody is not seen. A passing G6 is evidence from one run, not proof.
 
 ### After verification: the runtime tripwire
@@ -161,6 +164,9 @@ MiniLocker's policy, time, browser and artifact dimensions describe an agent's s
 
 * **Scope.** Only the containment run counts (from the start of G6 on). The build gate's package downloads cannot show up as network.
   The whole ledger is still checked for tampering.
+* **Egress of real calls.** The containment run has no network, so egress there is `not applicable`. For real calls of an approved tool
+  the report compares each connection the proxy logged with the hosts and services the call declared: a host that was not declared is a
+  violation, and a proxy log that could not be read is a gap ([approvals](approvals.md)).
 * **A gap is not a zero.** A dimension that nothing observed says `not measured`. `network` says `no_route` only when Docker itself
   reported no network for every sandbox.
 * **No G6, no measurement.** A version whose verification ledger holds no containment run (verified before G6 existed, or stopped
@@ -193,5 +199,6 @@ cleaned before it is shown. The ledger for a run (`ledgers/<tool>@<version>/veri
 ## Not measured
 
 Gate G6 has run only against the tools in this repository and, once `pytest -m docker` has been run, the Docker tests; it has not been
-measured against hostile tools yet: that is the attack lab (P15). G5 (a second model) arrives in P10 and the operator's approval (G7) in
-P09. Network behaviour is not measured at all in this release (see G6).
+measured against hostile tools yet: that is the attack lab (P15). G5 (a second model) arrives in P10. Network behaviour is measured only
+on real calls of an approved tool, from the proxy's log, and only for the hosts that proxy saw (see [approvals](approvals.md)); G6
+itself has no network to observe.

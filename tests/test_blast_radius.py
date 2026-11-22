@@ -377,3 +377,130 @@ def test_a_verification_ledger_with_no_g6_start_is_not_measured_not_judged_on_ot
     assert doc["sources"]["verification"]["events_measured"] == 0
     assert doc["sources"]["verification"]["verified"] is True  # the chain itself is still checked
     assert "gate G6 did not run" in doc["sources"]["verification"]["scope"]
+
+
+# --- Egress of real calls (P09) -------------------------------------------------------------------------------------------
+
+
+def call_events(*, network, secrets=(), egress=(), unobserved=False, audit_state=None, **kw):
+    body: list[tuple[str, str, dict]] = [
+        ("forge", "forge.call.started", {"network": network, "secrets": list(secrets)})
+    ]
+    body += sandbox_events(name="c1", **kw)
+    body += [("sandbox", f"egress.{kind}", payload) for kind, payload in egress]
+    if unobserved:
+        body.append(("forge", "forge.egress.unobserved", {}))
+    finished = {"ok": True}
+    if audit_state:
+        finished["real_secret_audit"] = audit_state
+    body.append(("forge", "forge.call.finished", finished))
+    return body
+
+
+def sampled(settings: Settings, events: list) -> dict:
+    verification_ledger(settings, sandbox_events())
+    write_ledger(Path(settings.home) / "ledgers" / LABEL / "call-1.jsonl", events)
+    return report(settings)
+
+
+def test_egress_to_a_declared_host_is_measured_and_is_not_a_violation(settings: Settings) -> None:
+    doc = sampled(
+        settings,
+        call_events(
+            network=["pypi.org"],
+            egress=[("allowed", {"host": "pypi.org"}), ("allowed", {"host": "files.pypi.org"})],
+        ),
+    )
+    egress = doc["runtime_sample"]["egress"]
+    assert egress["calls_with_egress"] == 1 and egress["allowed"] == 2 and egress["undeclared_hosts"] == []
+    assert egress["hosts_contacted"] == [
+        "files.pypi.org",
+        "pypi.org",
+    ]  # a subdomain of a declared host is covered
+    assert doc["verdict"]["violations"] == []
+
+
+def test_a_host_that_was_not_declared_is_a_violation_even_when_it_was_blocked(settings: Settings) -> None:
+    doc = sampled(
+        settings,
+        call_events(
+            network=["pypi.org"],
+            egress=[("blocked", {"host": "evil.example"}), ("allowed", {"host": "pypi.org"})],
+        ),
+    )
+    assert doc["runtime_sample"]["egress"]["undeclared_hosts"] == ["evil.example"]
+    assert doc["runtime_sample"]["egress"]["blocked"] == 1
+    assert doc["verdict"]["status"] == "violation_seen"
+    assert any("did not declare (evil.example)" in v for v in doc["verdict"]["violations"])
+
+
+def test_a_host_approved_for_another_tool_is_still_undeclared_here(settings: Settings) -> None:
+    doc = sampled(
+        settings, call_events(network=["pypi.org"], egress=[("allowed", {"host": "api.other.example"})])
+    )
+    assert doc["runtime_sample"]["egress"]["undeclared_hosts"] == ["api.other.example"]
+    assert doc["verdict"]["status"] == "violation_seen"
+
+
+def test_a_brokered_call_to_a_declared_service_is_not_a_violation(settings: Settings) -> None:
+    doc = sampled(
+        settings,
+        call_events(
+            network="none",
+            secrets=["github"],
+            egress=[("brokered", {"host": "api.github.com", "service": "github"})],
+        ),
+    )
+    egress = doc["runtime_sample"]["egress"]
+    assert egress["brokered"] == 1 and egress["undeclared_hosts"] == []
+    assert not any("declare" in v for v in doc["verdict"]["violations"])
+
+
+def test_a_brokered_call_to_an_undeclared_service_is_a_violation(settings: Settings) -> None:
+    doc = sampled(
+        settings,
+        call_events(
+            network="none",
+            secrets=["github"],
+            egress=[("brokered", {"host": "api.slack.com", "service": "slack"})],
+        ),
+    )
+    assert doc["runtime_sample"]["egress"]["undeclared_hosts"] == ["api.slack.com"]
+
+
+def test_a_proxy_that_could_not_be_read_is_not_measured_never_clean(settings: Settings) -> None:
+    doc = sampled(settings, call_events(network=["pypi.org"], unobserved=True))
+    assert doc["runtime_sample"]["egress"]["calls_proxy_unread"] == 1
+    assert doc["runtime_sample"]["egress"]["calls_with_egress"] == 0
+    assert doc["verdict"]["status"] != "no_violation_seen"
+
+
+def test_the_verification_run_still_has_no_egress_to_judge(settings: Settings) -> None:
+    verification_ledger(settings, sandbox_events())
+    doc = report(settings)
+    assert doc["dimensions"]["network"]["status"] == "no_route"
+
+
+def test_the_footer_states_the_one_proxy_limit(settings: Settings) -> None:
+    doc = sampled(settings, call_events(network=["pypi.org"], egress=[("allowed", {"host": "pypi.org"})]))
+    assert "one allowlist" in doc["footer"] and "subdomains" in doc["footer"]
+
+
+def test_the_real_secret_audit_of_calls_is_counted(settings: Settings) -> None:
+    doc = sampled(settings, call_events(network="none", audit_state="clean"))
+    assert doc["runtime_sample"]["real_secret_audit"] == {"clean": 1, "found": 0, "not_measured": 0}
+
+
+def test_a_refused_brokered_request_for_a_declared_service_is_not_an_undeclared_host(
+    settings: Settings,
+) -> None:
+    doc = sampled(
+        settings,
+        call_events(
+            network="none", secrets=["github"], egress=[("blocked", {"host": "broker", "service": "github"})]
+        ),
+    )
+    assert (
+        doc["runtime_sample"]["egress"]["undeclared_hosts"] == []
+        and doc["runtime_sample"]["egress"]["blocked"] == 1
+    )

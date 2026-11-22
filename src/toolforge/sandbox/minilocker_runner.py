@@ -13,8 +13,12 @@ Security properties, and the tests that prove them:
 * decoy values and environment contents are never logged, only the ids and labels `Watch` produces.
 
 Known limits, written down on purpose. The proxy has one global allowlist, so a tool can reach any host approved for any tool
-that ran since the proxy started (the allowlist only grows until `shutdown`). Two ToolForge processes on one Docker daemon share
-the fixed proxy container name and would remove each other's proxy. Egress events are read when `run` returns, not while it runs.
+that ran since the proxy started (the allowlist only grows until `shutdown`). The same is true of brokered services: the proxy
+cannot tell sandboxes apart, so a sandbox attached to it can ask for any service the proxy was started with, and MiniLocker hands
+every sandbox the placeholder variables of all of them. MiniLocker's proxy also lets a host's subdomains through (an allowed
+`example.org` allows `www.example.org`). Two ToolForge processes on one Docker daemon share the fixed proxy container name and
+would remove each other's proxy. Egress events are read when `run` returns, not while it runs. `docs/approvals.md` and
+`docs/upstream/minilocker-per-sandbox-allowlist.md` describe the consequences and the fix.
 """
 
 from __future__ import annotations
@@ -23,7 +27,7 @@ import copy
 import threading
 import time
 import uuid
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
 from pathlib import Path
 from typing import Any
 
@@ -59,11 +63,34 @@ def _docker_errors() -> tuple[type[BaseException], ...]:
     return (docker.errors.DockerException, requests.exceptions.RequestException, OSError)
 
 
-def _start_proxy(hosts: list[str]) -> Any:
-    """Start MiniLocker's egress proxy for `hosts`. The default factory of `EgressPool`."""
+def configured_broker_services(
+    settings: Settings | None = None, environ: Mapping[str, str] | None = None
+) -> dict[str, dict[str, Any]]:
+    """The credential-broker services the operator configured, as MiniLocker reads them (`broker_from_env`).
+
+    `{name: {"host", "header", "prefix", "token", "placeholder"}}`. The tokens are in the result because the proxy needs them, so
+    callers that only want to know what exists must use `broker_service_hosts`. `MINILOCKER_BROKER` and
+    `MINILOCKER_BROKER_TOKEN_<NAME>` are MiniLocker's own variables, read from the process environment (not from `.env`, which only
+    holds `TOOLFORGE_` settings). A service with no token, or with a malformed name or host, does not exist.
+    """
+    module = _ml_path.load("minilocker.egress.manager", settings)
+    return dict(module.broker_from_env(environ))
+
+
+def broker_service_hosts(
+    settings: Settings | None = None, environ: Mapping[str, str] | None = None
+) -> dict[str, str]:
+    """`{service name: host}` of the configured broker services. Never a token. Raises `SandboxUnavailable` when MiniLocker or the
+    Docker SDK cannot be imported (a broker cannot work then either)."""
+    return {name: str(entry["host"]) for name, entry in configured_broker_services(settings, environ).items()}
+
+
+def _start_proxy(hosts: list[str], broker: Mapping[str, dict[str, Any]] | None = None) -> Any:
+    """Start MiniLocker's egress proxy for `hosts` and `broker`. The default factory of `EgressPool`."""
     module = _ml_path.load("minilocker.egress.manager")
     try:
-        return module.EgressManager(hosts).start()
+        manager = module.EgressManager(hosts, broker=dict(broker or {}))
+        return manager.start()
     except SandboxUnavailable:
         raise
     except Exception as exc:  # Docker errors and "egress proxy failed to start" (a RuntimeError)
@@ -76,16 +103,27 @@ def _start_proxy(hosts: list[str]) -> Any:
 class EgressPool:
     """Owns the one `EgressManager` this process may have (MiniLocker's proxy and its networks have fixed names).
 
-    `acquire(hosts)` returns the running manager when `hosts` is already allowed, restarts the proxy with the union of the old
-    allowlist and `hosts` only when no sandbox is using it, and otherwise raises `SandboxUnavailable("egress is busy")`.
-    Every successful `acquire` must be paired with one `release`.
+    `acquire(hosts, services)` returns the running manager when `hosts` and `services` are already covered, restarts the proxy
+    with the union of the old allowlist and `hosts` (and the old and new brokered services) only when no sandbox is using it, and
+    otherwise raises `SandboxUnavailable("egress is busy")`. Every successful `acquire` must be paired with one `release`.
+
+    The factory is called as `factory(hosts)`, or `factory(hosts, broker=...)` once a brokered service is involved; `broker_loader`
+    turns service names into the entries the proxy needs (it raises `SandboxUnavailable` for a name that is not configured, and
+    only the services asked for ever reach the proxy, never every service the operator configured).
     """
 
-    def __init__(self, factory: Callable[[list[str]], Any] | None = None) -> None:
+    def __init__(
+        self,
+        factory: Callable[..., Any] | None = None,
+        *,
+        broker_loader: Callable[[Iterable[str]], dict[str, dict[str, Any]]] | None = None,
+    ) -> None:
         self._factory = factory or _start_proxy
+        self._broker_loader = broker_loader or _load_broker
         self._lock = threading.Lock()
         self._manager: Any = None
         self._allowed: set[str] = set()
+        self._services: set[str] = set()
         self._users = 0
 
     @property
@@ -94,29 +132,44 @@ class EgressPool:
             return frozenset(self._allowed)
 
     @property
+    def services(self) -> frozenset[str]:
+        with self._lock:
+            return frozenset(self._services)
+
+    @property
     def users(self) -> int:
         with self._lock:
             return self._users
 
-    def acquire(self, hosts: Iterable[str]) -> Any:
+    def acquire(self, hosts: Iterable[str], services: Iterable[str] = ()) -> Any:
         wanted = {str(h).strip().lower() for h in hosts}
+        wanted_services = {str(n).strip().lower() for n in services}
         with self._lock:
-            if self._manager is not None and wanted <= self._allowed:
+            if self._manager is not None and wanted <= self._allowed and wanted_services <= self._services:
                 self._users += 1
                 return self._manager
             if self._users > 0:
                 raise SandboxUnavailable(
                     "egress is busy",
-                    hint="another sandbox is using the egress proxy with a different host list; retry when it closes",
+                    hint="another sandbox is using the egress proxy with a different host or service list; retry when it closes",
                 )
             union = sorted(self._allowed | wanted)
+            union_services = sorted(self._services | wanted_services)
             try:
-                manager = self._factory(union)
+                if union_services:
+                    manager = self._factory(union, broker=self._broker_loader(union_services))
+                else:
+                    manager = self._factory(union)
             except BaseException:
                 # Starting a proxy removes the previous one first, so whatever ran before is gone: start from nothing.
-                self._manager, self._allowed = None, set()
+                self._manager, self._allowed, self._services = None, set(), set()
                 raise
-            self._manager, self._allowed, self._users = manager, set(union), 1
+            self._manager, self._allowed, self._services, self._users = (
+                manager,
+                set(union),
+                set(union_services),
+                1,
+            )
             return manager
 
     def release(self) -> None:
@@ -129,10 +182,26 @@ class EgressPool:
         with self._lock:
             if self._users > 0:
                 return False
-            manager, self._manager, self._allowed = self._manager, None, set()
+            manager, self._manager, self._allowed, self._services = self._manager, None, set(), set()
         if manager is not None:
             manager.stop()
         return True
+
+
+def _load_broker(names: Iterable[str]) -> dict[str, dict[str, Any]]:
+    """The configured entries for exactly `names`. A name the operator did not configure is an error, never skipped."""
+    configured = configured_broker_services()
+    wanted = sorted(set(names))
+    missing = [name for name in wanted if name not in configured]
+    if missing:
+        raise SandboxUnavailable(
+            f"no credential broker service is configured for: {', '.join(missing)}",
+            hint=(
+                "the operator sets MINILOCKER_BROKER=<name>=<host> and MINILOCKER_BROKER_TOKEN_<NAME> in the environment of the "
+                "process that runs ToolForge (see docs/approvals.md)"
+            ),
+        )
+    return {name: configured[name] for name in wanted}
 
 
 class MiniLockerHandle(ContextHandle):
@@ -365,8 +434,9 @@ class MiniLockerRunner:
         )  # before any container exists, so a ledger problem leaks nothing
 
         manager = None
-        if spec.network != "none":
-            manager = self.pool.acquire(spec.network)
+        if spec.network != "none" or spec.broker:
+            # The broker is a path on the proxy, so a sandbox that only needs a brokered service is attached to it with no host.
+            manager = self.pool.acquire(() if spec.network == "none" else spec.network, spec.broker)
         box = None
         handle: MiniLockerHandle | None = None
         reason = "open_failed"

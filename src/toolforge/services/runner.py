@@ -18,6 +18,15 @@ Security properties, and the tests that prove them (`tests/test_tool_runner.py` 
   could be in them. The active version is quarantined by actor `forge` and the event goes to the operator ledger, but only the
   decoy labels, never a value (`test_a_decoy_touched_during_a_call_fails_it_and_quarantines_the_version`,
   `test_the_quarantine_is_written_to_the_operators_ledger`). `RUNTIME_DECOYS=false` turns this off.
+* The manifest's permissions are the sandbox's network (P09): no hosts means no network at all; hosts are reachable only through the
+  egress proxy, and only for a version that was approved for exactly those hosts and secrets (a recorded approval with this
+  `code_sha`; `test_a_network_tool_without_a_recorded_approval_is_refused`). A secret is a brokered service: the sandbox gets
+  MiniLocker's placeholder, never a token, and a secret with no broker service is refused
+  (`test_a_secret_without_a_broker_service_is_refused`). A package run straight from a folder never gets a network or a secret
+  (`test_an_unverified_run_gets_no_network_and_no_secret`).
+* After every call the audit is read for real secrets: one found inside the sandbox fails the call, discards its output and
+  quarantines the version, as a decoy does (`test_a_real_secret_in_the_sandbox_fails_the_call_and_quarantines`). An audit that could
+  not look is recorded as `not_measured`, never as clean.
 
 What a caller learns is limited to `CallResult`. Infrastructure problems (no Docker, a sandbox that could not be filled, a corrupt
 blob) are raised as exceptions for the operator instead; a server must not forward their text to an agent.
@@ -92,6 +101,7 @@ class RegistryLike(Protocol):
     def find_version(self, name: str, version: str) -> VersionRecord | None: ...
     def active_version(self, name: str) -> VersionRecord | None: ...
     def get_tool(self, name: str) -> Any: ...
+    def list_approvals(self, status: str | None = None) -> list[Any]: ...
     def transition(
         self, version_id: int, to: str, *, actor: str, reason: str | None = None
     ) -> dict[str, Any]: ...
@@ -280,6 +290,31 @@ class _Outcome:
     result_bytes: int | None = None
 
 
+def _requested(manifest: Mapping[str, Any]) -> dict[str, list[str]]:
+    perms = manifest.get("permissions") if isinstance(manifest.get("permissions"), Mapping) else {}
+    return {
+        "network": sorted({str(h) for h in perms.get("network") or []}),
+        "secrets": sorted({str(n) for n in perms.get("secrets") or []}),
+    }
+
+
+def real_secret_audit(measured: Mapping[str, Any] | None) -> dict[str, Any]:
+    """What a sandbox's audit says about real secrets: `{"state": "found" | "clean" | "not_measured", "names": [...]}`.
+
+    `names` are the variable names MiniLocker found a real value of inside the sandbox (never a value). `clean` needs an audit
+    that looked inside the sandbox and knew at least one secret to look for; anything less is `not_measured`, which is not a pass.
+    """
+    section = (measured or {}).get("secrets") if isinstance(measured, Mapping) else None
+    if not isinstance(section, Mapping):
+        return {"state": "not_measured", "names": []}
+    found = [n for n in section.get("found") or [] if isinstance(n, str)]
+    if found:
+        return {"state": "found", "names": sorted({_plain(n, 60) for n in found})[:8]}
+    if section.get("inside") is True and section.get("checked"):
+        return {"state": "clean", "names": []}
+    return {"state": "not_measured", "names": []}
+
+
 def _failure(kind: str, message: str, hint: str = "", **rest: Any) -> _Outcome:
     return _Outcome(ok=False, error=CallError(type=kind, message=message, hint=hint), **rest)
 
@@ -301,7 +336,11 @@ class ToolRunner:
         *,
         clock: Callable[[], float] = time.monotonic,
         new_id: Callable[[], str] | None = None,
+        broker_services: Callable[[], Mapping[str, str]] | None = None,
     ) -> None:
+        self._broker_services = (
+            broker_services  # `{service: host}` the operator configured; None asks MiniLocker when needed
+        )
         self._runner = runner
         self._registry = registry
         self._settings = settings
@@ -319,6 +358,7 @@ class ToolRunner:
         files: Mapping[str, bytes] | None = None,
         session_id: str | None = None,
         allow_status: Sequence[str] = ("active",),
+        record_stats: bool = True,
     ) -> CallResult:
         """Call a registered tool. `name_or_version` is a tool name (its active version), `name@version`, or a `VersionRecord`.
 
@@ -326,9 +366,10 @@ class ToolRunner:
         `allow_status`, it is a session tool, or its package cannot be unpacked. Bad arguments or files are not exceptions:
         they come back as a failed `CallResult` (`InvalidArguments`, `InvalidFiles`) after which nothing ran and nothing was
         recorded, because the tool is not at fault. `session_id` is recorded with the call; sessions are P13.
+        `record_stats=False` keeps the call out of the version's statistics (the live smoke run of an approval uses it).
         """
         target = self._resolve(name_or_version, tuple(allow_status))
-        return self._execute(target, args, files, session_id)
+        return self._execute(target, args, files, session_id, record_stats)
 
     def run_unverified(
         self, package: ToolPackage, args: dict, *, files: Mapping[str, bytes] | None = None
@@ -359,6 +400,13 @@ class ToolRunner:
             unverified=True,
         )
         self._require_stateless(target)
+        wants = _requested(manifest)
+        if wants["network"] or wants["secrets"]:
+            raise ToolNotRunnable(
+                f"{label} declares network hosts or secrets, and a package run straight from a folder never gets either",
+                code="unverified_no_permissions",
+                hint="submit it (`toolforge submit`) and have the operator approve it (`toolforge approvals`)",
+            )
         return self._execute(target, args, files, None)
 
     # -- resolving ------------------------------------------------------------------------------------------------------
@@ -531,8 +579,56 @@ class ToolRunner:
     def _append(self, path: str, call_id: str, event: str, payload: dict[str, Any]) -> None:
         self._ledger_factory(path, call_id).append("forge", event, payload)
 
+    def _brokers(self) -> Mapping[str, str]:
+        if self._broker_services is not None:
+            return self._broker_services()
+        from toolforge.services import approvals
+
+        known, _ = approvals.default_brokers(self._settings)
+        return known
+
+    def _authorize(self, target: _Target, hosts: tuple[str, ...], wanted_secrets: tuple[str, ...]) -> None:
+        """Refuse a call that would give a tool a network or a secret nobody approved. Raises `ToolNotRunnable` (the operator's problem)."""
+        if target.status not in (lifecycle.ACTIVE, lifecycle.PENDING_APPROVAL):
+            raise ToolNotRunnable(
+                f"{target.label} asks for network hosts or secrets and is {target.status}; it only runs once it is active",
+                code="permissions_not_approved",
+                hint="the operator approves it with `toolforge approvals approve`",
+            )
+        if (
+            target.status == lifecycle.ACTIVE
+        ):  # defence in depth: the lifecycle already guarantees it, the record proves it
+            asked = {"network": sorted(hosts), "secrets": sorted(wanted_secrets)}
+            registry = self._registry
+            approved = [
+                a
+                for a in (registry.list_approvals("approved") if registry is not None else [])
+                if a.version_id == target.version_id
+                and (a.requested or {}).get("code_sha") == target.code_sha
+                and (a.requested or {}).get("requested") == asked
+            ]
+            if not approved:
+                raise ToolNotRunnable(
+                    f"{target.label} asks for network hosts or secrets and has no recorded approval for this content",
+                    code="permissions_not_approved",
+                    hint="the operator should look at `toolforge approvals list` and `toolforge report`; do not run it",
+                )
+        if wanted_secrets:
+            absent = [name for name in wanted_secrets if name not in self._brokers()]
+            if absent:
+                raise ToolNotRunnable(
+                    f"{target.label} needs a brokered secret for {', '.join(absent)} and no broker service of that name is configured",
+                    code="broker_not_configured",
+                    hint="the operator sets MINILOCKER_BROKER=<name>=<host> and MINILOCKER_BROKER_TOKEN_<NAME> for the ToolForge process",
+                )
+
     def _execute(
-        self, target: _Target, args: dict, files: Mapping[str, bytes] | None, session_id: str | None
+        self,
+        target: _Target,
+        args: dict,
+        files: Mapping[str, bytes] | None,
+        session_id: str | None,
+        record_stats: bool = True,
     ) -> CallResult:
         call_id = self._new_id()
         manifest = target.manifest
@@ -540,6 +636,12 @@ class ToolRunner:
         if refusal is not None:  # the caller's mistake: nothing opens, nothing is recorded
             return CallResult(ok=False, error=refusal, version=target.label, call_id=call_id)
         attached = {path: bytes(data) for path, data in (files or {}).items()}
+        wants = _requested(manifest)
+        hosts, brokered = tuple(wants["network"]), tuple(wants["secrets"])
+        if (hosts or brokered) and not target.unverified:
+            self._authorize(target, hosts, brokered)
+        elif target.unverified:
+            hosts, brokered = (), ()
         limits = self._limits(manifest)
         packed, package_files = repack_blob(target.load_blob())
         entry = str(manifest["entrypoint"]).rpartition(":")[0]
@@ -555,7 +657,9 @@ class ToolRunner:
         session = _plain(session_id, 80) if session_id is not None else None
         spec = SandboxSpec(
             image=self._settings.runtime_image,
-            network="none",  # a manifest's network hosts are enforced from P09; until then no tool has a route out
+            network=hosts
+            or "none",  # the manifest's hosts, reachable only through the egress proxy; none means no route out
+            broker=brokered,
             workspace_mb=WORKSPACE_MB,
             memory_mb=limits["memory_mb"],
             decoys=self._settings.runtime_decoys,
@@ -578,7 +682,8 @@ class ToolRunner:
                 "files": len(attached),
                 "file_bytes": sum(len(data) for data in attached.values()),
                 "limits": limits,
-                "network": "none",
+                "network": list(hosts) or "none",
+                "secrets": list(brokered),
             },
         )
         finished: dict[str, Any] = {"call_id": call_id, "ok": False, "error_type": "Aborted"}
@@ -587,12 +692,24 @@ class ToolRunner:
                 spec, packed, request, attached, nonce, limits
             )
             violations = summary_info.pop("violations", [])  # never stored as given
+            real_secrets = summary_info.pop("real_secrets", [])
             if not spec.decoys:
                 violations = []
             if violations:  # the tripwire: nothing the tool produced is kept, and the version is pulled
                 outcome = self._decoy_outcome(violations)
                 summary_info["decoy_violations"] = len(violations)
                 summary_info["quarantined"] = self._quarantine(target, call_id, violations)
+            elif (
+                real_secrets
+            ):  # a real secret inside the sandbox is worse still: same response, different reason
+                outcome = self._secret_outcome()
+                summary_info["real_secrets_found"] = len(real_secrets)
+                summary_info["quarantined"] = self._quarantine(
+                    target,
+                    call_id,
+                    (),
+                    why=f"a real secret was found inside the sandbox during call {call_id} ({', '.join(real_secrets)})",
+                )
             finished.update(
                 ok=outcome.ok,
                 error_type=outcome.error.type if outcome.error else None,
@@ -602,7 +719,8 @@ class ToolRunner:
                 result_bytes=outcome.result_bytes,
                 **summary_info,
             )
-            self._record(target, outcome, duration_ms, session, call_id)
+            if record_stats:
+                self._record(target, outcome, duration_ms, session, call_id)
             return CallResult(
                 ok=outcome.ok,
                 result=outcome.result,
@@ -674,10 +792,15 @@ class ToolRunner:
         ):  # the call's outcome stands; a container that would not go is for `toolforge doctor --clean`
             log.exception("a sandbox could not be closed cleanly")
             return {"cleanup_ok": False}
+        audit = real_secret_audit(summary.measured)
         return {
             "cleanup_ok": True,
             "egress_attempts": len(summary.egress_attempts),
             "decoy_events": len(summary.decoy_events),
+            "real_secret_audit": audit["state"],
+            "real_secrets": audit[
+                "names"
+            ],  # taken out again by `_execute`: variable names only, never a value
             "violations": decoy_violations(
                 summary.decoy_events
             ),  # taken out again by `_execute`; never stored as given
@@ -701,7 +824,18 @@ class ToolRunner:
             "use another tool or ask the operator",
         )
 
-    def _quarantine(self, target: _Target, call_id: str, violations: Sequence[dict[str, Any]]) -> bool:
+    @staticmethod
+    def _secret_outcome() -> _Outcome:
+        return _failure(
+            "PolicyViolation",
+            "a real credential was found inside the sandbox while the tool ran, so its answer was discarded",
+            "this version has been quarantined and an operator has to review it before it can run again; "
+            "use another tool or ask the operator",
+        )
+
+    def _quarantine(
+        self, target: _Target, call_id: str, violations: Sequence[dict[str, Any]], *, why: str | None = None
+    ) -> bool:
         """Pull an active version out of use because it touched a decoy. True when this call did it.
 
         Only a registered, active version can be quarantined. A second call that finds the work done, or a version whose status
@@ -711,7 +845,9 @@ class ToolRunner:
         if registry is None or target.version_id is None or target.unverified:
             return False
         names = self._decoy_names(violations)
-        reason = f"a decoy credential was touched during call {call_id} ({', '.join(names) or 'unnamed'})"
+        reason = (
+            why or f"a decoy credential was touched during call {call_id} ({', '.join(names) or 'unnamed'})"
+        )
         try:
             event = registry.transition(
                 target.version_id, lifecycle.QUARANTINED, actor="forge", reason=reason
@@ -847,6 +983,7 @@ __all__ = [
     "LedgerLike",
     "RegistryLike",
     "ToolRunner",
+    "real_secret_audit",
     "parse_envelope",
     "repack_blob",
     "sdk_source",

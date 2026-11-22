@@ -281,7 +281,9 @@ def build_server(
         settings, registry, sandbox, ledger_factory=factory, queue_timeout_s=SUBMIT_QUEUE_TIMEOUT_S
     )
     tool_runner = tool_runner or ToolRunner(sandbox, registry, settings, factory)
-    service = ToolService(settings, registry, forge, tool_runner, runtime_probe=runtime_probe)
+    service = ToolService(
+        settings, registry, forge, tool_runner, runtime_probe=runtime_probe, ledger_factory=factory
+    )
 
     catalog = DirectCatalog(registry) if settings.expose_direct else None
     bus = InMemorySubscriptionBus() if catalog is not None else None
