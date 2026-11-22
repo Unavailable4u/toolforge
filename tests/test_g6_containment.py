@@ -263,8 +263,12 @@ MOUNT_ONLY = {
 }
 
 
-def test_docker_listing_the_workspace_mount_point_as_modified_is_not_a_change_by_the_tool() -> None:
-    result, _ = run_gate(measured=with_measured(fs=MOUNT_ONLY))
+def test_docker_listing_the_workspace_mount_point_is_not_a_change_by_the_tool() -> None:
+    fs = {
+        **MOUNT_ONLY,
+        "rootfs_changed": [{"path": "/workspace", "kind": "added"}],
+    }  # what a real daemon most likely reports
+    result, _ = run_gate(measured=with_measured(fs=fs))
     assert result.status == "passed", (result.summary, result.hints)
     assert result.metrics["rootfs_changes"] == 0
 
@@ -285,15 +289,26 @@ def test_a_real_change_next_to_a_mount_point_still_fails_and_is_the_one_named() 
         "rootfs_changed": [*MOUNT_ONLY["rootfs_changed"], {"path": "/etc/passwd", "kind": "modified"}],
     }
     result, _ = run_gate(measured=with_measured(fs=fs))
-    assert result.status == "failed" and "1 changes" in result.summary and "/etc/passwd" in result.summary
+    assert (
+        result.status == "failed"
+        and "1 changes" in result.summary
+        and "/etc/passwd (modified)" in result.summary
+    )
     assert "/workspace" not in result.summary
 
 
-@pytest.mark.parametrize("kind", ["added", "deleted", "?"])
-def test_only_a_modified_mount_point_is_ignored(kind: str) -> None:
+@pytest.mark.parametrize("kind", ["modified", "added", "deleted", "?"])
+def test_a_mount_point_is_ignored_whatever_kind_docker_gave_it(kind: str) -> None:
     fs = {**MOUNT_ONLY, "rootfs_changed": [{"path": "/workspace", "kind": kind}]}
     result, _ = run_gate(measured=with_measured(fs=fs))
-    assert result.status == "failed" and "/workspace" in result.summary
+    assert result.status == "passed", (result.summary, result.hints)
+
+
+@pytest.mark.parametrize("kind", ["modified", "added", "deleted"])
+def test_a_path_that_is_not_a_mount_point_counts_whatever_its_kind(kind: str) -> None:
+    fs = {**MOUNT_ONLY, "rootfs_changed": [{"path": "/workspace/evil", "kind": kind}]}
+    result, _ = run_gate(measured=with_measured(fs=fs))
+    assert result.status == "failed" and f"/workspace/evil ({kind})" in result.summary
 
 
 def test_a_count_with_no_listed_entries_is_trusted_not_dropped() -> None:
@@ -315,3 +330,4 @@ def test_real_rootfs_changes_reads_garbage_as_empty() -> None:
         0,
     )
     assert real_rootfs_changes(1, [{"path": "/workspace", "kind": "modified"}]) == (0, [], 1)
+    assert real_rootfs_changes(1, [{"path": "/workspace", "kind": "added"}]) == (0, [], 1)

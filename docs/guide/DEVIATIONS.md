@@ -3,8 +3,9 @@
 Where reality differed from the guide, newest first: what the guide said, what is true, what was done.
 
 * 2026-11-22 (P08, found by `pytest -m docker`): MiniLocker's audit reports `rootfs_changes=1` for a tool that wrote nothing, because `docker diff` lists
-  the tmpfs mount point `/workspace` as modified. G6 and the Blast Radius report no longer count an entry that is exactly a mount point and is
-  "modified" (`sandbox.base.real_rootfs_changes`); an added or deleted entry, or any other path, still counts. Until this was fixed G6 failed every tool on
+  the tmpfs mount point `/workspace` in its diff. G6 and the Blast Radius report no longer count an entry whose path is exactly a mount point, of any
+  kind (`sandbox.base.real_rootfs_changes`); any other path still counts. The first attempt ignored only "modified" entries and was wrong: the real kind
+  is most likely "added" (Docker creates the mount point), so G6 now also names the kind of each change it reports. Until this was fixed G6 failed every tool on
   a real daemon. The report also treats a verification ledger with no G6 start as not measured instead of measuring the other gates' sandboxes.
 * 2026-11-22 (P08): the guide says G6 checks "no undeclared egress". G6 runs with the network closed, so no connection can be attempted and egress
   is reported as `not applicable`, never `clean`. Egress against approved hosts is measured at run time in P09.

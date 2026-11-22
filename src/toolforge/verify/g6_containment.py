@@ -251,7 +251,10 @@ class ContainmentGate:
         if measured and fs:
             metrics["rootfs_changes"] = changes
             if changes:
-                changed = [clip(c.get("path"), 80) for c in changed_entries[:MAX_NAMED]]
+                changed = [
+                    f"{clip(c.get('path'), 80)} ({c.get('kind') if c.get('kind') in ('modified', 'added', 'deleted') else '?'})"
+                    for c in changed_entries[:MAX_NAMED]
+                ]
                 problems.append(
                     f"the container's own files changed ({changes} changes, for example {', '.join(changed) or 'unknown'})"
                 )

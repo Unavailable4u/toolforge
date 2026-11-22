@@ -128,7 +128,7 @@ reads what the audit found. It **fails** when:
 * the sandbox was not locked down as it should be (a runner problem, but a tool must never be verified in a weaker box than the one it
   runs in);
 * the container's own files changed, a host folder was mounted, or a real secret was found inside. The sandbox's own tmpfs mount points
-  (`/workspace`, `/tmp`) are not counted: Docker lists them as modified even when nothing was written;
+  (`/workspace`, `/tmp`) are not counted: Docker lists them in its diff even when nothing was written;
 * memory, process count or CPU went past the limits, or an input hit the time limit.
 
 It is **skipped, never passed,** when the sandbox could not observe what it needs to: no decoys were planted, the hardening could not

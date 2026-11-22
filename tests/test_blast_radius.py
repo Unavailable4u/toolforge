@@ -332,7 +332,8 @@ def test_nothing_in_the_report_module_imports_minilocker_by_name_at_module_level
 # --- Found on a real Docker daemon -------------------------------------------------------------------------------------------------------
 
 
-def test_the_workspace_mount_point_listed_as_modified_is_not_a_violation(settings: Settings) -> None:
+@pytest.mark.parametrize("kind", ["modified", "added"])
+def test_the_workspace_mount_point_is_not_a_violation(kind: str, settings: Settings) -> None:
     fs = {
         **FS,
         "rootfs_changes": 1,
