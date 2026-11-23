@@ -34,7 +34,8 @@ def test_the_table_has_one_row_per_tool() -> None:
 
 def test_every_tool_has_a_summary_and_a_description_written_for_a_model() -> None:
     for tool in META_TOOLS:
-        assert tool.summary.endswith(".") and tool.since == "P07" and len(tool.description) > 150, tool.name
+        assert tool.summary.endswith(".") and len(tool.description) > 150, tool.name
+        assert tool.since == ("P11" if tool.name == "forge_build" else "P07"), tool.name
 
 
 def test_the_clients_guide_names_the_server_settings() -> None:

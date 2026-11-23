@@ -352,6 +352,7 @@ def test_the_checks_list_is_the_one_place_to_add_a_check() -> None:
         "leftover containers",
         "data directory",
         "challenger model",
+        "builder model",
     ]
     required = {check.name for check in cli_doctor.CHECKS if check.required}
     assert required == {"python", "docker daemon", "minilocker", "data directory"}
@@ -461,3 +462,60 @@ def test_doctor_makes_no_model_request(monkeypatch: pytest.MonkeyPatch) -> None:
         ).status
         == "ok"
     )
+
+
+# -- the builder model (P11) ---------------------------------------------------------------------------------------------------
+
+
+def builder_result(monkeypatch: pytest.MonkeyPatch, **env: str) -> CheckResult:
+    for name in ("LLM_BASE_URL", "LLM_MODEL", "LLM_API_KEY"):
+        monkeypatch.delenv(f"TOOLFORGE_{name}", raising=False)
+    for name, value in env.items():
+        monkeypatch.setenv(f"TOOLFORGE_{name.upper()}", value)
+    check = next(c for c in cli_doctor.CHECKS if c.name == "builder model")
+    assert not check.required  # a missing model never makes the machine "not ready"
+    return check.run(env_for(None))
+
+
+def test_no_builder_model_is_a_skip_that_says_only_reuse_works(monkeypatch: pytest.MonkeyPatch) -> None:
+    result = builder_result(monkeypatch)
+    assert (
+        result.status == "skip" and "only reuse" in result.message and "TOOLFORGE_LLM_BASE_URL" in result.hint
+    )
+
+
+def test_a_half_configured_builder_is_a_warning_naming_the_missing_setting(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    only_url = builder_result(monkeypatch, llm_base_url="https://llm.test/v1")
+    assert only_url.status == "warn" and "TOOLFORGE_LLM_MODEL" in only_url.message + only_url.hint
+    only_model = builder_result(monkeypatch, llm_model="m")
+    assert only_model.status == "warn" and "TOOLFORGE_LLM_BASE_URL" in only_model.message + only_model.hint
+
+
+def test_a_usable_builder_is_ok_shows_host_limits_and_never_the_key_or_credentials(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    result = builder_result(
+        monkeypatch,
+        llm_base_url="https://llm.test/v1",
+        llm_model="the-model",
+        llm_api_key="sk-very-secret-value",
+    )
+    assert result.status == "ok" and "the-model" in result.message and "llm.test" in result.message
+    assert (
+        "with an API key" in result.message
+        and "4 rounds" in result.message
+        and "60000 tokens" in result.message
+    )
+    assert "sk-very-secret-value" not in result.message + (result.hint or "") and "/v1" not in result.message
+    keyless = builder_result(monkeypatch, llm_base_url="http://localhost:11434/v1", llm_model="local")
+    assert keyless.status == "ok" and "without an API key" in keyless.message
+
+
+def test_a_builder_base_url_with_credentials_or_the_wrong_scheme_is_a_warning(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    with_login = builder_result(monkeypatch, llm_base_url="https://user:hunter2@llm.test/v1", llm_model="m")
+    assert with_login.status == "warn" and "hunter2" not in with_login.message + (with_login.hint or "")
+    assert builder_result(monkeypatch, llm_base_url="ftp://llm.test", llm_model="m").status == "warn"

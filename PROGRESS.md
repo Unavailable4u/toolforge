@@ -17,7 +17,7 @@ patch" in the same patch. Never tick a box for work that is not in the patch. Bo
 | [x] | P08 | Containment gate G6 and Blast Radius per tool | P06 |
 | [x] | P09 | Permissions, approvals, egress and brokered secrets | P07, P08 |
 | [x] | P10 | Independent challenger, gate G5 | P06 |
-| [ ] | P11 | Server-side builder | P07, P10 |
+| [x] | P11 | Server-side builder | P07, P10 |
 | [ ] | P12 | Reuse ranking, self-repair, rollback | P07, P11 |
 | [ ] | P13 | Stateful sessions | P05, P08 |
 | [ ] | P14 | Runtime image and adapter kits (software use) | P13 |
@@ -35,8 +35,29 @@ Milestones (M0 to M7) and what can be dropped: `docs/guide/05-milestones.md`.
 
 ## Notes for the next patch
 
-Done: P01 (skeleton), P02 (package spec), P03 (registry), P04 (sandbox seam), P05 (execution contract and `run`), P06 (gates G1 to G4), P07 (MCP server v1), P08 (gate G6 and Blast Radius), P09 (approvals, egress, brokered secrets), P10 (independent challenger, gate G5).
-Next: P11 (server-side builder; needs P07 and P10). P12 and P13 need P11 and P05/P08 respectively. Decisions and interfaces that later patches must respect:
+Done: P01 (skeleton), P02 (package spec), P03 (registry), P04 (sandbox seam), P05 (execution contract and `run`), P06 (gates G1 to G4), P07 (MCP server v1), P08 (gate G6 and Blast Radius), P09 (approvals, egress, brokered secrets), P10 (independent challenger, gate G5), P11 (server-side builder).
+Next: P12 (reuse ranking, self-repair, rollback; needs P07 and P11). P13 needs P05 and P08, and P16 needs P11, P12 and P14. Decisions and interfaces that later patches must respect:
+
+* P11 interfaces. `services/builder.py`: `Builder(settings, registry, forge, *, client, ledger_factory=, runtime_facts=, confidence=, clock=, new_id=)` and
+  `.build(goal, *, examples=, sample_files=, constraints=, on_progress=) -> BuildResult` (`ok`, `reused`, `stop_reason`, `tool`, `version`, `status`, `rounds`,
+  `attempts`, `usage`, `report`, `permissions`, `failure_summary`, `next_action`, `name_adjusted`, `warnings`; `.as_dict()` and `.text()`). `BuildRequest.parse` checks
+  and secret-scans the four inputs. `system_prompt`, `draft_prompt`, `revise_prompt`, `sandbox_section` and `bump_patch` are public. `STOP_REASONS` lists why a build ends.
+  `server.tools.runtime_facts(settings, probe=None)` is the one definition of what `forge_runtime_info` shows; `build_view(result)` is how an agent sees a build.
+  `ToolService.build(...)` makes its `Builder` on first use (`build_server(builder=)` lets a test pass one). CLI: `toolforge build "<goal>" [--examples F] [--sample F ...]
+  [--constraints T] [--json] [--quiet]`. Settings: `builder_max_rounds` (4), `builder_token_budget` (60000). Doctor has a `builder model` check. Operator page: `docs/builder.md`.
+* P11 behaviour. A build searches active tools first (`confidence == "high"` from `forge_find`'s measure) and needs no model for that. Otherwise the model's package goes
+  through `Forge.submit` as author `builder`; the loop sets `name`, `version` (0.1.0, then the next patch) and `parent_version`. A taken name becomes `name_2`. Only the first
+  failed gate's id, name, summary and hints go back, with the previous package (a file with secret-shaped text is named, not echoed). A build stops on `verified`, `reused`,
+  `max_rounds`, `stuck` (same gate and summary twice, or two unusable replies), `token_budget` (checked before every round after the first, with the next prompt's size
+  added), `llm_unavailable`, `llm_refused`, `busy` or `name_conflict`. Rejected versions stay in the registry. A sandbox failure is raised after the ledger event
+  (`outcome: aborted`) is written, and leaves its version `verifying`. Each build writes `forge.build.finished` to `ledgers/_builds/<build id>.jsonl` (ids, hashes, counts; never
+  the goal, a prompt or code). Without a model only the reuse step works. The builder cannot promote, approve, release or roll back (a test reads its source).
+* P11 for later patches. P12's self-repair can call `Builder.build` with the failure as the goal and `constraints`, or reuse `revise_prompt`; its versions must follow
+  `bump_patch`. P16's benchmark should read `BuildResult.usage` and `.attempts` for rounds and tokens, and must label `budget_basis: estimated` figures as estimates. The
+  builder shares one rate limiter per process for the builder model (`llm_max_rpm`); a free tier that keeps answering 429 ends a build as `llm_unavailable`.
+* P11 not run: `pytest -m llm tests/test_builder_live.py` (no endpoint where the patch was written), every `docker` test, and `toolforge build` with a real model and
+  Docker. The loop is proven with `FakeLLM`, a real registry and scripted gates; `toolforge build` with the real gates G1 to G4 through the local stand-in sandbox. How often
+  a real model writes a passing tool, and at what cost, is not measured (P16). MiniLocker was not present where the patch was written, so the injection scan reported "not measured".
 
 * P10 interfaces. `toolforge.llm.client`: `LLMClient(base_url, model, api_key, timeout_s=, limiter=, transport=, json_mode="prompt"|"native", wall_budget_s=, clock=, sleep=, rng=)`,
   `client_from_settings(settings, "builder" | "challenger")` (None when no endpoint and model are set; the challenger falls back to the builder's values),

@@ -56,6 +56,9 @@ class Settings(BaseSettings):
     llm_max_rpm: int = Field(0, ge=0)
     challenger_max_rpm: int = Field(0, ge=0)
     llm_timeout_s: int = Field(60, ge=1, le=600)
+    # The server-side builder (P11): rounds it may ask the model for a package, and the model tokens one build may spend in all.
+    builder_max_rounds: int = Field(4, ge=1, le=10)
+    builder_token_budget: int = Field(60000, ge=1000)
 
     # Network listeners; a token is required on any non-loopback host (enforced in P07 and P17)
     server_host: str = "127.0.0.1"

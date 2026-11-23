@@ -1,9 +1,9 @@
 """`toolforge doctor`: is this machine ready to run tools in a sandbox, and what is missing if not.
 
 Each check is a small function registered in `CHECKS`; later patches append theirs (P10 adds the "challenger model equals builder
-model" warning, P13 makes `--clean` also remove session containers) without editing a long function. A check returns a
-`CheckResult`; one marked `required` that fails makes the exit code 1, an optional one that fails is shown as a warning. A check
-that raises is reported as failed, never as a traceback.
+model" warning, P11 the builder model check, P13 makes `--clean` also remove session containers) without editing a long function.
+A check returns a `CheckResult`; one marked `required` that fails makes the exit code 1, an optional one that fails is shown as a
+warning. A check that raises is reported as failed, never as a traceback.
 
 Doctor only reads, except for `--clean`, which removes containers labelled `minilocker=sandbox` that are older than 10 minutes.
 It never starts a container and never pulls an image. Proven by `tests/test_cli_doctor.py`, which uses a faked Docker client.
@@ -312,6 +312,40 @@ def check_challenger(env: DoctorEnv) -> CheckResult:
     )
 
 
+def check_builder(env: DoctorEnv) -> CheckResult:
+    """Can `forge_build` and `toolforge build` ask a model for a package? Reads settings only: no request is made."""
+    from urllib.parse import urlsplit
+
+    settings = env.settings
+    base_url, model = settings.llm_base_url, settings.llm_model
+    if not base_url and not model:
+        return CheckResult(
+            "skip",
+            "no builder model is configured, so `toolforge build` and forge_build can only reuse tools that already exist",
+            "set TOOLFORGE_LLM_BASE_URL and TOOLFORGE_LLM_MODEL (and TOOLFORGE_LLM_API_KEY if the endpoint needs one)",
+        )
+    if not base_url or not model:
+        missing = "TOOLFORGE_LLM_BASE_URL" if not base_url else "TOOLFORGE_LLM_MODEL"
+        return CheckResult(
+            "warn",
+            f"the builder model is only partly configured ({missing} is missing), so nothing can be built",
+            f"set {missing}",
+        )
+    parts = urlsplit(base_url)
+    if parts.scheme not in ("http", "https") or not parts.hostname or parts.username or parts.password:
+        return CheckResult(
+            "warn",
+            "the builder base URL is not usable, so nothing can be built",
+            "it must be an http or https address, without a user name or password in it",
+        )
+    key = "with an API key" if settings.llm_api_key is not None else "without an API key"
+    return CheckResult(
+        "ok",
+        f"builder model {model} at {parts.hostname}, {key}; at most {settings.builder_max_rounds} rounds and "
+        f"{settings.builder_token_budget} tokens a build (not contacted: doctor makes no model requests)",
+    )
+
+
 # One list, in the order they are printed. Append to it to add a check; a required check that fails makes `doctor` exit 1.
 CHECKS: list[Check] = [
     Check("python", True, check_python),
@@ -322,6 +356,7 @@ CHECKS: list[Check] = [
     Check("leftover containers", False, check_leftovers),
     Check("data directory", True, check_data_dir),
     Check("challenger model", False, check_challenger),
+    Check("builder model", False, check_builder),
 ]
 
 

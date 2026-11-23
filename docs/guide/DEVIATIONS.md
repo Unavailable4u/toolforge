@@ -2,6 +2,21 @@
 
 Where reality differed from the guide, newest first: what the guide said, what is true, what was done.
 
+* 2026-11-23 (P11): the guide puts the builder in `src/toolforge/core/builder.py`. It is `src/toolforge/services/builder.py`, next to the forge it
+  calls (see the P05 and P06 entries on `core/`). The prompt is `src/toolforge/llm/prompts/builder.md`, as the guide says.
+* 2026-11-23 (P11): scope additions the guide does not list: `src/toolforge/cli_build.py` (the command, registered through `cli.REGISTRARS`),
+  `docs/builder.md`, a `builder model` check in `toolforge doctor` (it reads settings and contacts nothing), `server.tools.runtime_facts` and
+  `build_view` (the facts that `forge_runtime_info` shows, now one function that the builder's prompt and the command also use, and the way an agent
+  sees a build), `tests/builder_helpers.py`, and `Builder` as an optional argument of `build_server` so a test can pass a scripted one.
+* 2026-11-23 (P11): the guide says the tool returns "the final `VerificationReport`". It returns the report under `report` inside a larger result
+  (`ok`, `stop_reason`, `tool`, `version`, `status`, `rounds`, `attempts`, `usage`, `permissions`, `next_action`, `operator_command`), because a build can end
+  without any report (a model outage, a refused request, a reply that was never a package) and the caller needs to know why in every case. A failed
+  build is a result with `ok: false`, not a tool error; a bad request or a missing model is a tool error.
+* 2026-11-23 (P11): `forge_build` is the only tool with `open_world_hint: true`, because it sends text the caller wrote to the operator's model provider.
+  The other tools stay `false`.
+* 2026-11-23 (P11): the stuck rule also covers the model twice returning something that is not a package, and a name that was never registered (its
+  package was too invalid to store) may be used again by the next round. The loop, not the model, owns `name`, `version` and `parent_version` as the
+  guide says; when the chosen name exists the build uses `name_2` and reports `name_adjusted`.
 * 2026-11-23 (P10): the guide says the client is "an OpenAI-compatible chat client (`openai` SDK or plain `httpx`)". Neither is a declared dependency: `httpx` only arrives
   through `mcp`, and the pinned `mcp` 2.3.0 installs it as `httpx2`. The client therefore uses the standard library (`urllib.request`) behind a small `Transport` protocol, with no
   redirects (a redirect would forward the bearer token) and a response size cap. No dependency was added to `pyproject.toml`.

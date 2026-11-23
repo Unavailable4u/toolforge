@@ -87,6 +87,7 @@ supports remote servers takes the URL `http://127.0.0.1:8765/mcp` and the header
 | `forge_list` | `status: str | null` | versions with name, version, status and a short description (capped) | P07 |
 | `forge_recipe` | `kind: str` | the documentation text (v1 ships `package-format`) | P07 |
 | `forge_runtime_info` | none | Python version, runtime image, sandbox limits, preinstalled libraries (or null: not measured) | P07 |
+| `forge_build` | `goal: str`, `examples: [{input, output?}] | null`, `sample_files: object | null`, `constraints: str | null` | `reused` or the built `tool` and `version`, its `status`, `rounds`, `usage`, the verification `report` and `next_action` | P11 |
 <!-- tools:end -->
 
 There is no tool that approves, promotes, releases, rolls back or deletes anything. Those are operator actions.
@@ -101,6 +102,9 @@ What an agent should expect:
   left unchanged. `injection_scan` says `measured` or `not measured`.
 * Descriptions and manifest text written by tool authors are cleaned of invisible and control characters and capped (600 characters).
 * `forge_submit` reports progress for each gate. If the server answers *busy*, wait a minute and submit the same package again; that is safe.
+* `forge_build` is for a client that cannot or does not want to write a tool: it says what it needs in words, and the server's own model
+  writes the package. It reports progress for each round and gate, and it can take minutes. A tool that is built is not usable until an
+  operator promotes it (or approves the hosts or secrets it asks for); the result's `status` and `next_action` say which. See `docs/builder.md`.
 * Errors are tool errors with a message, a hint and a short `ref`. The same `ref` is in the server's log (stderr), where the details are.
 
 ## 5. Optional: every active tool as its own tool
@@ -120,6 +124,8 @@ change the next time they list tools.
 | `TOOLFORGE_SERVER_ALLOWED_HOSTS`, `TOOLFORGE_SERVER_ALLOWED_ORIGINS` | extra `Host` and `Origin` values to accept |
 | `TOOLFORGE_EXPOSE_DIRECT` | offer active tools as `tf_<name>` |
 | `TOOLFORGE_MAX_CONCURRENT_VERIFICATIONS` | how many `forge_submit` verifications run at once; more wait up to 30 seconds, then get *busy* |
+| `TOOLFORGE_LLM_BASE_URL`, `TOOLFORGE_LLM_MODEL`, `TOOLFORGE_LLM_API_KEY` | the builder model that `forge_build` asks; without them `forge_build` can only reuse an existing tool |
+| `TOOLFORGE_BUILDER_MAX_ROUNDS`, `TOOLFORGE_BUILDER_TOKEN_BUDGET` | how many times, and with how many model tokens in all, one build may ask for a package (4 and 60000) |
 
-Docker must be running for `forge_run` and `forge_submit`. Without it the server still starts and answers `forge_find`, `forge_describe`,
+Docker must be running for `forge_run`, `forge_submit` and `forge_build`. Without it the server still starts and answers `forge_find`, `forge_describe`,
 `forge_list`, `forge_status`, `forge_recipe` and `forge_runtime_info` (which says "not measured" for what it cannot read).

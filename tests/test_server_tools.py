@@ -43,7 +43,7 @@ def test_the_server_offers_exactly_the_tools_in_the_table(env: Env) -> None:
     assert [t.name for t in listed] == [m.name for m in META_TOOLS]
     assert [t.name for t in listed] == [
         "forge_find", "forge_describe", "forge_run", "forge_submit",
-        "forge_status", "forge_list", "forge_recipe", "forge_runtime_info",
+        "forge_status", "forge_list", "forge_recipe", "forge_runtime_info", "forge_build",
     ]  # fmt: skip
     assert all(t.description and len(t.description) > 80 for t in listed)
 

@@ -13,6 +13,7 @@ from collections.abc import Callable, Sequence
 
 from toolforge import __version__
 from toolforge import cli_approvals as approvals_commands
+from toolforge import cli_build as build_commands
 from toolforge import cli_doctor as doctor_commands
 from toolforge import cli_package as package_commands
 from toolforge import cli_promote as promote_commands
@@ -48,6 +49,7 @@ def _register_core(subparsers: argparse._SubParsersAction) -> None:
 REGISTRARS: list[Callable[[argparse._SubParsersAction], None]] = [
     _register_core,
     approvals_commands.register,
+    build_commands.register,
     doctor_commands.register,
     package_commands.register,
     promote_commands.register,

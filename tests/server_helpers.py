@@ -17,6 +17,7 @@ from toolforge.models.results import CallError, CallResult
 from toolforge.registry import Registry
 from toolforge.server.app import ForgeApp, build_server
 from toolforge.services import operator_actions
+from toolforge.services.builder import Builder
 from toolforge.services.forge import Forge
 
 
@@ -75,13 +76,27 @@ class Env:
         return anyio.run(main)
 
 
-def make_env(tmp_path: Path, *, gates: list[ScriptedGate] | None = None, **settings_options: Any) -> Env:
+def make_env(
+    tmp_path: Path, *, gates: list[ScriptedGate] | None = None, llm: Any = None, **settings_options: Any
+) -> Env:
     settings = Settings(home=tmp_path / "home", **settings_options)
     registry = Registry(settings.home)
     ledgers = MemoryLedgers()
     runner = StandInRunner()
     gate_list = gates if gates is not None else scripted_gates()
     forge = Forge(settings, registry, None, gates=gate_list, queue_timeout_s=0.2)
+    builder = (
+        Builder(
+            settings,
+            registry,
+            forge,
+            client=llm,
+            ledger_factory=ledgers,
+            runtime_facts=lambda: {"python": "3.12.4", "limits": {"default_timeout_s": 20}},
+        )
+        if llm is not None
+        else None
+    )
     app = build_server(
         settings,
         registry=registry,
@@ -93,6 +108,7 @@ def make_env(tmp_path: Path, *, gates: list[ScriptedGate] | None = None, **setti
             "python": "3.12.4",
             "libraries": [["numpy", "2.0.0"], ["pandas", "2.2.2"]],
         },
+        builder=builder,
         watch_interval_s=0.05,
     )
     return Env(settings, registry, app, ledgers, runner, gate_list)
