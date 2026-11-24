@@ -24,6 +24,9 @@ Security properties, and the tests that prove them (`tests/test_tool_runner.py` 
   MiniLocker's placeholder, never a token, and a secret with no broker service is refused
   (`test_a_secret_without_a_broker_service_is_refused`). A package run straight from a folder never gets a network or a secret
   (`test_an_unverified_run_gets_no_network_and_no_secret`).
+* A call that ends in a failure of the tool (`Crash`, `Timeout`, `SandboxCrashed`, `NoResult`, `PolicyViolation`) is captured with its error class
+  and a shape fingerprint (P12, `services/failures.py`), and a failure rate over 40 percent in the last calls quarantines the active version
+  (`tests/test_failures.py`). Only measured outcomes count; a handled `ToolError` does not.
 * After every call the audit is read for real secrets: one found inside the sandbox fails the call, discards its output and
   quarantines the version, as a decoy does (`test_a_real_secret_in_the_sandbox_fails_the_call_and_quarantines`). An audit that could
   not look is recorded as `not_measured`, never as clean.
@@ -64,6 +67,7 @@ from toolforge.packaging import check_rel_path
 from toolforge.registry import VersionRecord, lifecycle
 from toolforge.sandbox import harness
 from toolforge.sandbox.base import RunOutput, SandboxRunner, SandboxSpec, decoy_violations
+from toolforge.services import failures
 
 log = logging.getLogger(__name__)
 
@@ -721,6 +725,9 @@ class ToolRunner:
             )
             if record_stats:
                 self._record(target, outcome, duration_ms, session, call_id)
+                health = self._after_failure(target, outcome, args, attached, call_id)
+                if health:
+                    finished.update(health)
             return CallResult(
                 ok=outcome.ok,
                 result=outcome.result,
@@ -884,6 +891,41 @@ class ToolRunner:
             )
         except Exception:  # statistics must never turn a finished call into an exception
             log.exception("call %s of %s ran but its statistics could not be recorded", call_id, target.label)
+
+    def _after_failure(
+        self, target: _Target, outcome: _Outcome, args: dict, attached: Mapping[str, bytes], call_id: str
+    ) -> dict[str, Any]:
+        """Capture a failed call and, when the recent record says so, pull the active version. Never raises: the call is over.
+
+        Returns what the call's ledger event should add (`{}` when nothing happened).
+        """
+        error = outcome.error
+        if (
+            error is None
+            or error.type not in failures.CAPTURED
+            or target.version_id is None
+            or target.unverified
+            or self._registry is None
+        ):
+            return {}
+        info: dict[str, Any] = {}
+        try:
+            info["failure_captured"] = failures.capture(
+                self._registry,
+                self._settings,
+                version_id=target.version_id,
+                manifest=target.manifest,
+                error_class=error.type,
+                args=args,
+                files=attached,
+            )
+            if error.type in failures.QUARANTINE_FAILURES and target.status == lifecycle.ACTIVE:
+                verdict = failures.judge(self._registry, target.version_id)
+                if verdict is not None and self._quarantine(target, call_id, (), why=verdict.reason(call_id)):
+                    info["auto_quarantined"] = {"failures": verdict.failures, "calls": verdict.calls}
+        except Exception:  # the failure record must never turn a finished call into an exception
+            log.exception("the failure of call %s of %s could not be recorded", call_id, target.label)
+        return info
 
     # -- reading the outcome ------------------------------------------------------------------------------------------------
 

@@ -1,10 +1,14 @@
 """Gate G3, self-tests: the package's own tests and examples, in a fresh sandbox with no network, and a check that the tests mean something.
 
-Three runs in one sandbox, all through the in-sandbox harness (never pytest, never anything the author supplied):
+Three runs in one sandbox (four when the tool has regression cases), all through the in-sandbox harness (never pytest, never anything the
+author supplied):
 
 1. `--tests`: every `tests/test_*.py` (top-level `test_*` functions and `unittest.TestCase` methods), each in its own process.
 2. `--batch` over the manifest examples that give an `output` (and are not `live`): the result must equal the expected output as
    JSON, numbers within 1e-9.
+2b. Regression cases (P12): argument objects that crashed, timed out or killed the sandbox in an earlier version of this tool, stored by
+   `store_failed_inputs`. They go through `--batch` too. Each must end in a result or a handled `ToolError`; a crash, a timeout or an
+   oversized or non-JSON result fails the gate, and the hint names the case by its number, never by its content.
 3. `--tests --stub`: the same tests with the entrypoint replaced by a function that returns `None`. If every test still passes the
    tests do not constrain behaviour (`assert True`), and the gate fails.
 
@@ -83,6 +87,11 @@ class SelfTestGate:
                 return problem
             if examples:
                 bad = self._examples(handle, base, limits, examples, metrics)
+                if bad is not None:
+                    bad.metrics = metrics
+                    return bad
+            if ctx.regression_cases:
+                bad = self._regressions(handle, base, limits, ctx.regression_cases, metrics)
                 if bad is not None:
                     bad.metrics = metrics
                     return bad
@@ -202,6 +211,50 @@ class SelfTestGate:
             return failed(
                 f"{len(wrong)} of {len(items)} examples did not give the expected result",
                 [*wrong[:6], "fix the tool, or fix the example's output so the manifest tells the truth"],
+            )
+        return None
+
+    # -- regression cases -----------------------------------------------------------------------------------------------
+
+    @staticmethod
+    def _regressions(
+        handle: Any,
+        base: dict[str, Any],
+        limits: dict[str, int],
+        cases: tuple[dict[str, Any], ...],
+        metrics: dict[str, Any],
+    ) -> GateResult | None:
+        items = [{"args": case, "files": {}} for case in cases]
+        request = {**base, "items": items, "include_results": False, "deadline_s": EXAMPLES_DEADLINE_S}
+        run = sandboxrun.run_harness(
+            handle,
+            ["--batch"],
+            request,
+            timeout_s=EXAMPLES_DEADLINE_S + sandboxrun.GRACE_S,
+            max_out=len(items) * 4096 + 64 * 1024,
+        )
+        read = sandboxrun.read_batch_report(run.report, len(items)) if run.usable else None
+        if read is None:
+            return failed(
+                sandboxrun.describe_failed_run(run, "running the regression cases"),
+                ["the tool must return from every call; do not call os._exit or hang"],
+            )
+        outcomes, not_run = read
+        bad = [(n, o) for n, o in enumerate(outcomes, start=1) if not o.ok and o.error_type != "ToolError"]
+        metrics["regression_cases"] = len(items)
+        metrics["regression_cases_failed"] = len(bad)
+        if bad or not_run:
+            hints = [
+                f"regression case {n} (an input that broke an earlier version) still fails with {o.error_type}: {clip(o.message, 120)}"
+                for n, o in bad[:6]
+            ]
+            if not_run:
+                hints.append(f"{not_run} regression cases did not run before the time limit")
+            hints.append(
+                "fix the cause, or refuse such input with ToolError and a clear message; do not make the case disappear"
+            )
+            return failed(
+                f"{len(bad) + not_run} of {len(items)} regression cases still break the tool", hints
             )
         return None
 

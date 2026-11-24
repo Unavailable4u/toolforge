@@ -9,8 +9,9 @@ The steps, in order, and what each one refuses:
    finish because the sandbox was unavailable, resumes it). Different content under the same `name@version` is refused:
    versions are immutable, bump `version`.
 4. A new version of a tool that already has an active version must say it replaces that version (`parent_version` equal to the active
-   version). Anything else is refused as a possible name collision: it may be a different tool that happens to share the name, and it
-   must not be able to take the place of the one agents already use (P12 finishes this rule).
+   version) and must be a higher version than it. Anything else is refused (`name_collision`, or `version_not_higher`): it may be a
+   different tool that happens to share the name, and it must not be able to take the place of the one agents already use. A new name
+   whose description covers the same ground as an active tool is not refused: the report carries `similar_to` so the author can look first.
 5. Otherwise the version is registered as `submitted` and the pipeline runs it, with at most `max_concurrent_verifications` runs at
    the same time. Further submissions wait their turn: forever for the command line (`queue_timeout_s=None`), or that many seconds
    and then `Busy` for a server that must answer its callers.
@@ -24,6 +25,7 @@ Proven by `tests/test_forge.py` (fake gates, real registry), `tests/test_server_
 
 from __future__ import annotations
 
+import dataclasses
 import threading
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
@@ -31,7 +33,7 @@ from typing import Any
 
 from toolforge.config import Settings
 from toolforge.errors import Busy, RegistryError
-from toolforge.models.package import ToolPackage
+from toolforge.models.package import ToolPackage, semver_tuple
 from toolforge.registry import Registry, lifecycle
 from toolforge.sandbox.base import SandboxRunner
 from toolforge.services import approvals
@@ -85,8 +87,31 @@ class Forge:
             if existing is not None:
                 return self._existing(existing, package, by, progress)
             self._check_lineage(package)
+            similar = self._similar(package)
+            cases = self._regression_cases(package.manifest.name)
+        else:
+            similar, cases = (), ()
         with self._slot():
-            return self._pipeline.run(package, by, progress=progress)
+            report = self._pipeline.run(package, by, progress=progress, regression_cases=cases)
+        return dataclasses.replace(report, similar_to=similar) if similar else report
+
+    def _regression_cases(self, name: str) -> list[dict[str, Any]]:
+        """Stored arguments that broke an earlier version of this tool. G3 runs every one against the new version (P12)."""
+        found = getattr(self._registry, "regression_inputs", None)
+        if found is None or self._registry.get_tool(name) is None:
+            return []
+        return [failure.args for failure in found(name) if failure.args is not None]
+
+    def _similar(self, package: ToolPackage) -> tuple[str, ...]:
+        """Other active tools whose description covers this one's: a hint to look before adding one more, never a block."""
+        if self._registry.get_tool(package.manifest.name) is not None:
+            return ()
+        query = f"{package.manifest.name.replace('_', ' ')} {package.manifest.description}"[:300]
+        return tuple(
+            hit.name
+            for hit in self._registry.search(query, 5)
+            if hit.name != package.manifest.name and hit.confidence == "high"
+        )[:3]
 
     @contextmanager
     def _slot(self) -> Iterator[None]:
@@ -108,6 +133,14 @@ class Forge:
         """A new version of a tool that is active must name that version as its parent, or it may be a different tool."""
         name, parent = package.manifest.name, package.manifest.parent_version
         active = self._registry.active_version(name)
+        if active is not None and parent == active.version:
+            new, old = semver_tuple(package.manifest.version), semver_tuple(active.version)
+            if new is not None and old is not None and new <= old:
+                raise RegistryError(
+                    f"{name} is active at version {active.version}, and version {package.manifest.version} is not higher",
+                    code="version_not_higher",
+                    hint=f"raise `version` above {active.version}; a version is never reused or replaced",
+                )
         if active is not None and parent != active.version:
             raise RegistryError(
                 f"a tool called {name} is already active at version {active.version}, and this package does not say it replaces "
@@ -130,7 +163,13 @@ class Forge:
             )
         if record.status in IN_PROGRESS:
             with self._slot():
-                return self._pipeline.run(package, by, version=record, progress=progress)
+                return self._pipeline.run(
+                    package,
+                    by,
+                    version=record,
+                    progress=progress,
+                    regression_cases=self._regression_cases(package.manifest.name),
+                )
         if (
             record.status in (lifecycle.VERIFIED, lifecycle.VERIFIED_BASIC)
             and approvals.asks_for_permissions(record.manifest)

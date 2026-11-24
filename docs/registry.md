@@ -81,8 +81,9 @@ anything else is refused before any path is built. `attach_blob` records a blob 
 
 `registry.search(query, limit=5)` returns the best active tools, each with name, version, description, score, status, uses and
 success rate. The query is reduced to at most 12 plain words and every word is quoted before it reaches SQLite, so a query cannot
-carry FTS syntax. Words are stemmed and `word_count` is found by "word". Ranking is bm25 with fixed weights that favour the name over
-the description over the examples; smarter ranking (success rate, recency, permissions) is patch P12.
+carry FTS syntax. Words are stemmed and `word_count` is found by "word". Candidates are the best bm25 matches
+(fixed weights favouring the name over the description over the examples); they are then re-ranked with the match, a smoothed success
+rate, recency and permissions, and each hit carries a `confidence` and a `why`. The formula and its constants are in `docs/repair.md`.
 
 ## Statistics
 

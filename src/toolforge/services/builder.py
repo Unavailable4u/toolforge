@@ -636,24 +636,17 @@ class Builder:
 
     # -- reuse ---------------------------------------------------------------------------------------------------------
 
-    def _confidence_of(self, query: str, record: Any) -> str:
-        if self._confidence is None:
-            from toolforge.server.tools import (
-                confidence,  # the measure `forge_find` shows; imported late because that module uses this one
-            )
-
-            self._confidence = confidence
-        return self._confidence(query, record)
-
     def _find_reusable(self, goal: str) -> Any | None:
+        """An active tool whose confidence is `high`: the same measure `forge_find` shows (P12's ranking), unless one was injected."""
         query = goal[:MAX_SEARCH_QUERY_CHARS]
         for hit in self._registry.search(query, 5):
             record = self._registry.active_version(hit.name)
-            if record is not None and self._confidence_of(query, record) == "high":
+            if record is None:
+                continue
+            level = self._confidence(query, record) if self._confidence is not None else hit.confidence
+            if level == "high":
                 return record
         return None
-
-    # -- the loop ------------------------------------------------------------------------------------------------------
 
     def _facts(self) -> Mapping[str, Any] | None:
         if self._runtime_facts is None:

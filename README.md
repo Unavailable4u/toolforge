@@ -58,13 +58,14 @@ the live demo (see `docs/guide/04-optional-resources.md`; every resource listed 
 
 `toolforge serve` runs the MCP server (stdio by default, `--transport http` for a local HTTP listener). After `toolforge submit <dir>`
 verifies a tool, the operator runs `toolforge promote <name>@<version> --reason "..."` to make it active. Setup, client
-configuration, and the security rules are in `docs/clients.md`.
+configuration, and the security rules are in `docs/clients.md`. How tools are ranked, described, repaired and rolled back is in
+`docs/repair.md`.
 
 <!-- tools:begin -->
 | Tool | Input | Returns | Since |
 | --- | --- | --- | --- |
-| `forge_find` | `query: str`, `limit: int = 5` | ranked active tools with `confidence`, `uses`, `success_rate` (or null) and permissions | P07 |
-| `forge_describe` | `name: str`, `version: str | null` | the sanitised manifest, examples, status, lineage and gate summaries | P07 |
+| `forge_find` | `query: str`, `limit: int = 5` | ranked active tools with `confidence`, a one-line `why`, `uses`, `success_rate` (or null) and permissions | P07 |
+| `forge_describe` | `name: str`, `version: str | null` | the sanitised manifest, a typed call `signature`, examples, status, lineage and gate summaries | P07 |
 | `forge_run` | `name: str`, `args: object`, `files: object | null` | the call result: `ok`, the fenced `output` or `error`, `stdout`, `stderr`, `flags` | P07 |
 | `forge_submit` | `package: {manifest, files}` | the verification report: status, gates with summaries and hints, `next_action` | P07 |
 | `forge_status` | `name: str`, `version: str | null` | status, `next_step`, gate summaries and approval state | P07 |
@@ -72,6 +73,8 @@ configuration, and the security rules are in `docs/clients.md`.
 | `forge_recipe` | `kind: str` | the documentation text (v1 ships `package-format`) | P07 |
 | `forge_runtime_info` | none | Python version, runtime image, sandbox limits, preinstalled libraries (or null: not measured) | P07 |
 | `forge_build` | `goal: str`, `examples: [{input, output?}] | null`, `sample_files: object | null`, `constraints: str | null` | `reused` or the built `tool` and `version`, its `status`, `rounds`, `usage`, the verification `report` and `next_action` | P11 |
+| `forge_repair` | `name: str`, `problem: str`, `package: {manifest, files} | null` | `ok`, the new `version` and its `status`, `rounds`, the verification `report` and `next_action` | P12 |
+| `forge_report_problem` | `name: str`, `version: str | null`, `description: str` | `stored`, the report id and what happens next | P12 |
 <!-- tools:end -->
 
 ## Working on this repository with an AI agent

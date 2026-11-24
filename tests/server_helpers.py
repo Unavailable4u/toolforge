@@ -19,6 +19,7 @@ from toolforge.server.app import ForgeApp, build_server
 from toolforge.services import operator_actions
 from toolforge.services.builder import Builder
 from toolforge.services.forge import Forge
+from toolforge.services.repair import Repairer
 
 
 class StandInRunner:
@@ -51,6 +52,7 @@ class Env:
     ledgers: MemoryLedgers
     runner: StandInRunner
     gates: list[ScriptedGate] = field(default_factory=list)
+    repairer: Repairer | None = None
 
     def add_tool(self, *, promote: bool = True, **package_args: Any) -> str:
         """Verify (scripted gates) and, by default, promote a tool. Returns `name@version`."""
@@ -97,6 +99,14 @@ def make_env(
         if llm is not None
         else None
     )
+    repairer = Repairer(
+        settings,
+        registry,
+        forge,
+        client=llm,
+        ledger_factory=ledgers,
+        runtime_facts=lambda: {"python": "3.12.4", "limits": {"default_timeout_s": 20}},
+    )
     app = build_server(
         settings,
         registry=registry,
@@ -109,9 +119,10 @@ def make_env(
             "libraries": [["numpy", "2.0.0"], ["pandas", "2.2.2"]],
         },
         builder=builder,
+        repairer=repairer,
         watch_interval_s=0.05,
     )
-    return Env(settings, registry, app, ledgers, runner, gate_list)
+    return Env(settings, registry, app, ledgers, runner, gate_list, repairer)
 
 
 def payload_of(package) -> dict[str, Any]:

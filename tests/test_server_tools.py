@@ -44,6 +44,7 @@ def test_the_server_offers_exactly_the_tools_in_the_table(env: Env) -> None:
     assert [t.name for t in listed] == [
         "forge_find", "forge_describe", "forge_run", "forge_submit",
         "forge_status", "forge_list", "forge_recipe", "forge_runtime_info", "forge_build",
+        "forge_repair", "forge_report_problem",
     ]  # fmt: skip
     assert all(t.description and len(t.description) > 80 for t in listed)
 
@@ -52,7 +53,7 @@ def test_no_tool_can_approve_promote_release_or_delete(env: Env) -> None:
     names = {t.name for t in env.session(lambda client: client.list_tools()).tools}
     forbidden = ("promote", "approve", "release", "rollback", "quarantine", "delete", "deprecate", "decide")
     assert not [n for n in names if any(word in n for word in forbidden)]
-    assert set(OPERATOR_ONLY) >= {"promote"}
+    assert set(OPERATOR_ONLY) >= {"promote", "rollback"}
 
 
 def test_every_tool_declares_that_it_does_not_destroy_anything(env: Env) -> None:
@@ -607,7 +608,7 @@ def test_text_of_helper_is_usable(env: Env) -> None:
 def test_release_and_quarantine_are_operator_only_and_not_tools() -> None:
     from toolforge.server.tools import META_TOOLS, OPERATOR_ONLY
 
-    assert {"promote", "release", "quarantine", "decide"} <= set(OPERATOR_ONLY)
+    assert {"promote", "release", "quarantine", "decide", "rollback"} <= set(OPERATOR_ONLY)
     assert not {"release", "quarantine", "forge_release", "forge_quarantine"} & {t.name for t in META_TOOLS}
 
 

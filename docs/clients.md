@@ -79,8 +79,8 @@ supports remote servers takes the URL `http://127.0.0.1:8765/mcp` and the header
 <!-- tools:begin -->
 | Tool | Input | Returns | Since |
 | --- | --- | --- | --- |
-| `forge_find` | `query: str`, `limit: int = 5` | ranked active tools with `confidence`, `uses`, `success_rate` (or null) and permissions | P07 |
-| `forge_describe` | `name: str`, `version: str | null` | the sanitised manifest, examples, status, lineage and gate summaries | P07 |
+| `forge_find` | `query: str`, `limit: int = 5` | ranked active tools with `confidence`, a one-line `why`, `uses`, `success_rate` (or null) and permissions | P07 |
+| `forge_describe` | `name: str`, `version: str | null` | the sanitised manifest, a typed call `signature`, examples, status, lineage and gate summaries | P07 |
 | `forge_run` | `name: str`, `args: object`, `files: object | null` | the call result: `ok`, the fenced `output` or `error`, `stdout`, `stderr`, `flags` | P07 |
 | `forge_submit` | `package: {manifest, files}` | the verification report: status, gates with summaries and hints, `next_action` | P07 |
 | `forge_status` | `name: str`, `version: str | null` | status, `next_step`, gate summaries and approval state | P07 |
@@ -88,14 +88,18 @@ supports remote servers takes the URL `http://127.0.0.1:8765/mcp` and the header
 | `forge_recipe` | `kind: str` | the documentation text (v1 ships `package-format`) | P07 |
 | `forge_runtime_info` | none | Python version, runtime image, sandbox limits, preinstalled libraries (or null: not measured) | P07 |
 | `forge_build` | `goal: str`, `examples: [{input, output?}] | null`, `sample_files: object | null`, `constraints: str | null` | `reused` or the built `tool` and `version`, its `status`, `rounds`, `usage`, the verification `report` and `next_action` | P11 |
+| `forge_repair` | `name: str`, `problem: str`, `package: {manifest, files} | null` | `ok`, the new `version` and its `status`, `rounds`, the verification `report` and `next_action` | P12 |
+| `forge_report_problem` | `name: str`, `version: str | null`, `description: str` | `stored`, the report id and what happens next | P12 |
 <!-- tools:end -->
 
 There is no tool that approves, promotes, releases, rolls back or deletes anything. Those are operator actions.
 
 What an agent should expect:
 
-* `forge_find` lists only **active** tools. `confidence` is the share of the query's words found in the tool's name and description; it is
-  not a quality score.
+* `forge_find` lists only **active** tools, best match first. `confidence` says how much of the query's words the tool's name and
+  description cover, and is lowered for a tool whose recent calls mostly fail; it is not a quality score. `why` is one line of numbers.
+  When the best match is `low`, the answer says to build or submit a tool instead. `forge_describe` also returns `signature`, the exact
+  call shape as a Python and a TypeScript stub built from the schemas alone (it describes the call; it is not code to import). See `docs/repair.md`.
 * `forge_run` runs only active versions. Any other state returns an error that names the state and the next step.
 * Everything a tool printed or returned arrives **fenced**: between markers that carry a random id that changes with every response, under a
   line that says it is data and not instructions. Text that looks like an instruction is flagged (`flags: ["possible_injection"]`) and
@@ -105,6 +109,10 @@ What an agent should expect:
 * `forge_build` is for a client that cannot or does not want to write a tool: it says what it needs in words, and the server's own model
   writes the package. It reports progress for each round and gate, and it can take minutes. A tool that is built is not usable until an
   operator promotes it (or approves the hosts or secrets it asks for); the result's `status` and `next_action` say which. See `docs/builder.md`.
+* `forge_repair` writes a new version of a tool that fails (the server's model, or a package you send) and verifies it like any
+  submission, with the stored regression cases. The old version stays active until an operator promotes the new one. Repairs are limited
+  per tool per hour. `forge_report_problem` only tells the operator: a report never pulls a tool, and `forge_status` shows its count,
+  not its text. See `docs/repair.md`.
 * Errors are tool errors with a message, a hint and a short `ref`. The same `ref` is in the server's log (stderr), where the details are.
 
 ## 5. Optional: every active tool as its own tool
@@ -125,7 +133,9 @@ change the next time they list tools.
 | `TOOLFORGE_EXPOSE_DIRECT` | offer active tools as `tf_<name>` |
 | `TOOLFORGE_MAX_CONCURRENT_VERIFICATIONS` | how many `forge_submit` verifications run at once; more wait up to 30 seconds, then get *busy* |
 | `TOOLFORGE_LLM_BASE_URL`, `TOOLFORGE_LLM_MODEL`, `TOOLFORGE_LLM_API_KEY` | the builder model that `forge_build` asks; without them `forge_build` can only reuse an existing tool |
-| `TOOLFORGE_BUILDER_MAX_ROUNDS`, `TOOLFORGE_BUILDER_TOKEN_BUDGET` | how many times, and with how many model tokens in all, one build may ask for a package (4 and 60000) |
+| `TOOLFORGE_BUILDER_MAX_ROUNDS`, `TOOLFORGE_BUILDER_TOKEN_BUDGET` | how many times, and with how many model tokens in all, one build (or one repair) may ask for a package (4 and 60000) |
+| `TOOLFORGE_REPAIR_MAX_PER_HOUR` | how many `forge_repair` attempts may start on one tool in an hour (3) |
+| `TOOLFORGE_STORE_FAILED_INPUTS` | keep the raw arguments of failed calls as regression cases (false); see `docs/repair.md` before turning it on |
 
-Docker must be running for `forge_run`, `forge_submit` and `forge_build`. Without it the server still starts and answers `forge_find`, `forge_describe`,
+Docker must be running for `forge_run`, `forge_submit`, `forge_build` and `forge_repair`. Without it the server still starts and answers `forge_find`, `forge_describe`,
 `forge_list`, `forge_status`, `forge_recipe` and `forge_runtime_info` (which says "not measured" for what it cannot read).

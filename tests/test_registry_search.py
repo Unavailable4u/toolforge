@@ -273,10 +273,10 @@ def test_fallback_finds_by_description_name_and_examples(no_fts: Registry) -> No
     assert no_fts.search("quantum chromodynamics") == []
 
 
-def test_fallback_ranks_by_overlap_and_scores_are_between_zero_and_one(no_fts: Registry) -> None:
+def test_fallback_ranks_by_overlap_and_orders_by_score(no_fts: Registry) -> None:
     hits = no_fts.search("pdf text pages", limit=10)
     assert hits[0].name == "pdf_text"
-    assert all(0 < h.score <= 1 for h in hits)
+    assert all(h.score > 0 for h in hits)
     assert [h.score for h in hits] == sorted((h.score for h in hits), reverse=True)
 
 

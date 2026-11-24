@@ -3,7 +3,7 @@
 `promote` is the first one: it makes a verified version `active`, so agents can find and run it. It exists because an agent must
 not be able to put its own code in front of other agents. The server package may not import any function named in
 `toolforge.server.tools.OPERATOR_ONLY`; `tests/test_server_tools.py::test_server_never_imports_operator_actions` reads the server's
-source and fails if it does. P08 added `release` and `quarantine` here, P09 added `decide`, P12 adds `rollback`.
+source and fails if it does. P08 added `release` and `quarantine` here, P09 added `decide`, P12 added `rollback`.
 
 `quarantine` takes an active version out of use, and `release` puts a quarantined one back. Both need a reason, which goes to the
 version's `operator.jsonl`. `release_context` is what the operator should read before releasing: why the version was quarantined
@@ -32,7 +32,14 @@ environment. Then any example marked `live` runs once in a sandbox with the appr
 failure rejects the version instead; a sandbox that cannot start changes nothing. The decision and the move to `active` are one
 registry transaction. `promote` is never a way around it, and approval is the only way a version with network or secrets becomes active.
 
-Proven by `tests/test_operator_actions.py` and `tests/test_decide.py`.
+`rollback` makes a **previously active** version active again (P12). The only versions that were ever active and are not now are the
+`deprecated` ones (the lifecycle reaches `deprecated` only from `active`), so rollback takes exactly those: such a version already passed
+every gate and any approval it needed, and approvals are bound to its `code_sha`, so none is repeated. The version that is active now, if
+any, becomes `deprecated`; a quarantined one stays quarantined. A version that was never active is refused with the command that does
+apply (`promote`, `release`, `approvals`), and so is one whose stored package is gone or whose network or secrets have no recorded approval
+for this content. It needs a reason, which is written with `forge.rolled_back` to the version's `operator.jsonl`. No MCP tool can do it.
+
+Proven by `tests/test_operator_actions.py`, `tests/test_decide.py` and `tests/test_rollback.py`.
 """
 
 from __future__ import annotations
@@ -102,7 +109,7 @@ def _refuse_status(label: str, status: str) -> ToolForgeError:
         ),
         lifecycle.DEPRECATED: (
             f"{label} is deprecated: a newer version replaced it",
-            "going back to an older version is `toolforge rollback`, which arrives in P12",
+            "going back to an older version is `toolforge rollback <name> --to <version> --reason ...`",
         ),
         lifecycle.PENDING_APPROVAL: (
             f"{label} is waiting for approval and promote does not replace approval",
@@ -217,7 +224,7 @@ class Moved:
     """What `quarantine` or `release` did."""
 
     label: str
-    action: str  # "quarantined" | "released"
+    action: str  # "quarantined" | "released" | "rolled_back"
     from_status: str
     replaced: tuple[str, ...] = ()
     ledger_files: tuple[str, ...] = field(default=())
@@ -227,7 +234,8 @@ class Moved:
             return (
                 f"{self.label} is now quarantined (was {self.from_status}). It can no longer be found or run."
             )
-        lines = [f"{self.label} is active again (was {self.from_status})."]
+        verb = "is active again after a rollback" if self.action == "rolled_back" else "is active again"
+        lines = [f"{self.label} {verb} (was {self.from_status})."]
         if self.replaced:
             lines.append(f"deprecated: {', '.join(self.replaced)}")
         return "\n".join(lines)
@@ -317,7 +325,7 @@ def release(
     if record.status != lifecycle.QUARANTINED:
         hints = {
             lifecycle.ACTIVE: "it is active already",
-            lifecycle.DEPRECATED: "going back to an older version is `toolforge rollback`, which arrives in P12",
+            lifecycle.DEPRECATED: "going back to an older version is `toolforge rollback <name> --to <version> --reason ...`",
             lifecycle.VERIFIED: "a verified version is made active with `toolforge promote`",
             lifecycle.VERIFIED_BASIC: "a verified version is made active with `toolforge promote`",
         }
@@ -330,6 +338,88 @@ def release(
     written = _write_ledger(settings, event, ledger_factory, what="active again")
     replaced = tuple(f"{e['tool']}@{e['version']}" for e in event.get("related", []))
     return Moved(record.label, "released", record.status, replaced, tuple(written))
+
+
+_NEVER_ACTIVE: dict[str, str] = {
+    lifecycle.VERIFIED: "it passed every gate but was never made active: `toolforge promote {label} --reason ...`",
+    lifecycle.VERIFIED_BASIC: "it passed the gates that could run but was never made active: `toolforge promote {label} --reason ...`",
+    lifecycle.PENDING_APPROVAL: "it is waiting for approval: `toolforge approvals show <id>`, then `toolforge approvals approve|deny <id> --reason ...`",
+    lifecycle.QUARANTINED: "it is quarantined, which is not the same as replaced: read `toolforge report {label}`, then `toolforge release {label} --reason ...`",
+    lifecycle.REJECTED: "it was rejected by verification and can never run",
+    lifecycle.SUBMITTED: "it has not been verified yet",
+    lifecycle.VERIFYING: "it is still being verified",
+}
+
+
+def rollback(
+    settings: Settings,
+    registry: Registry,
+    name: str,
+    to_version: str,
+    reason: str,
+    *,
+    ledger_factory: LedgerFactory | None = None,
+) -> Moved:
+    """Make a version that was active before active again. See the module docstring for what it refuses."""
+    text = _need_reason("rollback", reason)
+    if (
+        not isinstance(name, str)
+        or not name.strip()
+        or not isinstance(to_version, str)
+        or not to_version.strip()
+    ):
+        raise RegistryError(
+            "name the tool and the version to go back to",
+            code="bad_version_ref",
+            hint='for example: toolforge rollback csv_summary --to 1.0.0 --reason "1.1.0 gives wrong totals"',
+        )
+    record = registry.find_version(name.strip(), to_version.strip())
+    if record is None:
+        known = ", ".join(v.version for v in registry.list_versions(name.strip())[-10:]) or "none"
+        raise RegistryError(
+            f"no version {name.strip()}@{to_version.strip()}",
+            code="unknown_version",
+            hint=f"the versions of {name.strip()}: {known}",
+        )
+    if record.status == lifecycle.ACTIVE:
+        raise IllegalTransition(
+            f"{record.label} is already active", code="not_rollbackable", hint="nothing to do"
+        )
+    if record.status != lifecycle.DEPRECATED:
+        why = _NEVER_ACTIVE.get(record.status, f"it is {record.status}").format(label=record.label)
+        raise IllegalTransition(
+            f"{record.label} was never active, so there is nothing to roll back to: {why}",
+            code="never_active",
+            hint="rollback only returns to a version that already passed every gate and approval while it was in use",
+        )
+    if not record.blob_sha or not registry.blobs.exists(record.blob_sha):
+        raise IllegalTransition(
+            f"{record.label} cannot be rolled back to: its frozen package is not in the store",
+            code="not_built",
+            hint="submit the tool again as a new version instead",
+        )
+    if record.asks_network_or_secrets:
+        asked = {
+            "network": sorted(str(h) for h in record.permissions.get("network") or []),
+            "secrets": sorted(str(n) for n in record.permissions.get("secrets") or []),
+        }
+        approved = [
+            a
+            for a in registry.list_approvals("approved")
+            if a.version_id == record.id
+            and (a.requested or {}).get("code_sha") == record.code_sha
+            and (a.requested or {}).get("requested") == asked
+        ]
+        if not approved:
+            raise IllegalTransition(
+                f"{record.label} asks for network hosts or secrets and has no recorded approval for this content",
+                code="needs_approval",
+                hint="submit it again as a new version so the operator can approve what it asks for (`toolforge approvals`)",
+            )
+    event = registry.transition(record.id, lifecycle.ACTIVE, actor=OPERATOR, reason=text)
+    written = _write_ledger(settings, event, ledger_factory, what="active again")
+    replaced = tuple(f"{e['tool']}@{e['version']}" for e in event.get("related", []))
+    return Moved(record.label, "rolled_back", record.status, replaced, tuple(written))
 
 
 def _recorded_quarantines(settings: Settings, label: str) -> tuple[str, ...]:

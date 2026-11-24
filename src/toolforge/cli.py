@@ -15,6 +15,7 @@ from toolforge import __version__
 from toolforge import cli_approvals as approvals_commands
 from toolforge import cli_build as build_commands
 from toolforge import cli_doctor as doctor_commands
+from toolforge import cli_health as health_commands
 from toolforge import cli_package as package_commands
 from toolforge import cli_promote as promote_commands
 from toolforge import cli_registry as registry_commands
@@ -51,6 +52,7 @@ REGISTRARS: list[Callable[[argparse._SubParsersAction], None]] = [
     approvals_commands.register,
     build_commands.register,
     doctor_commands.register,
+    health_commands.register,
     package_commands.register,
     promote_commands.register,
     registry_commands.register,

@@ -18,7 +18,7 @@ patch" in the same patch. Never tick a box for work that is not in the patch. Bo
 | [x] | P09 | Permissions, approvals, egress and brokered secrets | P07, P08 |
 | [x] | P10 | Independent challenger, gate G5 | P06 |
 | [x] | P11 | Server-side builder | P07, P10 |
-| [ ] | P12 | Reuse ranking, self-repair, rollback | P07, P11 |
+| [x] | P12 | Reuse ranking, self-repair, rollback | P07, P11 |
 | [ ] | P13 | Stateful sessions | P05, P08 |
 | [ ] | P14 | Runtime image and adapter kits (software use) | P13 |
 | [ ] | P15 | Forge Attack Lab | P09, P10 |
@@ -35,8 +35,26 @@ Milestones (M0 to M7) and what can be dropped: `docs/guide/05-milestones.md`.
 
 ## Notes for the next patch
 
-Done: P01 (skeleton), P02 (package spec), P03 (registry), P04 (sandbox seam), P05 (execution contract and `run`), P06 (gates G1 to G4), P07 (MCP server v1), P08 (gate G6 and Blast Radius), P09 (approvals, egress, brokered secrets), P10 (independent challenger, gate G5), P11 (server-side builder).
-Next: P12 (reuse ranking, self-repair, rollback; needs P07 and P11). P13 needs P05 and P08, and P16 needs P11, P12 and P14. Decisions and interfaces that later patches must respect:
+Done: P01 (skeleton), P02 (package spec), P03 (registry), P04 (sandbox seam), P05 (execution contract and `run`), P06 (gates G1 to G4), P07 (MCP server v1), P08 (gate G6 and Blast Radius), P09 (approvals, egress, brokered secrets), P10 (independent challenger, gate G5), P11 (server-side builder), P12 (reuse ranking, self-repair, rollback).
+Next: P13 (needs P05 and P08); P16 needs P11, P12 and P14. Decisions and interfaces that later patches must respect:
+
+* P12 interfaces. `registry/search.py`: `RANKING` (the one constant block), `rank`, `confidence_of`, `text_confidence`, `coverage_of`, `smoothed_success`; `Hit` gained
+  `confidence`, `why`, `coverage`; `Stats` gained `recent_ok`. `registry/health.py` (plain storage behind `Registry.record_failure`, `failures`, `regression_inputs`,
+  `recent_outcomes`, `add_problem_report`, `problem_reports`, `count_problem_reports`, `begin_repair`, `finish_repair`, `repair_state`, `repairs`); migration 3 adds
+  `regression_cases`, `problem_reports`, `repairs`. `services/failures.py` (`fingerprint`, `stored_input`, `quarantine_verdict`, `capture`, `judge`; the runner calls it
+  after every recorded call). `services/repair.py`: `Repairer(settings, registry, forge, *, client, ledger_factory=, runtime_facts=, clock=, new_id=).repair(name, problem,
+  package=None, *, on_progress=) -> RepairResult`. `server/signature.py::build_signature(manifest)`, `server/budget.py` (`BUDGET`, `fit_describe`, `estimate_tokens`).
+  `operator_actions.rollback(settings, registry, name, to_version, reason, *, ledger_factory=)`. CLI `toolforge rollback <name> --to <v> --reason ...` and `toolforge problems
+  [name[@version]]` (`cli_health.py`). MCP: `forge_repair`, `forge_report_problem`; `forge_describe` has `signature`; `forge_find` has `why` and a `hint`; `forge_status` has
+  `problem_reports` and `needs_operator`. Settings: `repair_max_per_hour` (3), `store_failed_inputs` (false). `GateContext.regression_cases`, `Pipeline.run(...,
+  regression_cases=)`, `VerificationReport.similar_to`. Operator page: `docs/repair.md`.
+* P12 behaviour. `Forge` hands every new version of an existing tool the stored inputs that broke it (G3 runs them through `--batch`; a result or a `ToolError` passes).
+  Failure capture is the shape only unless `store_failed_inputs` is on. A rate above 40% over at least 10 of the last 20 non-`ToolError` calls quarantines the active
+  version (actor `forge`); the window restarts when a version changes status. Repair never promotes: the old version stays active. P13 (sessions) must not change
+  `calls` rows in a way that breaks `recent_outcomes`, which joins `calls.ts` to `versions.updated_at`.
+* P12 not run: every `docker` test, `pytest -m llm`, and `forge_repair` with a real model (all repair tests use `FakeLLM` with scripted gates; how often a real model repairs a
+  tool is not measured, P16). The G3 regression run was proven with a scripted sandbox, not a container. The context budget was measured with 10 and 60 reference tools,
+  not 200 (building 200 verified tools took 100 s); `find` and `tools/list` do not depend on the registry's size, which the test shows.
 
 * P11 interfaces. `services/builder.py`: `Builder(settings, registry, forge, *, client, ledger_factory=, runtime_facts=, confidence=, clock=, new_id=)` and
   `.build(goal, *, examples=, sample_files=, constraints=, on_progress=) -> BuildResult` (`ok`, `reused`, `stop_reason`, `tool`, `version`, `status`, `rounds`,

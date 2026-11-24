@@ -120,11 +120,48 @@ _INITIAL_SCHEMA: tuple[str, ...] = (
     "CREATE INDEX approvals_by_status ON approvals(status)",
 )
 
-# Append only. A released migration is never edited: later patches add a new entry (P12 adds `regression_cases` and
-# `problem_reports`, P13 adds session metadata).
+# P12. `regression_cases` holds one row per captured failure of a call: the error class and a shape fingerprint (types and sizes, never
+# values) always, and the raw arguments (`input_json`) only when the operator turned `store_failed_inputs` on and the input was small and
+# free of secret-shaped text. A row with an input is a regression case that later versions of the tool are run against. `problem_reports`
+# are what agents say about a version; they are only ever shown to the operator and never change a status. `repairs` is one row per repair
+# attempt, which is what the per-hour limit and the "flagged for the operator" rule count.
+_P12_SCHEMA: tuple[str, ...] = (
+    """CREATE TABLE regression_cases (
+        id INTEGER PRIMARY KEY,
+        name TEXT NOT NULL,
+        version_id INTEGER NOT NULL REFERENCES versions(id),
+        error_class TEXT NOT NULL,
+        shape_json TEXT NOT NULL,
+        input_json TEXT,
+        input_sha256 TEXT NOT NULL,
+        created_at TEXT NOT NULL
+    )""",
+    "CREATE INDEX regression_cases_by_tool ON regression_cases(name, id)",
+    """CREATE TABLE problem_reports (
+        id INTEGER PRIMARY KEY,
+        version_id INTEGER NOT NULL REFERENCES versions(id),
+        reporter TEXT NOT NULL,
+        description TEXT NOT NULL,
+        created_at TEXT NOT NULL
+    )""",
+    "CREATE INDEX problem_reports_by_version ON problem_reports(version_id, id)",
+    """CREATE TABLE repairs (
+        id INTEGER PRIMARY KEY,
+        name TEXT NOT NULL,
+        base_version TEXT NOT NULL,
+        outcome TEXT NOT NULL,
+        child_version TEXT,
+        created_at TEXT NOT NULL,
+        finished_at TEXT
+    )""",
+    "CREATE INDEX repairs_by_tool ON repairs(name, id)",
+)
+
+# Append only. A released migration is never edited: later patches add a new entry (P13 adds session metadata).
 MIGRATIONS: list[Migration] = [
     Migration(1, "initial schema", _INITIAL_SCHEMA),
     Migration(2, "search index", (_create_search_index,)),
+    Migration(3, "regression cases, problem reports and repairs", _P12_SCHEMA),
 ]
 
 
@@ -187,6 +224,9 @@ class Stats:
     success_rate: (
         float | None
     )  # fraction of ok calls among the recent ones; None when too few, never a fake 0
+    recent_ok: int = (
+        0  # how many of the recent calls were ok: what a smoothed rate (search ranking, P12) is made from
+    )
 
 
 # --- The database --------------------------------------------------------------------------------------------------------
@@ -421,4 +461,4 @@ def call_stats(db: Database, version_id: int) -> Stats:
     )
     count, good = (int(recent["n"]), int(recent["good"])) if recent else (0, 0)
     rate = good / count if count >= STATS_MIN_CALLS else None
-    return Stats(uses=uses, recent_calls=count, success_rate=rate)
+    return Stats(uses=uses, recent_calls=count, success_rate=rate, recent_ok=good)

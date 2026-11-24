@@ -99,6 +99,18 @@ The code keeps this list once, as `GATE_INFO` (P06). Docs and the site read it.
 `forge.build.finished`, `forge.session.opened`, `forge.session.step`, `forge.session.rewound`, `forge.session.closed`,
 `forge.repaired`, `forge.rolled_back`, `forge.verification.aborted`, `forge.chain.started`, `forge.chain.finished` (optional, S02). MiniLocker-native events from `Watch` and the sandbox are kept as is.
 
+### Repair and rollback events (P12)
+
+`forge.repaired`: one file per attempt, `ledgers/_repairs/<repair id>.jsonl`, actor `repair`. Payload: `repair_id`, `tool`, `parent` and
+`child` (versions), `child_status`, `outcome` (`verified`, `failed`, `aborted`), `stop_reason`, `source` (`model` or `caller`), `rounds`,
+`regression_cases` (how many stored inputs the child was run against), `problem_sha256` and `problem_chars` (the problem text itself is
+never written), `model`, `requests`, `tokens_in`, `tokens_out`, `wall_time_ms`.
+
+`forge.rolled_back`: written by `toolforge rollback` to the restored version's `operator.jsonl`, actor `operator`, with the reason and
+the versions it replaced (each of those hears `forge.deprecated`).
+
+An automatic quarantine is the existing `forge.quarantined`, actor `forge`, with the failure counts as its reason.
+
 ### Verification events (P06)
 
 One ledger file per run, `ledgers/<tool>@<version>/verify-<run id>.jsonl`. `forge.submitted` carries the `code_sha`, who submitted, a

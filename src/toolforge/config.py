@@ -59,6 +59,10 @@ class Settings(BaseSettings):
     # The server-side builder (P11): rounds it may ask the model for a package, and the model tokens one build may spend in all.
     builder_max_rounds: int = Field(4, ge=1, le=10)
     builder_token_budget: int = Field(60000, ge=1000)
+    # Repair (P12): how many times `forge_repair` may start on one tool in an hour, and whether the raw arguments of a failed call are kept
+    # as regression cases (off by default: they are caller data; see docs/repair.md).
+    repair_max_per_hour: int = Field(3, ge=1, le=100)
+    store_failed_inputs: bool = False
 
     # Network listeners; a token is required on any non-loopback host (enforced in P07 and P17)
     server_host: str = "127.0.0.1"

@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from toolforge.errors import RegistryError
-from toolforge.registry import lifecycle, search
+from toolforge.registry import health, lifecycle, search
 from toolforge.registry.db import (
     GATE_STATUSES,
     STATS_MIN_CALLS,
@@ -342,6 +342,55 @@ class Registry:
             )
             for r in rows
         ]
+
+    # -- failures, problem reports and repairs (P12; plain storage, see `health`) -------------------------------------------------
+
+    def record_failure(
+        self,
+        version_id: int,
+        error_class: str,
+        shape: Mapping[str, Any],
+        *,
+        input_json: str | None = None,
+        input_sha256: str = "",
+    ) -> int:
+        """Store a captured failure: its error class, a shape fingerprint and, only if given, the raw arguments."""
+        return health.record_failure(
+            self.db, version_id, error_class, dict(shape), input_json=input_json, input_sha256=input_sha256
+        )
+
+    def failures(self, name: str, limit: int = 50) -> list[health.Failure]:
+        return health.failures(self.db, name, limit=limit)
+
+    def regression_inputs(self, name: str, limit: int = health.RAW_INPUTS_PER_TOOL) -> list[health.Failure]:
+        """The stored raw inputs of a tool's past failures, newest first: the regression cases for its next version."""
+        return health.regression_inputs(self.db, name, limit=limit)
+
+    def recent_outcomes(self, version_id: int, count: int = 20) -> list[tuple[bool, str | None]]:
+        return health.recent_outcomes(self.db, version_id, count)
+
+    def add_problem_report(self, version_id: int, reporter: str, description: str) -> int:
+        return health.add_problem_report(self.db, version_id, reporter, description)
+
+    def problem_reports(
+        self, *, version_id: int | None = None, name: str | None = None, limit: int = 50
+    ) -> list[health.ProblemReport]:
+        return health.problem_reports(self.db, version_id=version_id, name=name, limit=limit)
+
+    def count_problem_reports(self, version_id: int) -> int:
+        return health.count_problem_reports(self.db, version_id)
+
+    def repair_state(self, name: str, base_version: str) -> health.RepairState:
+        return health.repair_state(self.db, name, base_version)
+
+    def repairs(self, name: str, limit: int = 10) -> list[health.Repair]:
+        return health.repairs(self.db, name, limit=limit)
+
+    def begin_repair(self, name: str, base_version: str, *, max_per_hour: int) -> int:
+        return health.begin_repair(self.db, name, base_version, max_per_hour=max_per_hour)
+
+    def finish_repair(self, repair_id: int, outcome: str, child_version: str | None = None) -> None:
+        health.finish_repair(self.db, repair_id, outcome, child_version)
 
     # -- approvals (storage only; the flow is patch P09) ---------------------------------------------------------------------
 

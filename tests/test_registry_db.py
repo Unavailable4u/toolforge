@@ -16,7 +16,17 @@ from toolforge.registry import Registry, lifecycle
 from toolforge.registry import db as db_module
 from toolforge.registry.db import MIGRATIONS, Database, Migration, utc_now
 
-TABLES = {"tools", "versions", "gate_results", "calls", "approvals", "schema_version"}
+TABLES = {
+    "tools",
+    "versions",
+    "gate_results",
+    "calls",
+    "approvals",
+    "schema_version",
+    "regression_cases",
+    "problem_reports",
+    "repairs",
+}
 
 
 def _tables(db: Database) -> set[str]:
@@ -55,15 +65,15 @@ def test_a_new_migration_is_applied_once_and_in_order(
     Database(path).close()
     later = Migration(
         MIGRATIONS[-1].version + 1,
-        "regression cases",
+        "a later table",
         (
-            "CREATE TABLE regression_cases (id INTEGER PRIMARY KEY)",
-            "CREATE INDEX regression_by_id ON regression_cases(id)",
+            "CREATE TABLE later_table (id INTEGER PRIMARY KEY)",
+            "CREATE INDEX later_by_id ON later_table(id)",
         ),
     )
     monkeypatch.setattr(db_module, "MIGRATIONS", [*MIGRATIONS, later])
     db = Database(path)
-    assert "regression_cases" in _tables(db)
+    assert "later_table" in _tables(db)
     assert db.schema_version() == later.version
     assert db.migrate() == []  # and not again
     db.close()

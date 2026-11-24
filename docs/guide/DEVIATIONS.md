@@ -210,3 +210,28 @@ Where reality differed from the guide, newest first: what the guide said, what i
   output `{"rows": 2}`. The reference pack in `examples/toolpacks/csv_summary` returns the full summary for its example and opens
   `args["path"]` as given, because the `toolforge_sdk` helpers (`input_path`) are specified in P05 but do not exist yet. P05 must decide
   where relative paths resolve inside the sandbox and, if needed, adjust this pack (see "Notes for the next patch" in `PROGRESS.md`).
+* 2026-11-24 (P12): the guide's scope names `core/repair.py`; the code lives in `services/repair.py` (the guide's `core/` is `services/` here, as in P11). Scope additions,
+  each needed by something the guide asks for: `registry/health.py` (storage behind three new tables, so `registry/__init__.py` stays a facade), `services/failures.py` (failure
+  fingerprints, the raw-input rule and the quarantine verdict, called by the runner), `cli_health.py` (`toolforge rollback` and `toolforge problems`), and a third migration
+  table, `repairs`, because the per-hour limit and the "flagged for the operator" rule need attempts that survive a restart. `regression_cases` holds one row per captured
+  failure (a row is a replayable case only when it has an `input_json`).
+* 2026-11-24 (P12): `forge_status` shows a version's problem reports to agents as a **count**, with the command the operator uses to read them, and never the text: a report is
+  written by another agent and `forge_status` is read by agents, so showing it would hand one agent an instruction channel into another's context. `toolforge problems` shows the
+  text, cleaned.
+* 2026-11-24 (P12): the guide lets a report be rate limited "per caller", but an MCP connection carries no caller identity here, so every report has the reporter `agent` and the
+  limit (5 an hour) is per server. It cannot be finer without identity that the transport does not provide.
+* 2026-11-24 (P12): the Python call stub writes an enum as `Literal[...]`, so the test of allowed names admits `Literal` beside `Any`, `dict`, `list`, `str`, `int`, `float`,
+  `bool` and `None`. A stub whose Python form is over 2000 characters is replaced by the plain `args` form alone: the TypeScript one is replaced only if it is over the limit too.
+* 2026-11-24 (P12): the guide says a failure is `Crash`, `Timeout`, `SandboxCrashed` or `NoResult` for automatic quarantine; `OutputTooLarge` and `NotJson` still count against a
+  tool's success rate (as in P07) but not toward quarantine. A handled `ToolError` is left out of the window altogether (neither failure nor good call), which the guide leaves
+  open. `PolicyViolation` is captured but is handled by P08's immediate quarantine, not by the window.
+* 2026-11-24 (P12): the name-collision rule "a higher version whose `parent_version` equals the active one" was already enforced for any valid manifest, because the manifest rule
+  says a parent version must be lower than the version. P12 adds the check to `Forge._check_lineage` anyway (error `version_not_higher`) so it holds if that rule ever changes.
+* 2026-11-24 (P12): `tests/test_context_budget.py` registers 10 and then 60 tools, not 200: building each verified tool takes about half a second and 200 made the test take 100
+  seconds. The budgeted responses do not depend on the registry's size, which the test checks by comparing the two sizes. `BUDGET` values: `tools/list` 14000, `forge_find` 9000,
+  `forge_describe` 20000 characters (measured 12.3k, 1.9k and 3.3k with the reference tools).
+* 2026-11-24 (P12): `Builder` no longer needs `confidence=` from the server: unless a test injects one it uses the search hit's own `confidence`, so a build reuses a tool exactly
+  when `forge_find` would call it `high` (including the lowering for a tool that keeps failing). `server.tools.confidence(query, record)` is kept for text-only callers.
+* 2026-11-24 (P12): three existing tests changed because P12 replaced what they pinned: `tests/test_registry_db.py` (the table set; its stand-in migration no longer reuses the name
+  `regression_cases`), and `tests/test_registry_search.py` (fallback scores are no longer bounded by 1, since the formula now adds terms). The exact tool list tests gained
+  `forge_repair` and `forge_report_problem`.

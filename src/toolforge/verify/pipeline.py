@@ -232,6 +232,8 @@ class GateContext:
     original_sha: str = (
         ""  # the package's `code_sha` when the run began; the pipeline checks it again after every gate
     )
+    # Argument objects that crashed, timed out or killed the sandbox in an earlier version of this tool (P12). G3 runs them as an extra input.
+    regression_cases: tuple[dict[str, Any], ...] = ()
 
     def remaining_s(self) -> float:
         return max(0.0, self.deadline - self.clock())
@@ -302,6 +304,9 @@ class VerificationReport:
     approval: dict[str, Any] | None = (
         None  # `{"id", "state"}` once G7 opened a request; None when the version needs none
     )
+    similar_to: tuple[
+        str, ...
+    ] = ()  # active tools with other names that cover the same ground (set by `Forge`, a hint and never a block)
 
     @property
     def ok(self) -> bool:
@@ -312,6 +317,8 @@ class VerificationReport:
         document = self._as_dict()
         if self.approval is not None:
             document["approval"] = dict(self.approval)
+        if self.similar_to:
+            document["similar_to"] = list(self.similar_to)
         return document
 
     def _as_dict(self) -> dict[str, Any]:
@@ -473,6 +480,7 @@ class Pipeline:
         *,
         version: VersionRecord | None = None,
         progress: ProgressFn | None = None,
+        regression_cases: Sequence[dict[str, Any]] = (),
     ) -> VerificationReport:
         """Verify `package`. With a registry the version is created (or `version`, left `submitted` or `verifying`, is resumed).
 
@@ -500,6 +508,7 @@ class Pipeline:
             clock=self._clock,
             blob=None,
             original_sha=self._code_sha(package, record),
+            regression_cases=tuple(regression_cases),
         )
         if record is not None and registry is not None:
             self._start(registry, record, ledger, package, submitted_by, run_id)
