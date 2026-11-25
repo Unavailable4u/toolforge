@@ -13,7 +13,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-import pkg_resources
+try:
+    from importlib.metadata import version as get_package_version
+except ImportError:
+    # Python < 3.8 fallback
+    import pkg_resources
+    get_package_version = lambda name: pkg_resources.get_distribution(name).version
 
 if TYPE_CHECKING:
     from toolforge.config import Settings
@@ -88,7 +93,7 @@ class RuntimeInfo:
 
         version = "unknown"
         try:
-            version = pkg_resources.get_distribution("toolforge").version
+            version = get_package_version("toolforge")
         except Exception:
             pass
 
