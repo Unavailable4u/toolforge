@@ -456,15 +456,24 @@ def test_a_version_without_a_frozen_package_is_not_runnable(rig: Rig) -> None:
     assert info.value.code == "no_blob"
 
 
-def test_a_session_tool_is_refused_until_sessions_exist(rig: Rig) -> None:
+def test_a_session_tool_goes_to_the_session_manager_not_to_a_single_call(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch
+) -> None:
     record = rig.registry.active_version("word_count")
     assert record is not None
     manifest = {**record.manifest, "kind": "session"}
     rig.registry.add(replace(record, manifest=manifest))
-    with pytest.raises(ToolNotRunnable) as info:
-        rig.run()
-    assert info.value.code == "session_not_built"
-    opened_nothing(rig)
+    seen: list[Any] = []
+    monkeypatch.setattr(
+        rig.runner.sessions,
+        "call",
+        lambda target, args, files, session_id, record_stats=True: (
+            seen.append((target.label, session_id)) or CallResult(ok=True, version=target.label)
+        ),
+    )
+    rig.run()
+    assert seen == [(record.label, None)]
+    opened_nothing(rig)  # the single-call path opened no sandbox
 
 
 def test_a_runner_without_a_registry_cannot_run_by_name() -> None:

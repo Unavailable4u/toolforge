@@ -157,11 +157,40 @@ _P12_SCHEMA: tuple[str, ...] = (
     "CREATE INDEX repairs_by_tool ON repairs(name, id)",
 )
 
-# Append only. A released migration is never edited: later patches add a new entry (P13 adds session metadata).
+# P13. One row per session. The row is what other processes see (`toolforge sessions list`, `toolforge doctor`): the live sandbox itself
+# belongs to the process that opened it. `public_id` is the part of a session id that may be shown; the caller's secret part is stored only
+# as a hash (`secret_sha256`). Times are seconds since the epoch. `heartbeat_at` is refreshed by the owning process's reaper, so a session
+# that is `open` with an old heartbeat belongs to a process that died. `box` is the container name of the sandbox that is open now.
+_P13_SCHEMA: tuple[str, ...] = (
+    """CREATE TABLE sessions (
+        public_id TEXT PRIMARY KEY,
+        secret_sha256 TEXT NOT NULL,
+        version_id INTEGER NOT NULL REFERENCES versions(id),
+        label TEXT NOT NULL,
+        state TEXT NOT NULL CHECK (state IN ('open', 'closed', 'expired', 'quarantined', 'lost', 'operator')),
+        reason TEXT,
+        owner TEXT NOT NULL,
+        box TEXT,
+        steps INTEGER NOT NULL DEFAULT 0,
+        rewinds INTEGER NOT NULL DEFAULT 0,
+        close_requested INTEGER NOT NULL DEFAULT 0,
+        opened_at REAL NOT NULL,
+        last_used_at REAL NOT NULL,
+        expires_at REAL NOT NULL,
+        hard_expires_at REAL NOT NULL,
+        heartbeat_at REAL NOT NULL,
+        closed_at REAL
+    )""",
+    "CREATE INDEX sessions_by_state ON sessions(state, opened_at)",
+    "CREATE INDEX sessions_by_version ON sessions(version_id, state)",
+)
+
+# Append only. A released migration is never edited: later patches add a new entry.
 MIGRATIONS: list[Migration] = [
     Migration(1, "initial schema", _INITIAL_SCHEMA),
     Migration(2, "search index", (_create_search_index,)),
     Migration(3, "regression cases, problem reports and repairs", _P12_SCHEMA),
+    Migration(4, "session metadata", _P13_SCHEMA),
 ]
 
 

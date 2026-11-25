@@ -53,6 +53,7 @@ class CallResult(BaseModel):
 
     `result` is any JSON value the tool returned and is `None` on failure. `duration_ms` is measured on the host, never taken from
     the sandbox. `truncated` says that some output was cut; `sandbox_timed_out` says that the host stopped the sandbox.
+    The three session fields (P13) are empty for a tool that keeps no state.
     """
 
     ok: bool
@@ -65,3 +66,8 @@ class CallResult(BaseModel):
     call_id: str = ""
     truncated: bool = False
     sandbox_timed_out: bool = False
+    # Sessions (P13). `session_id` is set on a call of a session tool that left its session open: the id to pass to the next call. `step` is the
+    # session's step after this call (0 before the first successful call) and `session_expires_in_s` how long it stays open if left idle.
+    session_id: str | None = None
+    step: int | None = None
+    session_expires_in_s: int | None = None

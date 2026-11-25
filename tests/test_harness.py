@@ -125,6 +125,7 @@ def test_the_harness_imports_only_the_standard_library() -> None:
     allowed = {
         "__future__",
         "ast",
+        "hashlib",
         "importlib",
         "io",
         "json",

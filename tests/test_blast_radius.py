@@ -504,3 +504,78 @@ def test_a_refused_brokered_request_for_a_declared_service_is_not_an_undeclared_
         doc["runtime_sample"]["egress"]["undeclared_hosts"] == []
         and doc["runtime_sample"]["egress"]["blocked"] == 1
     )
+
+
+# -- one session's report (P13) -------------------------------------------------------------------------------------------------
+
+
+def session_report(settings: Settings, session: str = "s-1a2b3c4d", **kw):
+    name, version = LABEL.split("@")
+    return br.session_report(settings, name, version, session, **kw)
+
+
+def write_session_boxes(settings: Settings, session: str, *boxes: list) -> Path:
+    folder = Path(settings.home) / "ledgers" / LABEL
+    for n, events in enumerate(boxes, 1):
+        write_ledger(folder / f"{session}-{n}.jsonl", events)
+    return folder
+
+
+def test_a_session_with_no_ledgers_has_no_report(settings: Settings) -> None:
+    assert session_report(settings) is None
+    assert not (Path(settings.home) / "ledgers" / LABEL / "sessions").exists()
+
+
+def test_a_clean_session_says_no_violation_seen_and_is_stored_next_to_its_events(settings: Settings) -> None:
+    folder = write_session_boxes(settings, "s-1a2b3c4d", sandbox_events(name="b1"))
+    doc = session_report(settings)
+    assert (
+        doc is not None
+        and doc["kind"] == "session"
+        and doc["session"] == "s-1a2b3c4d"
+        and doc["sandboxes"] == 1
+    )
+    assert doc["ledger_verified"] is True and doc["verdict"]["status"] == "no_violation_seen"
+    stored = json.loads((folder / "sessions" / "s-1a2b3c4d-blast-radius.json").read_text())
+    assert stored["verdict"] == doc["verdict"]
+
+
+def test_every_sandbox_of_a_session_is_measured_and_a_touched_decoy_in_any_is_a_violation(
+    settings: Settings,
+) -> None:
+    write_session_boxes(
+        settings, "s-1a2b3c4d", sandbox_events(name="b1"), sandbox_events(name="b2", touched=("c2",))
+    )
+    doc = session_report(settings)
+    assert doc["sandboxes"] == 2 and doc["verdict"]["status"] == "violation_seen"
+    assert [s["ledger"] for s in doc["sources"]["sandboxes"]] == ["s-1a2b3c4d-1.jsonl", "s-1a2b3c4d-2.jsonl"]
+
+
+def test_a_session_does_not_pick_up_the_ledgers_of_another_session_or_of_a_call(settings: Settings) -> None:
+    folder = write_session_boxes(settings, "s-1a2b3c4d", sandbox_events(name="mine"))
+    write_ledger(folder / "s-ffffffff-1.jsonl", sandbox_events(name="theirs", touched=("c1",)))
+    write_ledger(folder / "call-1.jsonl", sandbox_events(name="call", touched=("c1",)))
+    doc = session_report(settings)
+    assert doc["sandboxes"] == 1 and doc["verdict"]["status"] == "no_violation_seen"
+
+
+def test_a_box_that_was_never_audited_is_not_measured_never_zero(settings: Settings) -> None:
+    write_session_boxes(settings, "s-1a2b3c4d", sandbox_events(name="b1", audit=False))
+    doc = session_report(settings)
+    assert doc["verdict"]["status"] != "no_violation_seen"
+
+
+def test_a_tampered_session_ledger_is_ledger_broken(settings: Settings) -> None:
+    folder = write_session_boxes(settings, "s-1a2b3c4d", sandbox_events(name="b1"))
+    path = folder / "s-1a2b3c4d-1.jsonl"
+    lines = path.read_text().splitlines()
+    lines[1] = lines[1].replace("canary.seeded", "canary.xxxxxx")
+    path.write_text("\n".join(lines) + "\n")
+    doc = session_report(settings)
+    assert doc["ledger_verified"] is False and doc["verdict"]["status"] == "ledger_broken"
+
+
+def test_a_session_report_with_store_false_writes_nothing(settings: Settings) -> None:
+    folder = write_session_boxes(settings, "s-1a2b3c4d", sandbox_events(name="b1"))
+    assert session_report(settings, store=False) is not None
+    assert not (folder / "sessions").exists()

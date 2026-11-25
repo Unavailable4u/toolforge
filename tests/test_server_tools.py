@@ -45,6 +45,7 @@ def test_the_server_offers_exactly_the_tools_in_the_table(env: Env) -> None:
         "forge_find", "forge_describe", "forge_run", "forge_submit",
         "forge_status", "forge_list", "forge_recipe", "forge_runtime_info", "forge_build",
         "forge_repair", "forge_report_problem",
+        "forge_session_close", "forge_session_rewind", "forge_session_list",
     ]  # fmt: skip
     assert all(t.description and len(t.description) > 80 for t in listed)
 

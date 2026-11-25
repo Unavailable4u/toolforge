@@ -638,7 +638,76 @@ def generate(
 
 def write(settings: Settings, label: str, document: dict[str, Any]) -> Path:
     """Store `document` as `blast-radius.json`, replacing an earlier copy in one step so a reader never sees half a file."""
-    path = report_path(settings, label)
+    return _write_json(report_path(settings, label), document)
+
+
+def session_report(
+    settings: Settings, name: str, version: str, session: str, *, store: bool = True
+) -> dict[str, Any] | None:
+    """The Blast Radius report of one session (P13), from the ledgers of its sandboxes, or None when there are none on disk.
+
+    A session has one sandbox ledger per sandbox it used (`<session>-<n>.jsonl` in the version's folder: the sandbox is replaced by a
+    rewind or a recovery). Each is measured as a real call is, as a whole. Unlike the version's report there is no verification part: the
+    verdict says only what these runs showed. It is stored as `sessions/<session>-blast-radius.json` next to the session's own ledger.
+    """
+    label = f"{name}@{version}"
+    folder = ledger_io.version_ledger_dir(settings.home, label)
+    try:
+        files = sorted(p for p in folder.glob(f"{session}-*.jsonl") if p.is_file())
+    except OSError:
+        files = []
+    if not files:
+        return None
+    analyses = [_analyse(_read_source(p), f"session:{label}:{session}", from_gate=None) for p in files]
+    violations: list[str] = []
+    gaps: list[str] = []
+    for analysis in analyses:
+        violations += _violations(analysis.dims, f"sandbox ledger {analysis.name}")
+        gaps += [g for g in _gaps(analysis) if "containment gate" not in g]
+    runtime = _runtime(analyses, len(analyses))
+    verified = all(a.verified for a in analyses)
+    if not verified:
+        status = LEDGER_BROKEN
+    elif violations:
+        status = VIOLATION_SEEN
+    elif gaps:
+        status = INCOMPLETE
+    else:
+        status = NO_VIOLATION_SEEN
+    document = {
+        "schema": SCHEMA,
+        "kind": "session",
+        "tool": name,
+        "version": version,
+        "session": session,
+        "sandboxes": len(analyses),
+        "generated_at": _now(),
+        "dimensions": {dim: analyses[-1].dims[dim] for dim in DIMENSIONS},
+        "runtime_sample": runtime,
+        "ledger_verified": verified,
+        "verdict": {
+            "status": status,
+            "summary": VERDICT_TEXT[status],
+            "violations": violations[:LIST_CAP],
+            "not_measured": gaps[:LIST_CAP],
+        },
+        "sources": {
+            "sandboxes": [
+                {"ledger": a.name, "events": a.events, "verified": a.verified, "head_hash": a.head_hash}
+                for a in analyses
+            ]
+        },
+        "not_applicable": dict(NOT_APPLICABLE),
+        "footer": FOOTER,
+    }
+    cleaned: dict[str, Any] = clean(document)
+    cleaned["footer"] = FOOTER
+    if store:
+        _write_json(folder / "sessions" / f"{session}-blast-radius.json", cleaned)
+    return cleaned
+
+
+def _write_json(path: Path, document: dict[str, Any]) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     handle, temp = tempfile.mkstemp(prefix=".blast-", suffix=".tmp", dir=path.parent)
     try:

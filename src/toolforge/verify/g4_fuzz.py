@@ -4,6 +4,9 @@ The inputs come from `verify.schemagen` (boundary values of every property, plus
 time), seeded by the package's `code_sha`, so the same package always gets the same inputs. They run through the harness `--batch`
 mode with the package's own timeout and output limit.
 
+A session tool (P13) is fuzzed as one long session: the inputs run in order and share one state, so what the tool kept from one input
+is what the next one meets. An input that fails does not save its state, as in a real session.
+
 A run passes when every input ends in a result or a `ToolError` (the tool refusing on purpose, which is handled). It fails on a crash,
 a timeout, an oversized or non-JSON result, or when the time budget ends before every input has run. The first few failing inputs
 are named in the hints, described by what is unusual about them, never by dumping them.
@@ -75,13 +78,16 @@ class FuzzGate:
             )
         limits = sandboxrun.limits_of(ctx)
         items = [{"args": item.args, "files": item.files} for item in inputs]
-        request = {
-            "entrypoint": manifest.entrypoint,
-            "limits": limits,
-            "items": items,
-            "include_results": False,
-            "deadline_s": BUDGET_S,
-        }
+        request = sandboxrun.session_request(
+            ctx,
+            {
+                "entrypoint": manifest.entrypoint,
+                "limits": limits,
+                "items": items,
+                "include_results": False,
+                "deadline_s": BUDGET_S,
+            },
+        )
         with sandboxrun.open_sandbox(ctx, "G4", network="none") as handle:
             sandboxrun.load_package(handle, ctx.blob)
             run = sandboxrun.run_harness(

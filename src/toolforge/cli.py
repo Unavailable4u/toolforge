@@ -23,6 +23,7 @@ from toolforge import cli_release as release_commands
 from toolforge import cli_report as report_commands
 from toolforge import cli_run as run_commands
 from toolforge import cli_serve as serve_commands
+from toolforge import cli_sessions as sessions_commands
 from toolforge import cli_verify as verify_commands
 from toolforge.config import load_settings
 from toolforge.errors import ToolForgeError
@@ -60,6 +61,7 @@ REGISTRARS: list[Callable[[argparse._SubParsersAction], None]] = [
     report_commands.register,
     run_commands.register,
     serve_commands.register,
+    sessions_commands.register,
     verify_commands.register,
 ]
 

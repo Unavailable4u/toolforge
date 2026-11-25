@@ -141,6 +141,12 @@ def run_response(result: CallResult, label: str) -> dict[str, Any]:
         "timed_out": bool(result.sandbox_timed_out),
         "notice": FENCE_NOTICE,
     }
+    if result.session_id is not None:
+        response["session_id"] = result.session_id  # made by ToolForge, never by the tool
+    if result.step is not None:
+        response["step"] = int(result.step)
+    if result.session_expires_in_s is not None:
+        response["session_expires_in_s"] = int(result.session_expires_in_s)
     if result.ok:
         response["output"] = fencer.block(_result_text(result.result))
     elif result.error is not None:
@@ -164,6 +170,33 @@ def run_response(result: CallResult, label: str) -> dict[str, Any]:
     return response
 
 
+def session_response(info: dict[str, Any]) -> dict[str, Any]:
+    """What `forge_session_*` answer. Everything in it was produced by ToolForge (counts, states, fixed words) except the tool's name
+    in a list and the Blast Radius verdict text, which are cleaned like any author text."""
+    return clean_json(_session_shape(info), 200)
+
+
+def _session_shape(value: Any) -> Any:
+    """The same structure with the Blast Radius document cut down to its verdict, which is all a caller needs from it."""
+    if isinstance(value, dict):
+        out: dict[str, Any] = {}
+        for key, item in value.items():
+            if key == "blast_radius":
+                out[key] = None if item is None else _blast_view(item)
+            else:
+                out[key] = _session_shape(item)
+        return out
+    if isinstance(value, list):
+        return [_session_shape(item) for item in value]
+    return value
+
+
+def _blast_view(report: Any) -> dict[str, Any]:
+    verdict = report.get("verdict") if isinstance(report, dict) else None
+    verdict = verdict if isinstance(verdict, dict) else {}
+    return {"status": verdict.get("status", "not_measured"), "summary": verdict.get("summary", "")}
+
+
 __all__ = [
     "FENCE_NOTICE",
     "FLAG_INJECTION",
@@ -175,4 +208,5 @@ __all__ = [
     "clean_text",
     "description_flags",
     "run_response",
+    "session_response",
 ]

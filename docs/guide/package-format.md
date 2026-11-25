@@ -178,6 +178,12 @@ larger than `limits.output_kb` is `OutputTooLarge`. `ToolError` is a handled fai
 exception, including `SystemExit`, is a `Crash` and does. Anything printed is captured, not returned: only the last 2000 characters of
 stdout and of stderr reach the caller.
 
+### A tool that keeps state (`kind: "session"`)
+
+A session tool has the signature `run(args: dict, state: dict) -> object`. The harness loads `state` from `/workspace/.tf/state.json` before the
+call and saves it after a successful call; it must be JSON and at most 256 KB. The sandbox stays open across the calls of one session, but
+the package, harness and SDK are put back before every call, so keep everything you need in `state`. See [../sessions.md](../sessions.md).
+
 ### The `toolforge_sdk` helpers
 
 `toolforge_sdk` is written next to the harness and needs no installation; it is standard library only.

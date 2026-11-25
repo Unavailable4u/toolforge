@@ -118,6 +118,17 @@ class RegistryLike(Protocol):
         session_id: str | None = None,
     ) -> None: ...
 
+    # Sessions (P13): only a runner that keeps sessions needs these.
+    def get_session(self, public_id: str) -> Any: ...
+    def list_sessions(self, *, state: str | None = None, limit: int = 100) -> list[Any]: ...
+    def open_session(self, **fields: Any) -> Any: ...
+    def touch_session(self, public_id: str, **fields: Any) -> None: ...
+    def note_session_rewind(self, public_id: str, **fields: Any) -> None: ...
+    def session_heartbeat(self, owner: str, *, now: float) -> int: ...
+    def request_session_close(self, public_id: str) -> bool: ...
+    def close_session(self, public_id: str, state: str, reason: str | None, *, now: float) -> bool: ...
+    def open_sessions_of(self, version_id: int) -> list[Any]: ...
+
 
 # --- The envelope ------------------------------------------------------------------------------------------------------
 
@@ -141,6 +152,8 @@ class Envelope(BaseModel):
     stdout_tail: str = ""
     stderr_tail: str = ""
     truncated: bool = False
+    state_sha256: str | None = None  # a session call: the hash and size of the state the harness saved (P13)
+    state_bytes: int | None = None
 
     @model_validator(mode="after")
     def _shape(self) -> Envelope:
@@ -292,6 +305,8 @@ class _Outcome:
     truncated: bool = False
     sandbox_timed_out: bool = False
     result_bytes: int | None = None
+    state_sha256: str | None = None
+    state_bytes: int | None = None
 
 
 def _requested(manifest: Mapping[str, Any]) -> dict[str, list[str]]:
@@ -319,6 +334,10 @@ def real_secret_audit(measured: Mapping[str, Any] | None) -> dict[str, Any]:
     return {"state": "not_measured", "names": []}
 
 
+def _is_sha256(value: object) -> bool:
+    return isinstance(value, str) and len(value) == 64 and set(value) <= set("0123456789abcdef")
+
+
 def _failure(kind: str, message: str, hint: str = "", **rest: Any) -> _Outcome:
     return _Outcome(ok=False, error=CallError(type=kind, message=message, hint=hint), **rest)
 
@@ -341,6 +360,9 @@ class ToolRunner:
         clock: Callable[[], float] = time.monotonic,
         new_id: Callable[[], str] | None = None,
         broker_services: Callable[[], Mapping[str, str]] | None = None,
+        session_clock: Callable[[], float] | None = None,
+        session_sleep: Callable[[float], None] | None = None,
+        session_reaper: bool = True,
     ) -> None:
         self._broker_services = (
             broker_services  # `{service: host}` the operator configured; None asks MiniLocker when needed
@@ -351,6 +373,11 @@ class ToolRunner:
         self._ledger_factory = ledger_factory
         self._clock = clock
         self._new_id = new_id or (lambda: uuid.uuid4().hex[:16])
+        from toolforge.services.sessions import SessionManager  # imported here: that module imports this one
+
+        self.sessions = SessionManager(
+            self, clock=session_clock or time.time, sleep=session_sleep or time.sleep, reaper=session_reaper
+        )
 
     # -- entry points ---------------------------------------------------------------------------------------------------
 
@@ -367,12 +394,16 @@ class ToolRunner:
         """Call a registered tool. `name_or_version` is a tool name (its active version), `name@version`, or a `VersionRecord`.
 
         Raises `RegistryError` for an unknown tool or version and `ToolNotRunnable` when the version's status is not in
-        `allow_status`, it is a session tool, or its package cannot be unpacked. Bad arguments or files are not exceptions:
+        `allow_status`, or its package cannot be unpacked. Bad arguments or files are not exceptions:
         they come back as a failed `CallResult` (`InvalidArguments`, `InvalidFiles`) after which nothing ran and nothing was
-        recorded, because the tool is not at fault. `session_id` is recorded with the call; sessions are P13.
-        `record_stats=False` keeps the call out of the version's statistics (the live smoke run of an approval uses it).
+        recorded, because the tool is not at fault. For a stateless tool `session_id` is only recorded with the call. A session tool
+        (P13) opens a session when `session_id` is None and runs in the caller's session otherwise (`services/sessions.py`); its
+        `CallResult.session_id` is the id to pass next. `record_stats=False` keeps the call out of the version's statistics (the
+        live smoke run of an approval uses it).
         """
         target = self._resolve(name_or_version, tuple(allow_status))
+        if target.manifest.get("kind", "stateless") == "session":
+            return self.sessions.call(target, args, files, session_id, record_stats)
         return self._execute(target, args, files, session_id, record_stats)
 
     def run_unverified(
@@ -467,16 +498,15 @@ class ToolRunner:
             ledger_dir=record.label,
             status=record.status,
         )
-        self._require_stateless(target)
         return target
 
     @staticmethod
     def _require_stateless(target: _Target) -> None:
         if target.manifest.get("kind", "stateless") != "stateless":
             raise ToolNotRunnable(
-                f"{target.label} is a session tool and sessions are not built yet",
-                code="session_not_built",
-                hint="sessions arrive in a later release; only stateless tools can be called now",
+                f"{target.label} is a session tool, and a package run straight from a folder keeps no sessions",
+                code="session_needs_registry",
+                hint="submit it (`toolforge submit`) and have the operator promote it, then run it by name",
             )
 
     # -- checking what the caller sent ----------------------------------------------------------------------------------------
@@ -862,6 +892,14 @@ class ToolRunner:
         except Exception:
             log.warning("could not quarantine %s after a decoy was touched", target.label, exc_info=True)
             return False
+        try:  # a quarantined version ends every session it has: they would otherwise keep running its code
+            self.sessions.close_for_version(target.version_id)
+        except Exception:
+            log.warning(
+                "the sessions of %s could not all be closed after it was quarantined",
+                target.label,
+                exc_info=True,
+            )
         event_type = str(event.pop("type", "forge.quarantined"))
         event.pop("related", None)
         path = str(Path(self._settings.home) / "ledgers" / target.ledger_dir / OPERATOR_LEDGER)
@@ -1015,7 +1053,16 @@ class ToolRunner:
                 "the tool must return a smaller result",
                 **common,
             )
-        return _Outcome(ok=True, result=envelope.result, result_bytes=size, **common)
+        state_sha = envelope.state_sha256 if _is_sha256(envelope.state_sha256) else None
+        state_size = envelope.state_bytes if state_sha is not None else None
+        return _Outcome(
+            ok=True,
+            result=envelope.result,
+            result_bytes=size,
+            state_sha256=state_sha,
+            state_bytes=state_size,
+            **common,
+        )
 
 
 __all__ = [

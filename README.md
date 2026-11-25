@@ -66,7 +66,7 @@ configuration, and the security rules are in `docs/clients.md`. How tools are ra
 | --- | --- | --- | --- |
 | `forge_find` | `query: str`, `limit: int = 5` | ranked active tools with `confidence`, a one-line `why`, `uses`, `success_rate` (or null) and permissions | P07 |
 | `forge_describe` | `name: str`, `version: str | null` | the sanitised manifest, a typed call `signature`, examples, status, lineage and gate summaries | P07 |
-| `forge_run` | `name: str`, `args: object`, `files: object | null` | the call result: `ok`, the fenced `output` or `error`, `stdout`, `stderr`, `flags` | P07 |
+| `forge_run` | `name: str`, `args: object`, `files: object | null`, `session_id: str | null` | the call result: `ok`, the fenced `output` or `error`, `stdout`, `stderr`, `flags`; for a session tool also `session_id`, `step` | P07 |
 | `forge_submit` | `package: {manifest, files}` | the verification report: status, gates with summaries and hints, `next_action` | P07 |
 | `forge_status` | `name: str`, `version: str | null` | status, `next_step`, gate summaries and approval state | P07 |
 | `forge_list` | `status: str | null` | versions with name, version, status and a short description (capped) | P07 |
@@ -75,6 +75,9 @@ configuration, and the security rules are in `docs/clients.md`. How tools are ra
 | `forge_build` | `goal: str`, `examples: [{input, output?}] | null`, `sample_files: object | null`, `constraints: str | null` | `reused` or the built `tool` and `version`, its `status`, `rounds`, `usage`, the verification `report` and `next_action` | P11 |
 | `forge_repair` | `name: str`, `problem: str`, `package: {manifest, files} | null` | `ok`, the new `version` and its `status`, `rounds`, the verification `report` and `next_action` | P12 |
 | `forge_report_problem` | `name: str`, `version: str | null`, `description: str` | `stored`, the report id and what happens next | P12 |
+| `forge_session_close` | `session_id: str` | `closed`, the number of `steps`, the sandbox audit result and a one-line Blast Radius `verdict` | P13 |
+| `forge_session_rewind` | `session_id: str`, `step: int` | the `step` it is at now and the `steps_available` that can still be restored | P13 |
+| `forge_session_list` | `session_id: str | null` | open sessions by public name (tool, steps, time left); with your `session_id`, its `steps_available` too | P13 |
 <!-- tools:end -->
 
 ## Working on this repository with an AI agent

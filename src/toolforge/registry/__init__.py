@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from toolforge.errors import RegistryError
-from toolforge.registry import health, lifecycle, search
+from toolforge.registry import health, lifecycle, search, sessions
 from toolforge.registry.db import (
     GATE_STATUSES,
     STATS_MIN_CALLS,
@@ -391,6 +391,63 @@ class Registry:
 
     def finish_repair(self, repair_id: int, outcome: str, child_version: str | None = None) -> None:
         health.finish_repair(self.db, repair_id, outcome, child_version)
+
+    # -- sessions (P13; plain storage, see `registry.sessions`) --------------------------------------------------------------------
+
+    def open_session(
+        self,
+        *,
+        public_id: str,
+        secret_sha256: str,
+        version_id: int,
+        label: str,
+        owner: str,
+        box: str | None,
+        now: float,
+        ttl_s: int,
+        max_s: int,
+    ) -> sessions.SessionRow:
+        return sessions.open_session(
+            self.db,
+            public_id=public_id,
+            secret_sha256=secret_sha256,
+            version_id=version_id,
+            label=label,
+            owner=owner,
+            box=box,
+            now=now,
+            ttl_s=ttl_s,
+            max_s=max_s,
+        )
+
+    def get_session(self, public_id: str) -> sessions.SessionRow | None:
+        return sessions.get(self.db, public_id)
+
+    def list_sessions(self, *, state: str | None = None, limit: int = 100) -> list[sessions.SessionRow]:
+        return sessions.list_sessions(self.db, state=state, limit=limit)
+
+    def count_open_sessions(self) -> int:
+        return sessions.count_open(self.db)
+
+    def open_sessions_of(self, version_id: int) -> list[sessions.SessionRow]:
+        return sessions.open_for_version(self.db, version_id)
+
+    def touch_session(
+        self, public_id: str, *, now: float, ttl_s: int, box: str | None = None, steps: int | None = None
+    ) -> None:
+        sessions.touch(self.db, public_id, now=now, ttl_s=ttl_s, box=box, steps=steps)
+
+    def note_session_rewind(self, public_id: str, *, box: str | None, steps: int) -> None:
+        sessions.note_rewind(self.db, public_id, box=box, steps=steps)
+
+    def session_heartbeat(self, owner: str, *, now: float) -> int:
+        return sessions.heartbeat(self.db, owner, now=now)
+
+    def request_session_close(self, public_id: str) -> bool:
+        return sessions.request_close(self.db, public_id)
+
+    def close_session(self, public_id: str, state: str, reason: str | None, *, now: float) -> bool:
+        return sessions.close(self.db, public_id, state, reason, now=now)
 
     # -- approvals (storage only; the flow is patch P09) ---------------------------------------------------------------------
 

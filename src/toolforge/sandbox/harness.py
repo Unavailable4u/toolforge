@@ -15,6 +15,7 @@ INPUTS_PREFIX = "inputs/"  # caller files are named inputs/<name> and are writte
 HARNESS_PATH = f"{WORKSPACE}/.tf/harness.py"
 SDK_PATH = f"{WORKSPACE}/.tf/toolforge_sdk.py"
 REQUEST_PATH = f"{WORKSPACE}/.tf/in.json"
+STATE_PATH = f"{WORKSPACE}/.tf/state.json"  # a session tool's saved state (P13)
 
 TAIL_CHARS = 2000  # how much of stdout, stderr, a message and a traceback an envelope carries
 DEFAULT_OUTPUT_KB = 64  # the result size limit when a manifest does not set `limits.output_kb`
@@ -33,7 +34,7 @@ def end_marker(nonce: str) -> bytes:
 
 HARNESS_SOURCE = r'''"""ToolForge harness: runs ONE tool call inside a sandbox and prints ONE result envelope. Standard library only.
 
-Usage: `python /workspace/.tf/harness.py <nonce> [--tests [--stub] | --batch]`. Without a flag it runs one call (below). The host
+Usage: `python /workspace/.tf/harness.py <nonce> [--tests [--stub] | --batch | --state]`. Without a flag it runs one call (below). The host
 (toolforge.services.runner) has put these next to it before the call:
 
     <workspace>/pkg/            the unpacked tool package (and pkg/.deps when it has requirements)
@@ -52,12 +53,19 @@ function is replaced by one that returns None first, which shows whether the tes
 entrypoint once per item of in.json's "items", each in a forked process with its own timeout, and reports one outcome per item
 (gate G3 uses it for the manifest examples, gate G4 for schema fuzzing). Items share the workspace's files, never memory.
 
+Session tools (`"session": true` in in.json, manifest kind `session`) are called as `run(args, state)`. `state` is a dict that the harness
+loads from `<workspace>/.tf/state.json` before the call (an empty dict when there is none) and saves after a call that succeeded, when
+the tool changed it. It must be JSON and at most 256 KB; a state that is not, or is too large, fails the call and is not saved. With
+`input_files` in in.json the call sees only those files under `inputs/`. `--state` reports the saved state's hash and size without
+running the tool; the host uses it to check that a restored snapshot holds the state it was taken with.
+
 The contract is documented in docs/guide/package-format.md ("How a tool runs"). Keep this file dependency free.
 """
 
 from __future__ import annotations
 
 import ast
+import hashlib
 import importlib.util
 import io
 import json
@@ -90,6 +98,8 @@ MAX_LISTED = 20  # failures and errors listed in a test report (the counts are a
 MAX_BATCH_ITEMS = 500
 ITEM_TEXT_CHARS = 600  # a batch item's message and trace tail
 CHILD_RESULT_BYTES = 256 * 1024  # a test child reports a few lines; more than this is a bug or an attack
+STATE_FILE = "state.json"  # in the harness's own folder, so a snapshot of the workspace holds it
+MAX_STATE_BYTES = 256 * 1024  # a session's state as JSON; larger fails the call
 
 
 class _ByteSink:
@@ -245,6 +255,94 @@ def _check_result(result: object, limit_kb: int) -> dict | None:
     return None
 
 
+def _state_bytes(state: object) -> bytes:
+    """The state as canonical JSON (sorted keys, UTF-8). Raises TypeError, ValueError or RecursionError when it is not plain JSON."""
+    return json.dumps(state, sort_keys=True, ensure_ascii=False, allow_nan=False).encode("utf-8")
+
+
+def _load_state(tf_dir: str) -> dict:
+    """The saved session state, or an empty dict when none was saved yet. Anything unreadable raises ValueError."""
+    try:
+        with open(os.path.join(tf_dir, STATE_FILE), "rb") as handle:
+            raw = handle.read(MAX_STATE_BYTES + 1)
+    except FileNotFoundError:
+        return {}
+    except OSError as exc:
+        raise ValueError(f"the saved session state could not be read ({type(exc).__name__})")
+    if len(raw) > MAX_STATE_BYTES:
+        raise ValueError(f"the saved session state is larger than {MAX_STATE_BYTES // 1024} KB")
+    try:
+        state = json.loads(raw.decode("utf-8"))
+    except ValueError:
+        raise ValueError("the saved session state is not valid JSON") from None
+    if not isinstance(state, dict):
+        raise ValueError("the saved session state is not a JSON object")
+    return state
+
+
+def _save_state(tf_dir: str, data: bytes) -> None:
+    """Replace the state file in one step, so a call that is killed half way never leaves a torn file."""
+    path = os.path.join(tf_dir, STATE_FILE)
+    temp = path + ".tmp"
+    with open(temp, "wb") as handle:
+        handle.write(data)
+        handle.flush()
+        os.fsync(handle.fileno())
+    os.replace(temp, path)
+
+
+def _commit_state(tf_dir: str, state: dict, before: bytes) -> tuple[dict | None, dict]:
+    """After a successful call: check the state, save it when it changed. Returns `(error or None, {"state_sha256", "state_bytes"})`."""
+    try:
+        after = _state_bytes(state)
+    except RecursionError:
+        return _error("NotJson", "the session state is nested too deeply to be written as JSON"), {}
+    except (TypeError, ValueError) as exc:
+        return _error(
+            "NotJson",
+            f"the session state cannot be written as JSON: {_safe_str(exc)}. Keep only dicts with text keys, lists, text, numbers, "
+            "booleans and null in `state`; a Python object that cannot be saved is rebuilt from a seed and the list of actions.",
+        ), {}
+    if len(after) > MAX_STATE_BYTES:
+        return _error(
+            "OutputTooLarge",
+            f"the session state is {len(after) / 1024:.1f} KB as JSON but the limit is {MAX_STATE_BYTES // 1024} KB. "
+            "Keep less in `state`: a seed and the list of actions, not the whole world.",
+        ), {}
+    if after != before:
+        try:
+            _save_state(tf_dir, after)
+        except OSError as exc:
+            return _error("Crash", f"the session state could not be saved ({type(exc).__name__})"), {}
+    return None, {"state_sha256": hashlib.sha256(after).hexdigest(), "state_bytes": len(after)}
+
+
+def _state_info(tf_dir: str) -> dict:
+    """`--state`: the hash and size of the saved state, canonicalised the way a call reports it."""
+    data = _state_bytes(_load_state(tf_dir))
+    return {"state_sha256": hashlib.sha256(data).hexdigest(), "state_bytes": len(data)}
+
+
+def _prune_inputs(workspace: str, keep: object) -> None:
+    """A session call sees only the files it was sent: every other file under `inputs/` is removed first. Not a list: leave it alone."""
+    if not isinstance(keep, list):
+        return
+    wanted = {name for name in keep if isinstance(name, str)}
+    for folder, dirs, names in os.walk(os.path.join(workspace, "inputs"), topdown=False):
+        for name in names:
+            full = os.path.join(folder, name)
+            if os.path.relpath(full, workspace).replace(os.sep, "/") not in wanted:
+                try:
+                    os.remove(full)
+                except OSError:
+                    pass
+        for name in dirs:
+            try:
+                os.rmdir(os.path.join(folder, name))  # only an empty folder goes
+            except OSError:
+                pass
+
+
 def _run_tool(request: dict, workspace: str, tf_dir: str, out: _Tail, err: _Tail, started: float) -> dict:
     import toolforge_sdk  # found next to this file, before the package's folders are on the path
 
@@ -268,15 +366,25 @@ def _run_tool(request: dict, workspace: str, tf_dir: str, out: _Tail, err: _Tail
     sys.stdout, sys.stderr = out, err
     result: object = None
     error: dict | None = None
+    session = request.get("session") is True
+    state: dict = {}
+    before = b""
     try:
+        if session:
+            _prune_inputs(workspace, request.get("input_files"))
+            state = _load_state(tf_dir)
+            before = _state_bytes(state)
         function = _load_entry(package, entrypoint)
-        result = function(request["args"])
+        result = function(request["args"], state) if session else function(request["args"])
     except toolforge_sdk.ToolError as exc:
         error = _error("ToolError", _safe_str(exc))
     except BaseException as exc:  # includes SystemExit and KeyboardInterrupt: whatever the tool does, the envelope still goes out
         error = _crash(exc)
     if error is None:
         error = _check_result(result, limit_kb)
+    reported: dict = {}
+    if session and error is None:
+        error, reported = _commit_state(tf_dir, state, before)
     return {
         "ok": error is None,
         "result": result if error is None else None,
@@ -285,6 +393,7 @@ def _run_tool(request: dict, workspace: str, tf_dir: str, out: _Tail, err: _Tail
         "stderr_tail": err.tail(),
         "duration_ms": int((time.monotonic() - started) * 1000),
         "truncated": out.total > TAIL_CHARS or err.total > TAIL_CHARS,
+        **reported,
     }
 
 
@@ -466,7 +575,12 @@ def _run_batch(request: dict, workspace: str, tf_dir: str) -> dict:
                 )
             )
             continue
-        call = {"args": item["args"], "entrypoint": request["entrypoint"], "limits": limits}
+        call = {
+            "args": item["args"],
+            "entrypoint": request["entrypoint"],
+            "limits": limits,
+            "session": request.get("session") is True,  # items then share one state, in order
+        }
         kind, data = _spawn(
             lambda call=call: _item_job(call, workspace, tf_dir),
             timeout_s,
@@ -723,14 +837,17 @@ def main(argv: list[str]) -> None:
         with open(os.path.join(tf_dir, "in.json"), encoding="utf-8") as handle:
             request = json.load(handle)
         flags = argv[2:]
-        unknown = [flag for flag in flags if flag not in ("--tests", "--stub", "--batch")]
+        unknown = [flag for flag in flags if flag not in ("--tests", "--stub", "--batch", "--state")]
         if (
             unknown
             or ("--stub" in flags and "--tests" not in flags)
             or ("--tests" in flags and "--batch" in flags)
+            or ("--state" in flags and len(flags) > 1)
         ):
-            raise ValueError(f"unusable options {flags!r}: use nothing, --tests [--stub] or --batch")
-        if "--batch" in flags:
+            raise ValueError(f"unusable options {flags!r}: use nothing, --tests [--stub], --batch or --state")
+        if "--state" in flags:
+            envelope = _wrapped(_state_info(tf_dir), started)
+        elif "--batch" in flags:
             envelope = _wrapped(_run_batch(request, workspace, tf_dir), started)
         elif "--tests" in flags:
             envelope = _wrapped(_run_tests(request, workspace, "--stub" in flags), started)

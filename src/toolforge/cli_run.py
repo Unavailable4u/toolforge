@@ -114,7 +114,18 @@ def _cmd_run(args: argparse.Namespace) -> int:
         else:
             with Registry.from_settings(settings) as registry:
                 tool_runner = ToolRunner(sandbox, registry, settings, make_ledger)
-                result = tool_runner.run(args.name, call_args, files=files)
+                try:
+                    result = tool_runner.run(args.name, call_args, files=files)
+                    if result.session_id is not None:  # this process ends now; a session lives in the server
+                        tool_runner.sessions.close(result.session_id)
+                        result.session_id = None
+                        print(
+                            "note: this tool keeps state; the call ran in a one-call session that is closed now. "
+                            "Sessions that last across calls are used through the MCP server (forge_run with session_id).",
+                            file=sys.stderr,
+                        )
+                finally:
+                    tool_runner.sessions.shutdown()
     finally:
         shutdown: Callable[[], object] | None = getattr(sandbox, "shutdown", None)
         if shutdown is not None:

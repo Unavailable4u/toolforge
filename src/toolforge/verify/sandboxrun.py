@@ -34,6 +34,21 @@ _ERROR_CHARS = 300
 MAX_LISTED = 20  # failures and errors a test report may list (the harness lists at most this many)
 
 
+def is_session(ctx: GateContext) -> bool:
+    """True for a tool with `kind: session`: its calls take and change a state, so the gates run them in order as one session."""
+    return ctx.package.manifest.kind == "session"
+
+
+def session_request(ctx: GateContext, request: dict[str, Any]) -> dict[str, Any]:
+    """`request` for a `--batch` run, marked as a session (items share one state, in order) when the tool keeps state."""
+    return {**request, "session": True} if is_session(ctx) else request
+
+
+def reset_state(handle: SandboxHandle) -> None:
+    """Back to the state before the first call of a session: `{}` in `state.json`. Used between the phases of one gate."""
+    handle.put(harness.STATE_PATH, b"{}")
+
+
 def limits_of(ctx: GateContext) -> dict[str, int]:
     """The package's own limits with the settings' defaults filled in, as a call would use them."""
     declared = ctx.package.manifest.limits
@@ -269,11 +284,14 @@ __all__ = [
     "TestReport",
     "count",
     "describe_failed_run",
+    "is_session",
     "limits_of",
     "load_package",
     "open_sandbox",
     "read_batch_report",
     "read_test_report",
+    "reset_state",
     "run_harness",
+    "session_request",
     "text",
 ]

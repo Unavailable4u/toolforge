@@ -519,6 +519,10 @@ def _run_live(
             allow_status=(lifecycle.PENDING_APPROVAL,),
             record_stats=False,
         )
+        if (
+            result.session_id is not None
+        ):  # a session tool: this process ends right after, so its session ends with the example
+            runner.sessions.close(result.session_id)
         if result.ok:
             lines.append(f"#{number}: ok")
         else:

@@ -35,7 +35,14 @@ def test_the_table_has_one_row_per_tool() -> None:
 def test_every_tool_has_a_summary_and_a_description_written_for_a_model() -> None:
     for tool in META_TOOLS:
         assert tool.summary.endswith(".") and len(tool.description) > 150, tool.name
-        expected = {"forge_build": "P11", "forge_repair": "P12", "forge_report_problem": "P12"}
+        expected = {
+            "forge_build": "P11",
+            "forge_repair": "P12",
+            "forge_report_problem": "P12",
+            "forge_session_close": "P13",
+            "forge_session_rewind": "P13",
+            "forge_session_list": "P13",
+        }
         assert tool.since == expected.get(tool.name, "P07"), tool.name
 
 

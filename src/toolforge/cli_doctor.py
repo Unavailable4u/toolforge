@@ -204,6 +204,42 @@ def _age_seconds(container: Any, now: float) -> float | None:
     return max(now - moment.timestamp(), 0.0)
 
 
+def _session_view(env: DoctorEnv) -> tuple[set[str], list[Any]]:
+    """`(boxes of live sessions, open sessions whose owner process is gone)` from the registry, which is only read when it exists.
+
+    A session's container is old by the time its idle limit is near, so age alone cannot tell a session from a leak (P13). A session whose
+    owner still reports (its heartbeat is recent) is in use; one whose owner does not is a leak, even if its container is young.
+    """
+    from toolforge.registry import DB_NAME, Registry
+
+    if not (env.settings.home / DB_NAME).is_file():
+        return set(), []
+    try:
+        with Registry.from_settings(env.settings) as registry:
+            rows = registry.list_sessions(state="open", limit=1000)
+    except Exception:
+        return set(), []
+    now = env.now()
+    live = {str(r.box) for r in rows if r.box and not r.orphaned(now)}
+    return live, [r for r in rows if r.orphaned(now)]
+
+
+def _mark_lost(env: DoctorEnv, orphans: list[Any]) -> None:
+    from toolforge.registry import Registry
+
+    try:
+        with Registry.from_settings(env.settings) as registry:
+            for row in orphans:
+                registry.close_session(
+                    row.public_id,
+                    "lost",
+                    "its server process was gone; the container was removed by doctor",
+                    now=env.now(),
+                )
+    except Exception:
+        pass
+
+
 def check_leftovers(env: DoctorEnv) -> CheckResult:
     try:
         client = env.client()
@@ -220,9 +256,26 @@ def check_leftovers(env: DoctorEnv) -> CheckResult:
     now = env.now()
     sandboxes = [c for c in found if (getattr(c, "labels", None) or {}).get("minilocker") == "sandbox"]
     others = [c for c in found if c not in sandboxes]
-    old = [c for c in sandboxes if (_age_seconds(c, now) or 0) > LEFTOVER_AFTER_S]
-    young = [c for c in sandboxes if c not in old]
-    note = f"; left alone: {', '.join(str(c.name) for c in others)}" if others else ""
+    live_boxes, orphans = _session_view(env)
+    orphan_boxes = {str(r.box) for r in orphans if r.box}
+    in_session = [c for c in sandboxes if str(c.name) in live_boxes]
+    old = [
+        c
+        for c in sandboxes
+        if str(c.name) not in live_boxes
+        and ((_age_seconds(c, now) or 0) > LEFTOVER_AFTER_S or str(c.name) in orphan_boxes)
+    ]
+    young = [c for c in sandboxes if c not in old and c not in in_session]
+    notes = []
+    if others:
+        notes.append(f"left alone: {', '.join(str(c.name) for c in others)}")
+    if in_session:
+        notes.append(f"{len(in_session)} in use by open sessions, left alone")
+    note = f"; {'; '.join(notes)}" if notes else ""
+    if (
+        env.clean and orphans and not old
+    ):  # their containers are already gone: only the registry rows are stale
+        _mark_lost(env, orphans)
     if old and env.clean:
         removed, failed = [], []
         for container in old:
@@ -237,6 +290,7 @@ def check_leftovers(env: DoctorEnv) -> CheckResult:
                 f"removed {len(removed)}, could not remove: {', '.join(failed)}",
                 "try `docker rm -f` on them",
             )
+        _mark_lost(env, orphans)
         return CheckResult(
             "ok", f"removed {len(removed)} leftover sandbox container(s): {', '.join(removed)}{note}"
         )

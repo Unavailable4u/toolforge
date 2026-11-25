@@ -133,13 +133,17 @@ class ContainmentGate:
                 metrics={"inputs_run": 0},
             )
         limits = sandboxrun.limits_of(ctx)
-        request = {
-            "entrypoint": manifest.entrypoint,
-            "limits": limits,
-            "items": items,
-            "include_results": False,
-            "deadline_s": BUDGET_S,
-        }
+        # A session tool runs the same inputs as one session in one watched sandbox: the examples first, in order, then the generated ones.
+        request = sandboxrun.session_request(
+            ctx,
+            {
+                "entrypoint": manifest.entrypoint,
+                "limits": limits,
+                "items": items,
+                "include_results": False,
+                "deadline_s": BUDGET_S,
+            },
+        )
         with sandboxrun.open_sandbox(ctx, "G6", network="none", decoys=True) as handle:
             sandboxrun.load_package(handle, ctx.blob)
             run = sandboxrun.run_harness(

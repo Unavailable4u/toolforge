@@ -26,6 +26,7 @@ TABLES = {
     "regression_cases",
     "problem_reports",
     "repairs",
+    "sessions",
 }
 
 

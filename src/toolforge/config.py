@@ -63,6 +63,11 @@ class Settings(BaseSettings):
     # as regression cases (off by default: they are caller data; see docs/repair.md).
     repair_max_per_hour: int = Field(3, ge=1, le=100)
     store_failed_inputs: bool = False
+    # Sessions (P13): a session tool keeps one sandbox alive across calls. It closes after `session_ttl_s` seconds without a call, or
+    # `session_max_s` seconds after it opened whatever happens; at most `max_sessions` are open at once.
+    session_ttl_s: int = Field(900, ge=1)
+    session_max_s: int = Field(3600, ge=1)
+    max_sessions: int = Field(4, ge=1, le=64)
 
     # Network listeners; a token is required on any non-loopback host (enforced in P07 and P17)
     server_host: str = "127.0.0.1"

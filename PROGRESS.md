@@ -19,7 +19,7 @@ patch" in the same patch. Never tick a box for work that is not in the patch. Bo
 | [x] | P10 | Independent challenger, gate G5 | P06 |
 | [x] | P11 | Server-side builder | P07, P10 |
 | [x] | P12 | Reuse ranking, self-repair, rollback | P07, P11 |
-| [ ] | P13 | Stateful sessions | P05, P08 |
+| [x] | P13 | Stateful sessions | P05, P08 |
 | [ ] | P14 | Runtime image and adapter kits (software use) | P13 |
 | [ ] | P15 | Forge Attack Lab | P09, P10 |
 | [ ] | P16 | Benchmark harness | P11, P12, P14 |
@@ -35,9 +35,20 @@ Milestones (M0 to M7) and what can be dropped: `docs/guide/05-milestones.md`.
 
 ## Notes for the next patch
 
-Done: P01 (skeleton), P02 (package spec), P03 (registry), P04 (sandbox seam), P05 (execution contract and `run`), P06 (gates G1 to G4), P07 (MCP server v1), P08 (gate G6 and Blast Radius), P09 (approvals, egress, brokered secrets), P10 (independent challenger, gate G5), P11 (server-side builder), P12 (reuse ranking, self-repair, rollback).
-Next: P13 (needs P05 and P08); P16 needs P11, P12 and P14. Decisions and interfaces that later patches must respect:
+Done: P01 (skeleton), P02 (package spec), P03 (registry), P04 (sandbox seam), P05 (execution contract and `run`), P06 (gates G1 to G4), P07 (MCP server v1), P08 (gate G6 and Blast Radius), P09 (approvals, egress, brokered secrets), P10 (independent challenger, gate G5), P11 (server-side builder), P12 (reuse ranking, self-repair, rollback), P13 (stateful sessions).
+Next: P14 (needs P13); P16 needs P11, P12 and P14. Decisions and interfaces that later patches must respect:
 
+* P13 interfaces. `registry/sessions.py` (plain storage; `new_session_id`, `split_session_id`, `secret_matches`, `SessionRow`, ...) behind `Registry.open_session`, `get_session`,
+  `list_sessions`, `count_open_sessions`, `open_sessions_of`, `touch_session`, `note_session_rewind`, `session_heartbeat`, `request_session_close`, `close_session`; migration 4 adds
+  `sessions`. `services/sessions.py::SessionManager(tools, clock=, sleep=, reaper=)` with `call`, `resolve`, `close`, `rewind`, `describe`, `close_for_version`, `sweep`, `shutdown`;
+  `ToolRunner.sessions` is one (`ToolRunner(..., session_clock=, session_sleep=, session_reaper=)`), and `ToolRunner.run(..., session_id=)` dispatches `kind: "session"` to it.
+  Harness: `state` protocol, `--state`, batch `"session": true`; `verify/sandboxrun.py` has `is_session`, `session_request`, `reset_state`. MCP: `forge_run(session_id)`,
+  `forge_session_close|rewind|list`. CLI `toolforge sessions list|close`. Settings `session_ttl_s`, `session_max_s`, `max_sessions`. `report/blast_radius.session_report`. Page: `docs/sessions.md`.
+  P14's adapter kits and recipes can use `state` (a seed plus an action list) for engines that cannot be stored.
+* P13 behaviour. A failed call is not a step; a dead sandbox is recovered to the last step. Session ids are capabilities (public half in lists, secret half hashed). Quarantine closes
+  a version's sessions, deprecation does not. `doctor --clean` leaves containers of live sessions alone. P17's dashboard should read `registry.list_sessions()`, never ledgers.
+* P13 not run: every `docker` test (`tests/docker/test_session_containers.py`: counter 1,2,3, rewind, container removal on close and on TTL), and real MiniLocker `freeze`/`thaw`/rewind and
+  the reaper against real containers. Everything else ran against the real harness through a stand-in sandbox that is not isolated, so snapshots there are copies of a directory.
 * P12 interfaces. `registry/search.py`: `RANKING` (the one constant block), `rank`, `confidence_of`, `text_confidence`, `coverage_of`, `smoothed_success`; `Hit` gained
   `confidence`, `why`, `coverage`; `Stats` gained `recent_ok`. `registry/health.py` (plain storage behind `Registry.record_failure`, `failures`, `regression_inputs`,
   `recent_outcomes`, `add_problem_report`, `problem_reports`, `count_problem_reports`, `begin_repair`, `finish_repair`, `repair_state`, `repairs`); migration 3 adds

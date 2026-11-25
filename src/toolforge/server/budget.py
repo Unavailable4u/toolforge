@@ -33,9 +33,9 @@ class Budget:
     describe_chars: int
 
 
-# Measured with the reference tools: tools/list 12.3k, a five-result find 1.9k, a typical describe 3.3k. `find` keeps room for the worst case its
+# Measured with the reference tools: tools/list 12.3k (14.7k once P13 added three session tools), a five-result find 1.9k, a typical describe 3.3k. `find` keeps room for the worst case its
 # per-field caps allow (eight long hosts on every result); `describe` is a ceiling that `fit_describe` enforces.
-BUDGET = Budget(tools_list_chars=14_000, find_chars=9_000, describe_chars=20_000)
+BUDGET = Budget(tools_list_chars=15_000, find_chars=9_000, describe_chars=20_000)
 CHARS_PER_TOKEN = 4
 BASIS = "estimated"  # label for any token figure derived from `estimate_tokens`
 

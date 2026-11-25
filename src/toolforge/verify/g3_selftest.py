@@ -12,6 +12,11 @@ author supplied):
 3. `--tests --stub`: the same tests with the entrypoint replaced by a function that returns `None`. If every test still passes the
    tests do not constrain behaviour (`assert True`), and the gate fails.
 
+Session tools (P13, `kind: session`) are checked as sequences. Steps 2 and 2b run with the harness in session mode: the examples run in the
+order the manifest lists them and share one state, as the calls of one session would. Then a fresh sandbox runs the first example again
+and must give the same answer, which shows that the state starts empty and that nothing but the saved state carries over from one call
+to the next. Regression cases run on a state reset to empty, since the cases are only argument objects.
+
 Limits of the test runner, documented in `docs/verification.md`: no fixtures, no `parametrize`, no `conftest.py`, no async tests, plain
 `assert`; a test file may import `tool` and its own helpers from `tests/`, and nothing else is on the path but the package and its
 `.deps`. The strength check proves tests are not vacuous; it does not prove they are good.
@@ -69,6 +74,7 @@ class SelfTestGate:
             )
         manifest = ctx.package.manifest
         limits = sandboxrun.limits_of(ctx)
+        session = sandboxrun.is_session(ctx)
         base = {"entrypoint": manifest.entrypoint, "limits": limits}
         examples = [
             (n, e) for n, e in enumerate(manifest.examples, start=1) if e.output is not None and not e.live
@@ -86,12 +92,12 @@ class SelfTestGate:
                 problem.metrics = metrics
                 return problem
             if examples:
-                bad = self._examples(handle, base, limits, examples, metrics)
+                bad = self._examples(handle, base, limits, examples, metrics, session)
                 if bad is not None:
                     bad.metrics = metrics
                     return bad
             if ctx.regression_cases:
-                bad = self._regressions(handle, base, limits, ctx.regression_cases, metrics)
+                bad = self._regressions(handle, base, limits, ctx.regression_cases, metrics, session)
                 if bad is not None:
                     bad.metrics = metrics
                     return bad
@@ -99,6 +105,11 @@ class SelfTestGate:
             if isinstance(stub, GateResult):
                 stub.metrics = metrics
                 return stub
+        if session and examples:
+            bad = self._fresh_session(ctx, base, limits, examples[0], metrics)
+            if bad is not None:
+                bad.metrics = metrics
+                return bad
         return self._strength(real, stub, metrics)
 
     # -- the three runs -------------------------------------------------------------------------------------------------
@@ -178,9 +189,13 @@ class SelfTestGate:
         limits: dict[str, int],
         examples: list[tuple[int, Any]],
         metrics: dict[str, Any],
+        session: bool = False,
     ) -> GateResult | None:
         items = [{"args": e.input, "files": e.files} for _, e in examples]
         request = {**base, "items": items, "include_results": True, "deadline_s": EXAMPLES_DEADLINE_S}
+        if session:
+            request["session"] = True
+            sandboxrun.reset_state(handle)
         run = sandboxrun.run_harness(
             handle,
             ["--batch"],
@@ -214,6 +229,53 @@ class SelfTestGate:
             )
         return None
 
+    # -- a second, fresh session (session tools) ----------------------------------------------------------------------------
+
+    @staticmethod
+    def _fresh_session(
+        ctx: GateContext,
+        base: dict[str, Any],
+        limits: dict[str, int],
+        first: tuple[int, Any],
+        metrics: dict[str, Any],
+    ) -> GateResult | None:
+        """The first example again, in a new sandbox with no state. It must give the answer it gave at the start of the first session."""
+        number, example = first
+        request = {
+            **base,
+            "items": [{"args": example.input, "files": example.files}],
+            "include_results": True,
+            "deadline_s": EXAMPLES_DEADLINE_S,
+            "session": True,
+        }
+        with sandboxrun.open_sandbox(ctx, "G3", network="none") as fresh:
+            sandboxrun.load_package(fresh, ctx.blob or b"")
+            run = sandboxrun.run_harness(
+                fresh,
+                ["--batch"],
+                request,
+                timeout_s=EXAMPLES_DEADLINE_S + sandboxrun.GRACE_S,
+                max_out=limits["output_kb"] * 1024 * 6 + 64 * 1024,
+            )
+        read = sandboxrun.read_batch_report(run.report, 1) if run.usable else None
+        if read is None or not read[0]:
+            return failed(
+                sandboxrun.describe_failed_run(run, "running the first example in a fresh session"),
+                ["a new session must be able to start from an empty state"],
+            )
+        outcome = read[0][0]
+        metrics["fresh_session_checked"] = True
+        if not outcome.ok or not json_equal(example.output, outcome.result):
+            what = outcome.error_type if not outcome.ok else _short_json(outcome.result)
+            return failed(
+                f"example {number} gave a different answer in a fresh session than at the start of the first one",
+                [
+                    f"fresh session: {what}; manifest: {_short_json(example.output)}",
+                    "a session may keep only what is in `state`; a tool whose first answer depends on anything else is not repeatable",
+                ],
+            )
+        return None
+
     # -- regression cases -----------------------------------------------------------------------------------------------
 
     @staticmethod
@@ -223,9 +285,13 @@ class SelfTestGate:
         limits: dict[str, int],
         cases: tuple[dict[str, Any], ...],
         metrics: dict[str, Any],
+        session: bool = False,
     ) -> GateResult | None:
         items = [{"args": case, "files": {}} for case in cases]
         request = {**base, "items": items, "include_results": False, "deadline_s": EXAMPLES_DEADLINE_S}
+        if session:
+            request["session"] = True
+            sandboxrun.reset_state(handle)
         run = sandboxrun.run_harness(
             handle,
             ["--batch"],

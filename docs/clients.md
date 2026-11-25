@@ -81,7 +81,7 @@ supports remote servers takes the URL `http://127.0.0.1:8765/mcp` and the header
 | --- | --- | --- | --- |
 | `forge_find` | `query: str`, `limit: int = 5` | ranked active tools with `confidence`, a one-line `why`, `uses`, `success_rate` (or null) and permissions | P07 |
 | `forge_describe` | `name: str`, `version: str | null` | the sanitised manifest, a typed call `signature`, examples, status, lineage and gate summaries | P07 |
-| `forge_run` | `name: str`, `args: object`, `files: object | null` | the call result: `ok`, the fenced `output` or `error`, `stdout`, `stderr`, `flags` | P07 |
+| `forge_run` | `name: str`, `args: object`, `files: object | null`, `session_id: str | null` | the call result: `ok`, the fenced `output` or `error`, `stdout`, `stderr`, `flags`; for a session tool also `session_id`, `step` | P07 |
 | `forge_submit` | `package: {manifest, files}` | the verification report: status, gates with summaries and hints, `next_action` | P07 |
 | `forge_status` | `name: str`, `version: str | null` | status, `next_step`, gate summaries and approval state | P07 |
 | `forge_list` | `status: str | null` | versions with name, version, status and a short description (capped) | P07 |
@@ -90,6 +90,9 @@ supports remote servers takes the URL `http://127.0.0.1:8765/mcp` and the header
 | `forge_build` | `goal: str`, `examples: [{input, output?}] | null`, `sample_files: object | null`, `constraints: str | null` | `reused` or the built `tool` and `version`, its `status`, `rounds`, `usage`, the verification `report` and `next_action` | P11 |
 | `forge_repair` | `name: str`, `problem: str`, `package: {manifest, files} | null` | `ok`, the new `version` and its `status`, `rounds`, the verification `report` and `next_action` | P12 |
 | `forge_report_problem` | `name: str`, `version: str | null`, `description: str` | `stored`, the report id and what happens next | P12 |
+| `forge_session_close` | `session_id: str` | `closed`, the number of `steps`, the sandbox audit result and a one-line Blast Radius `verdict` | P13 |
+| `forge_session_rewind` | `session_id: str`, `step: int` | the `step` it is at now and the `steps_available` that can still be restored | P13 |
+| `forge_session_list` | `session_id: str | null` | open sessions by public name (tool, steps, time left); with your `session_id`, its `steps_available` too | P13 |
 <!-- tools:end -->
 
 There is no tool that approves, promotes, releases, rolls back or deletes anything. Those are operator actions.
@@ -113,6 +116,9 @@ What an agent should expect:
   submission, with the stored regression cases. The old version stays active until an operator promotes the new one. Repairs are limited
   per tool per hour. `forge_report_problem` only tells the operator: a report never pulls a tool, and `forge_status` shows its count,
   not its text. See `docs/repair.md`.
+* A tool with `kind: "session"` keeps state between calls. `forge_run` without `session_id` opens a session and returns its `session_id`; pass
+  it on later calls. Keep the whole id private: it is the only proof the session is yours. `forge_session_rewind` and `forge_session_close` act only on
+  your own session, and an idle session closes after 15 minutes. See `docs/sessions.md`.
 * Errors are tool errors with a message, a hint and a short `ref`. The same `ref` is in the server's log (stderr), where the details are.
 
 ## 5. Optional: every active tool as its own tool

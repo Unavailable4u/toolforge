@@ -519,3 +519,90 @@ def test_a_builder_base_url_with_credentials_or_the_wrong_scheme_is_a_warning(
     with_login = builder_result(monkeypatch, llm_base_url="https://user:hunter2@llm.test/v1", llm_model="m")
     assert with_login.status == "warn" and "hunter2" not in with_login.message + (with_login.hint or "")
     assert builder_result(monkeypatch, llm_base_url="ftp://llm.test", llm_model="m").status == "warn"
+
+
+# -- containers of stateful sessions (P13) -------------------------------------------------------------------------------------
+
+
+def _open_session(box: str, *, heartbeat_age_s: float) -> str:
+    """A session row in the registry doctor opens (TOOLFORGE_HOME), whose owner last reported `heartbeat_age_s` ago."""
+    import copy
+
+    from conftest import BASE_FILES, BASE_MANIFEST
+
+    from toolforge.models.package import ToolPackage
+    from toolforge.registry import Registry
+    from toolforge.registry.sessions import new_session_id
+
+    with Registry.from_settings(load_settings()) as registry:
+        manifest = copy.deepcopy(BASE_MANIFEST)
+        manifest["version"] = (
+            f"1.0.{len(registry.list_sessions())}"  # one version per session: versions are immutable
+        )
+        version = registry.add_version(ToolPackage(manifest, dict(BASE_FILES)), created_by="test")
+        _, public, digest = new_session_id()
+        registry.open_session(
+            public_id=public,
+            secret_sha256=digest,
+            version_id=version.id,
+            label="counter 0.1.0",
+            owner="o",
+            box=box,
+            now=NOW - heartbeat_age_s,
+            ttl_s=900,
+            max_s=3600,
+        )
+    return public
+
+
+def _session_state(public: str) -> tuple[str, str | None]:
+    from toolforge.registry import Registry
+
+    with Registry.from_settings(load_settings()) as registry:
+        row = registry.get_session(public)
+        assert row is not None
+        return row.state, row.reason
+
+
+def test_the_container_of_a_live_session_is_left_alone_however_old_it_is(pinned: Path) -> None:
+    box = FakeContainer("minilocker-live", age_s=3000)
+    _open_session("minilocker-live", heartbeat_age_s=3)
+    result = cli_doctor.check_leftovers(env_for(FakeClient(containers=[box]), clean=True))
+    assert result.status == "ok" and box.removed == [] and "1 in use by open sessions" in result.message
+
+
+def test_without_clean_a_session_container_is_not_reported_as_a_leak(pinned: Path) -> None:
+    box = FakeContainer("minilocker-live", age_s=3000)
+    _open_session("minilocker-live", heartbeat_age_s=3)
+    result = cli_doctor.check_leftovers(env_for(FakeClient(containers=[box])))
+    assert result.status == "ok" and "older than" not in result.message
+
+
+def test_the_container_of_a_session_whose_server_is_gone_is_a_leak_even_when_young(pinned: Path) -> None:
+    box = FakeContainer("minilocker-orphan", age_s=20)
+    _open_session("minilocker-orphan", heartbeat_age_s=300)
+    warn = cli_doctor.check_leftovers(env_for(FakeClient(containers=[box])))
+    assert warn.status == "warn" and "minilocker-orphan" in warn.message and box.removed == []
+
+
+def test_clean_removes_an_orphaned_session_container_and_marks_the_session_lost(pinned: Path) -> None:
+    orphan = FakeContainer("minilocker-orphan", age_s=20)
+    live = FakeContainer("minilocker-live", age_s=4000)
+    gone = _open_session("minilocker-orphan", heartbeat_age_s=300)
+    alive = _open_session("minilocker-live", heartbeat_age_s=2)
+    result = cli_doctor.check_leftovers(env_for(FakeClient(containers=[orphan, live]), clean=True))
+    assert result.status == "ok" and orphan.removed == [True] and live.removed == []
+    state, reason = _session_state(gone)
+    assert state == "lost" and "doctor" in (reason or "")
+    assert _session_state(alive)[0] == "open"
+
+
+def test_clean_marks_an_orphaned_session_lost_even_when_its_container_is_already_gone(pinned: Path) -> None:
+    gone = _open_session("minilocker-vanished", heartbeat_age_s=300)
+    cli_doctor.check_leftovers(env_for(FakeClient(containers=[]), clean=True))
+    assert _session_state(gone)[0] == "lost"
+
+
+def test_doctor_without_a_registry_still_works(pinned: Path) -> None:
+    old = FakeContainer("minilocker-aaa", age_s=3600)
+    assert cli_doctor.check_leftovers(env_for(FakeClient(containers=[old]))).status == "warn"
