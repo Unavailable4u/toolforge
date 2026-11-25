@@ -6,11 +6,10 @@ import json
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any
 
 import click
 
-from toolforge.config import Settings, create_settings
+from toolforge.config import create_settings
 from toolforge.errors import ToolForgeError
 
 
@@ -61,7 +60,7 @@ def _runtime_image_list(json_output: bool) -> None:
         click.echo(f"    digest     {image.digest[:64]}…")
         click.echo(f"    built      {image.built_at} ({age} days ago)")
         if image.deprecated:
-            click.echo(f"    DEPRECATED")
+            click.echo("    DEPRECATED")
         if packages:
             click.echo(f"    packages   {len(packages)}")
             for pkg, ver in packages[:3]:
