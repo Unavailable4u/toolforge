@@ -1,0 +1,9 @@
+description: Chess game analysis session
+kind: game-state
+name: chess_session
+recipe:
+  analysis_depth: 3
+  description: Chess game analysis session
+  engine: stockfish
+  starting_position: rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1
+version: 1.0.0

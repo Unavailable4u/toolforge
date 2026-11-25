@@ -1,0 +1,10 @@
+description: FrozenLake reinforcement learning environment
+kind: game-state
+name: frozenlake_session
+recipe:
+  description: FrozenLake reinforcement learning environment
+  is_slippery: true
+  map: 4x4
+  max_steps: 100
+  render_mode: ansi
+version: 1.0.0

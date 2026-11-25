@@ -1,0 +1,15 @@
+description: Fetch and validate JSON from HTTP API
+kind: http-api
+name: http_json_fetch
+recipe:
+  description: Fetch and validate JSON from HTTP API
+  headers:
+    Accept: application/json
+  method: GET
+  url: https://api.example.com/data
+  validation_schema:
+    properties:
+      status:
+        type: string
+    type: object
+version: 1.0.0

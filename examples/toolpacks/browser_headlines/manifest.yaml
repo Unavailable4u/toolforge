@@ -1,0 +1,23 @@
+description: Extract news headlines from website
+kind: browser-plan
+name: browser_headlines
+recipe:
+  description: Extract news headlines from website
+  output_schema:
+    headlines:
+      items:
+        type: string
+      type: array
+  plan:
+  - action: goto
+    url: https://news.example.com
+  - action: wait_for
+    selector: .headline
+    timeout: 10
+  - action: extract_text
+    limit: 5
+    name: headlines
+    selector: .headline
+  - action: screenshot
+    name: homepage
+version: 1.0.0

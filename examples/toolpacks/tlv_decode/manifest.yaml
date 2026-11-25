@@ -1,0 +1,13 @@
+description: Decode TLV (Type-Length-Value) binary format
+kind: file-format
+name: tlv_decode
+recipe:
+  description: Decode TLV (Type-Length-Value) binary format
+  sample_hex: 010548656C6C6F
+  schema:
+    big_endian: true
+    tags:
+      '0x01': string
+      '0x02': uint32
+    type: TLV
+version: 1.0.0

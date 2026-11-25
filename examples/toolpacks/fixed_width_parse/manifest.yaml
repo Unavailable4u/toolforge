@@ -1,0 +1,13 @@
+description: Parse fixed-width text files
+kind: file-format
+name: fixed_width_parse
+recipe:
+  columns:
+  - id:8
+  - name:20
+  - amount:10
+  description: Parse fixed-width text files
+  sample: '001     Alice           123.45
+
+    002     Bob             678.90'
+version: 1.0.0

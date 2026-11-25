@@ -1,0 +1,29 @@
+name: sqlite-query-demo
+version: 1.0.0
+description: Example SQLite query tool demonstrating the SQL recipe
+
+tools:
+  - name: query-products
+    description: Query products from SQLite database
+    kind: sql
+    permissions:
+      files: true
+    inputs:
+      - name: products.db
+        description: SQLite products database
+    parameters:
+      - name: query
+        description: SQL SELECT query (use ? for parameters)
+        type: string
+        required: true
+      - name: params
+        description: Query parameters as JSON array
+        type: array
+        default: []
+    outputs:
+      - name: rows
+        description: Query result rows
+        type: array
+      - name: columns
+        description: Column names
+        type: array

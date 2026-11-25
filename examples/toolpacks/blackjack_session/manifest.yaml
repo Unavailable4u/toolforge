@@ -1,0 +1,12 @@
+description: Blackjack game simulation
+kind: game-state
+name: blackjack_session
+recipe:
+  decks: 6
+  description: Blackjack game simulation
+  players: 4
+  rules:
+    dealer_hits_soft_17: true
+    double_after_split: true
+    surrender: false
+version: 1.0.0
