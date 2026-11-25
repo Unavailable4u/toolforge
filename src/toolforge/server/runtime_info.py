@@ -8,7 +8,6 @@ from __future__ import annotations
 import json
 import os
 import platform
-import sys
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -73,7 +72,7 @@ class RuntimeInfo:
 
     def to_dict(self) -> dict[str, object]:
         """Everything a client may want to know about the server, as plain JSON."""
-        from toolforge.sandbox.fake import FakeSandbox
+
         from toolforge.sandbox.minilocker_runner import MiniLockerSandbox
 
         # Which sandbox backends are usable (some may be unavailable on this system).

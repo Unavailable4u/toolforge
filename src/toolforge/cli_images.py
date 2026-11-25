@@ -52,7 +52,7 @@ def _cmd_images_list(args: argparse.Namespace) -> int:
         print(f"    digest     {image.digest[:64]}…")
         print(f"    built      {image.built_at} ({age} days ago)")
         if image.deprecated:
-            print(f"    DEPRECATED")
+            print("    DEPRECATED")
         if packages:
             print(f"    packages   {len(packages)}")
             for pkg, ver in packages[:3]:
