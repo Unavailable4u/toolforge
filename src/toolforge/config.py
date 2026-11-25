@@ -27,6 +27,7 @@ class Settings(BaseSettings):
 
     # Storage and sandbox
     home: Path = Path("~/.toolforge")
+    images_dir: Path = Path("~/.toolforge/images")
     minilocker_path: Path | None = None
     runtime_image: str = "python:3.12-slim"
     build_allow: Annotated[list[str], NoDecode] = Field(
@@ -87,10 +88,12 @@ class Settings(BaseSettings):
             return [part.strip().lower() for part in value.split(",") if part.strip()]
         return value
 
-    @field_validator("home", "minilocker_path", mode="after")
+    @field_validator("home", "images_dir", "minilocker_path", mode="after")
     @classmethod
     def _expand(cls, value: Path | None) -> Path | None:
-        return value.expanduser() if value is not None else None
+        if value is None:
+            return None
+        return value.expanduser()
 
     @field_validator("log_level", mode="after")
     @classmethod
