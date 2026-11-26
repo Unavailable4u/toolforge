@@ -120,7 +120,7 @@ class Fencer:
         )
 
 
-def _result_text(value: Any) -> str:
+def result_text(value: Any) -> str:
     try:
         return json.dumps(value, ensure_ascii=False, allow_nan=False, default=str)
     except (TypeError, ValueError):
@@ -148,7 +148,7 @@ def run_response(result: CallResult, label: str) -> dict[str, Any]:
     if result.session_expires_in_s is not None:
         response["session_expires_in_s"] = int(result.session_expires_in_s)
     if result.ok:
-        response["output"] = fencer.block(_result_text(result.result))
+        response["output"] = fencer.block(result_text(result.result))
     elif result.error is not None:
         error = result.error
         authored = error.type in TOOL_AUTHORED_ERRORS
@@ -207,6 +207,7 @@ __all__ = [
     "clean_json",
     "clean_text",
     "description_flags",
+    "result_text",
     "run_response",
     "session_response",
 ]

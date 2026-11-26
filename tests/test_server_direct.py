@@ -8,10 +8,15 @@ import anyio
 import pytest
 from server_helpers import Env, data, error_text, make_env
 
+from toolforge.config import Settings
 from toolforge.registry import lifecycle
 from toolforge.server import fences
 from toolforge.server.direct import DirectCatalog
-from toolforge.server.tools import META_TOOLS
+from toolforge.server.tools import META_TOOLS, enabled_tools
+
+META_NAMES = [
+    m.name for m in enabled_tools(Settings(chain_enabled=False))
+]  # forge_chain is offered only when enabled
 
 
 @pytest.fixture
@@ -29,7 +34,7 @@ def test_without_the_setting_there_are_only_the_meta_tools(tmp_path: Path) -> No
     environment = make_env(tmp_path)
     try:
         environment.add_tool()
-        assert names(environment) == [m.name for m in META_TOOLS]
+        assert names(environment) == META_NAMES
         assert environment.call("tf_my_tool", {}).is_error  # not a tool: the SDK's own "unknown tool" answer
     finally:
         environment.registry.close()
@@ -39,9 +44,7 @@ def test_active_tools_are_added_after_the_meta_tools(env: Env) -> None:
     env.add_tool()
     env.add_tool(name="second_tool", promote=False)
     listed = names(env)
-    assert listed[: len(META_TOOLS)] == [m.name for m in META_TOOLS] and listed[len(META_TOOLS) :] == [
-        "tf_my_tool"
-    ]
+    assert listed[: len(META_NAMES)] == META_NAMES and listed[len(META_NAMES) :] == ["tf_my_tool"]
 
 
 def test_a_direct_tool_has_the_manifest_schema_and_a_cleaned_description(env: Env) -> None:
@@ -73,7 +76,7 @@ def test_a_direct_call_of_a_tool_that_is_not_exposed_is_refused(env: Env) -> Non
 def test_tools_that_take_files_or_are_not_stateless_are_not_exposed(env: Env) -> None:
     env.add_tool(name="files_tool", permissions={"network": [], "secrets": [], "inputs": True})
     env.add_tool(name="plain_tool")
-    assert names(env)[len(META_TOOLS) :] == ["tf_plain_tool"]
+    assert names(env)[len(META_NAMES) :] == ["tf_plain_tool"]
     assert "there is no tool" in error_text(env.call("tf_files_tool", {}))
     assert (
         data(env.call("forge_run", {"name": "files_tool", "args": {}}))["ok"] is True
@@ -92,11 +95,11 @@ def test_a_tool_cannot_be_named_like_a_meta_tool_or_a_direct_tool() -> None:
 def test_a_deprecated_or_quarantined_tool_disappears(env: Env) -> None:
     env.add_tool()
     env.add_tool(version="0.2.0", parent_version="0.1.0")
-    assert names(env)[len(META_TOOLS) :] == ["tf_my_tool"]
+    assert names(env)[len(META_NAMES) :] == ["tf_my_tool"]
     record = env.registry.active_version("my_tool")
     with env.registry.db.transaction() as conn:
         conn.execute("UPDATE versions SET status = ? WHERE id = ?", (lifecycle.QUARANTINED, record.id))
-    assert names(env)[len(META_TOOLS) :] == []
+    assert names(env)[len(META_NAMES) :] == []
     assert "there is no tool" in error_text(env.call("tf_my_tool", {}))
 
 

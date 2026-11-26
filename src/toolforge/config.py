@@ -71,6 +71,12 @@ class Settings(BaseSettings):
     session_max_s: int = Field(3600, ge=1)
     max_sessions: int = Field(4, ge=1, le=64)
 
+    # Declarative tool chains (S02, optional, docs/CHAINS.md): off by default. A chain runs at most `chain_max_steps` verified, network-free,
+    # secret-free tools in order (the hard ceiling is 8, `services.chain.HARD_MAX_STEPS`), and no step may start after `chain_total_seconds`.
+    chain_enabled: bool = False
+    chain_max_steps: int = Field(5, ge=1, le=8)
+    chain_total_seconds: int = Field(60, ge=1, le=600)
+
     # Network listeners; a token is required on any non-loopback host (enforced in P07 and P17)
     server_host: str = "127.0.0.1"
     server_port: int = Field(8765, ge=1, le=65535)

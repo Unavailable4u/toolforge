@@ -30,13 +30,13 @@ patch" in the same patch. Never tick a box for work that is not in the patch. Bo
 | [ ] | P20 | Guided tour | P19 |
 | [ ] | P21 | Hardening pass and release | P01 to P20 |
 | [x] | S01 | Optional: portable bundles and signed provenance | P12 |
-| [ ] | S02 | Optional: declarative tool chains | P09, P12 |
+| [x] | S02 | Optional: declarative tool chains | P09, P12 |
 
 Milestones (M0 to M7) and what can be dropped: `docs/guide/05-milestones.md`.
 
 ## Notes for the next patch
 
-Done: P01 (skeleton), P02 (package spec), P03 (registry), P04 (sandbox seam), P05 (execution contract and `run`), P06 (gates G1 to G4), P07 (MCP server v1), P08 (gate G6 and Blast Radius), P09 (approvals, egress, brokered secrets), P10 (independent challenger, gate G5), P11 (server-side builder), P12 (reuse ranking, self-repair, rollback), P13 (stateful sessions), P14a (runtime image, recipes, reference packs), P14b (browser plans and the GUI kit), S01 (optional: portable bundles and signed provenance).
+Done: P01 (skeleton), P02 (package spec), P03 (registry), P04 (sandbox seam), P05 (execution contract and `run`), P06 (gates G1 to G4), P07 (MCP server v1), P08 (gate G6 and Blast Radius), P09 (approvals, egress, brokered secrets), P10 (independent challenger, gate G5), P11 (server-side builder), P12 (reuse ranking, self-repair, rollback), P13 (stateful sessions), P14a (runtime image, recipes, reference packs), P14b (browser plans and the GUI kit), S01 (optional: portable bundles and signed provenance), S02 (optional: declarative tool chains).
 Next: P15 (Forge Attack Lab; needs P09 and P10). P16 (needs P11, P12, P14a and P14b) is unblocked too. Decisions and interfaces that later patches must respect:
 
 * P14b interfaces. `adapters/browser_plan.py` (`STEPS` and `LIMITS` are the one vocabulary; `parse_plan`, `validate_plan`, `template_args`, `render_plan`, `run_steps`, `host_of`, `PlanError`, `PlanFailure`);
@@ -60,6 +60,14 @@ Next: P15 (Forge Attack Lab; needs P09 and P10). P16 (needs P11, P12, P14a and P
   `tests/test_provenance_*.py` and `docs/PROVENANCE.md` in its checks.
 * S01 not run: exporting and importing a tool that was verified through real Docker containers, and `toolforge export csv_summary@1.0.0` itself (the CLI tests round-trip `word_count` through the stand-in
   sandbox with the real harness and the real MiniLocker ledger; every other test uses scripted gates). Not measured: behaviour on Windows without WSL2 (file modes cannot be enforced).
+* S02 interfaces (optional patch, applies on top of P14b). `services/chain.py`: `ChainRunner(settings, registry, runner, *, ledger_factory, clock=, new_id=).run(steps) -> ChainResult`, `parse_request`, `parse_ref`, `substitute`,
+  `HARD_MAX_STEPS` (8). `ToolRunner.run(..., chain_id=)` only adds `chain_id` to that call's `forge.call.started` / `forge.call.finished`. `server.tools`: `forge_chain` is the last entry of `META_TOOLS`, `OPTIONAL_TOOLS`,
+  `enabled_tools(settings)` (what a server offers), `chain_view(result)` (the fenced response), `ToolService.chain(steps)`; `register_tools(server, service, settings=None)` skips an optional tool whose setting is off. Settings
+  `chain_enabled` (false), `chain_max_steps` (5, 1 to 8), `chain_total_seconds` (60). `fences.result_text` is public. Page: `docs/CHAINS.md`. Test rig: `tests/chain_helpers.py` (`ChainRig`, `step`, `ref`).
+* S02 behaviour. Tools are pinned at the chain's start (a version deprecated in the middle still runs, a quarantined one fails its step); every step is checked for eligibility (no network, secrets, files, browser, session; passed G2; stored blob)
+  before step 1; a failing step stops the chain and the rest are `skipped`. The chain ledger (`ledgers/chains/<id>.jsonl`) holds ids, statuses and output hashes only. Anything that lists tools must use `enabled_tools(settings)`, not `META_TOOLS`,
+  to know what a server offers. There is no per-caller rate limiter in the repository, so none was changed (see DEVIATIONS).
+* S02 not run: a chain of real tools in real containers (all chain tests use a scripted sandbox over the real registry and runner), `pytest -m docker`, and P16's chain-versus-separate-calls comparison (P16 is not built; "not measured").
 * P14a interfaces. `images/runtime/{Dockerfile,requirements.txt}`; `cli_images.py` (`build_image`, `build_command`, `TAG`, `register`) behind `toolforge images build [--tag] [--context] [--no-cache]`; `config.RUNTIME_IMAGE` (`toolforge-runtime:py312`, now the default `runtime_image`);
   `sandbox/image_info.py::image_id(image)` (never raises, never pulls); `ToolRunner(..., image_id=)`; `forge.call.started` and `forge.session.opened` carry `image` and `image_id`; `forge_runtime_info` has `image_id`. `adapters.RECIPE_KINDS` (the one list; P14b adds `browser-plan`)
   and four recipes (`sql`, `file-format`, `http-api`, `game-state`), each with a complete example package in fenced blocks (` ```json manifest `, ` ```python tool.py `, ` ```python tests/... `) that `tests/test_recipes.py` runs through the real gates. Seven packs in `examples/toolpacks/`.

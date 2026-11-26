@@ -93,7 +93,11 @@ supports remote servers takes the URL `http://127.0.0.1:8765/mcp` and the header
 | `forge_session_close` | `session_id: str` | `closed`, the number of `steps`, the sandbox audit result and a one-line Blast Radius `verdict` | P13 |
 | `forge_session_rewind` | `session_id: str`, `step: int` | the `step` it is at now and the `steps_available` that can still be restored | P13 |
 | `forge_session_list` | `session_id: str | null` | open sessions by public name (tool, steps, time left); with your `session_id`, its `steps_available` too | P13 |
+| `forge_chain` | `steps: [{id, tool, args}]` | per step `status` (`ok`, `failed`, `skipped`), `run_id`, `duration_ms` and the fenced `output` or `error`; `stop_reason`, `flags` | S02 |
 <!-- tools:end -->
+
+`forge_chain` is an optional tool: the server offers it only when `TOOLFORGE_CHAIN_ENABLED=true`. It runs a short fixed list of active
+tools in one call (no network, no secrets, no files); see [chains](CHAINS.md).
 
 There is no tool that approves, promotes, releases, rolls back or deletes anything. Those are operator actions.
 

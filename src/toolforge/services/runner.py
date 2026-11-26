@@ -413,6 +413,7 @@ class ToolRunner:
         session_id: str | None = None,
         allow_status: Sequence[str] = ("active",),
         record_stats: bool = True,
+        chain_id: str | None = None,
     ) -> CallResult:
         """Call a registered tool. `name_or_version` is a tool name (its active version), `name@version`, or a `VersionRecord`.
 
@@ -422,7 +423,8 @@ class ToolRunner:
         recorded, because the tool is not at fault. For a stateless tool `session_id` is only recorded with the call. A session tool
         (P13) opens a session when `session_id` is None and runs in the caller's session otherwise (`services/sessions.py`); its
         `CallResult.session_id` is the id to pass next. `record_stats=False` keeps the call out of the version's statistics (the
-        live smoke run of an approval uses it).
+        live smoke run of an approval uses it). `chain_id` (S02) is the id of the chain this call is a step of: it is only written to the
+        call's `forge.call.started` and `forge.call.finished` events, and changes nothing else. A session tool is never a step of a chain.
         """
         target = self._resolve(name_or_version, tuple(allow_status))
         kind = target.manifest.get("kind", "stateless")
@@ -430,7 +432,7 @@ class ToolRunner:
             return self.sessions.call(target, args, files, session_id, record_stats)
         if kind == browser_plan.PLAN_KIND:
             return self._execute_plan(target, args, files, session_id, record_stats)
-        return self._execute(target, args, files, session_id, record_stats)
+        return self._execute(target, args, files, session_id, record_stats, chain_id)
 
     def run_unverified(
         self, package: ToolPackage, args: dict, *, files: Mapping[str, bytes] | None = None
@@ -695,6 +697,7 @@ class ToolRunner:
         files: Mapping[str, bytes] | None,
         session_id: str | None,
         record_stats: bool = True,
+        chain_id: str | None = None,
     ) -> CallResult:
         call_id = self._new_id()
         manifest = target.manifest
@@ -721,6 +724,8 @@ class ToolRunner:
         nonce = secrets.token_hex(16)
         ledger_path = self._ledger_path(target, call_id)
         session = _plain(session_id, 80) if session_id is not None else None
+        # Only a step of a chain carries a chain id, in its started and finished events.
+        chain = {"chain_id": _plain(chain_id, 40)} if chain_id is not None else {}
         spec = SandboxSpec(
             image=self._settings.runtime_image,
             network=hosts
@@ -752,9 +757,10 @@ class ToolRunner:
                 "secrets": list(brokered),
                 "image": spec.image,
                 "image_id": self._image_id(spec.image),  # None is "not read", never a guess
+                **chain,
             },
         )
-        finished: dict[str, Any] = {"call_id": call_id, "ok": False, "error_type": "Aborted"}
+        finished: dict[str, Any] = {"call_id": call_id, "ok": False, "error_type": "Aborted", **chain}
         try:
             outcome, duration_ms, summary_info = self._in_sandbox(
                 spec, packed, request, attached, nonce, limits

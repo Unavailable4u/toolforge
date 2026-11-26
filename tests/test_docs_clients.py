@@ -42,6 +42,7 @@ def test_every_tool_has_a_summary_and_a_description_written_for_a_model() -> Non
             "forge_session_close": "P13",
             "forge_session_rewind": "P13",
             "forge_session_list": "P13",
+            "forge_chain": "S02",
         }
         assert tool.since == expected.get(tool.name, "P07"), tool.name
 

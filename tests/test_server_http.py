@@ -23,9 +23,10 @@ from mcp import Client, StdioServerParameters
 from server_helpers import make_env
 
 from toolforge.cli import main
+from toolforge.config import Settings
 from toolforge.errors import ConfigError
 from toolforge.server.app import HTTP_PATH, build_http_app, describe_listener
-from toolforge.server.tools import META_TOOLS
+from toolforge.server.tools import enabled_tools
 
 TOKEN = "t0ken-for-tests-only-0123456789abcdef"
 INITIALIZE = {
@@ -117,7 +118,7 @@ def test_the_tools_list_over_http_is_the_table(open_listener: Listener) -> None:
         async with Client(open_listener.url) as client:
             return [t.name for t in (await client.list_tools()).tools]
 
-    assert anyio.run(work) == [m.name for m in META_TOOLS]
+    assert anyio.run(work) == [m.name for m in enabled_tools(Settings(chain_enabled=False))]
 
 
 @pytest.mark.parametrize("host", ["evil.example", "127.0.0.1", "localhost.evil.example:1"])
@@ -209,7 +210,7 @@ def test_stdio_carries_only_protocol_messages(tmp_home: Path) -> None:
         async with Client(params) as client:
             return [t.name for t in (await client.list_tools()).tools]
 
-    assert anyio.run(work) == [m.name for m in META_TOOLS]
+    assert anyio.run(work) == [m.name for m in enabled_tools(Settings(chain_enabled=False))]
 
 
 def test_stdio_stdout_is_clean_when_the_input_is_closed(tmp_home: Path) -> None:

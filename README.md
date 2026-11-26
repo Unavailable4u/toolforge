@@ -61,6 +61,7 @@ verifies a tool, the operator runs `toolforge promote <name>@<version> --reason 
 configuration, and the security rules are in `docs/clients.md`. How tools are ranked, described, repaired and rolled back is in
 `docs/repair.md`.
 Handing a verified tool to another operator as a signed bundle (optional patch S01) is in `docs/PROVENANCE.md`.
+The optional `forge_chain` tool (off unless `TOOLFORGE_CHAIN_ENABLED=true`, see `docs/CHAINS.md`) runs a short fixed list of active tools in one call.
 
 <!-- tools:begin -->
 | Tool | Input | Returns | Since |
@@ -79,6 +80,7 @@ Handing a verified tool to another operator as a signed bundle (optional patch S
 | `forge_session_close` | `session_id: str` | `closed`, the number of `steps`, the sandbox audit result and a one-line Blast Radius `verdict` | P13 |
 | `forge_session_rewind` | `session_id: str`, `step: int` | the `step` it is at now and the `steps_available` that can still be restored | P13 |
 | `forge_session_list` | `session_id: str | null` | open sessions by public name (tool, steps, time left); with your `session_id`, its `steps_available` too | P13 |
+| `forge_chain` | `steps: [{id, tool, args}]` | per step `status` (`ok`, `failed`, `skipped`), `run_id`, `duration_ms` and the fenced `output` or `error`; `stop_reason`, `flags` | S02 |
 <!-- tools:end -->
 
 ## Working on this repository with an AI agent

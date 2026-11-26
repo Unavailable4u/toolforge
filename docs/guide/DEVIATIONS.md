@@ -2,6 +2,24 @@
 
 Where reality differed from the guide, newest first: what the guide said, what is true, what was done.
 
+* 2026-11-26 (S02): the guide puts the module in `src/toolforge/core/chain.py`. It is `src/toolforge/services/chain.py`, next to the runner it calls (see the
+  P05, P06 and P11 entries on `core/`). It also names `ToolRunner.run(record, args)` alone; the runner gained one optional keyword, `chain_id`, which only adds
+  `chain_id` to that call's `forge.call.started` and `forge.call.finished` events (nothing else changes, and a call without it writes exactly what it wrote before).
+* 2026-11-26 (S02): the guide says "the existing per-caller rate limit counts every step". The repository has no per-caller rate limiter (`llm_max_rpm` limits calls
+  to a model, not to tools). Nothing was invented: each step is an ordinary `ToolRunner.run`, so a limiter added there later counts every step, and
+  `docs/CHAINS.md` says none exists today. The test proves one sandbox and one pair of call events per step instead.
+* 2026-11-26 (S02): the guide says `chain_enabled=false` "makes `forge_chain` return a clear disabled error and the tool is not listed". Both hold, at two levels:
+  the server does not register or list the tool (a client that calls it anyway gets the SDK's unknown-tool error), and `ToolService.chain` /
+  `ChainRunner.run` raise `chain_disabled` with a hint. `META_TOOLS` still holds `forge_chain` (the table, the docs and the drift tests describe every tool the server
+  can offer), and `tools.enabled_tools(settings)` is the list a server offers. Four existing tests that pinned the exact tool list (`test_server_tools`,
+  `test_server_direct`, `test_server_http`, and the "since" map in `test_docs_clients`) now use `enabled_tools(Settings(chain_enabled=False))` / know `forge_chain` is `S02`.
+* 2026-11-26 (S02): the guide says "if any step is flagged, `possible_injection` is true on the chain". The chain response follows `forge_run`: `flags` holds
+  `"possible_injection"` (and each step has its own `flags`). `fences.result_text` was made public (it was `_result_text`) so `chain_view` can use it.
+* 2026-11-26 (S02): a setting `chain_total_seconds` (default 60, 1 to 600) was added next to `chain_enabled` and `chain_max_steps` (default 5, 1 to 8), as the guide's
+  text implies; all three are in `.env.example`.
+* 2026-11-26 (S02): `tests/chain_helpers.py` (the rig) needed one change to run against this repository: its loose input schema now lists its properties with
+  `additionalProperties: false`, because the package rules (P02) refuse `additionalProperties: true`. The chain module had one bug found by the tests: `_shown(key, 20)`
+  asked `textsafety.sanitize` for a limit below its minimum (28) and raised `ValueError` for any step with an unknown field instead of a `bad_chain` refusal; the limit is now raised to the minimum.
 * 2026-11-27 (P14b): the guide's pitfall holds: MiniLocker's browser worker cannot read an element by selector, only the page's visible text (cut at 12000 characters) and at most 40 interactive elements. So `extract_text` works on the visible text (`after`/`before` anchors, `lines`, `contains`, `skip`, `limit`) and `extract_attr` on that element list (`href`, `label`, `name`, `type`; matched on the label), not on a selector. `click` and `type` selectors are resolved by Playwright, so the recipe says "CSS, as Playwright reads it". The worker uses an input's current value as its label, so `extract_attr` skips password fields.
 * 2026-11-27 (P14b): `{{arg}}` templating is narrower than the guide's wording: only a `goto` path, query or fragment (percent-encoded, `.` and `..` segments refused), `type.text`, and `after`, `before`, `contains`, `match`. Never a host or a selector, because a templated selector would let an argument choose the element, including a password field. "Never carry credentials" is enforced by a plan declaring no secrets and by a heuristic on the names in selectors and templated arguments; a heuristic cannot know what an element is.
 * 2026-11-27 (P14b): the guide did not give the package layout. `entrypoint` is `plan.json`; the other files may only be `fixtures/*.json` and `.md`/`.txt` notes; no `secrets`, `inputs`, `requirements` or example `files`; at least one network host; there is no `tests/` folder (the examples are the tests); the result is `{"fields": {...}}`. The issue code `permissions.browser.reserved` is gone; `permissions.browser.kind` and the `plan.*` codes replace it.
