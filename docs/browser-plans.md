@@ -99,5 +99,9 @@ The ledger of a call holds `forge.call.started` (with `kind`, the number of step
 
 The tests in `tests/` drive the validator, gates, adapter and run path with recorded pages and a scripted browser.
 `tests/docker/test_browser_plans.py` needs Docker, the browser image and the network, and says why it skips when Docker or the
-image is missing. While this was built, **no real page was loaded through the egress proxy**, and MiniLocker's own browser image was
-not built: the container audit, the proxy's block and the reference pack's gates ran with a stand-in image (`PROGRESS.md`).
+image is missing.
+
+On 2026-11-27 the operator ran these on their own machine, with the images built there: the golden packs (this pack among them), the
+browser container audit and the proxy's block passed, and a real page was loaded through the egress proxy. The test that loads it
+then failed on an assertion about the page's wording. The assertion was corrected afterwards, and **the corrected test has not been
+run**, so its later checks (cleanup, the proxy's record and the call ledger) have not been confirmed against a real page.

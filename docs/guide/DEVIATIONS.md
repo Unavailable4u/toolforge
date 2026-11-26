@@ -2,6 +2,9 @@
 
 Where reality differed from the guide, newest first: what the guide said, what is true, what was done.
 
+* 2026-11-27 (Fix P14b): the real-page test expected `https://example.com` to show "Example Domain". The visible text the browser
+  container read on 2026-11-27 starts "This domain is for use in documentation examples" and does not hold that heading. The plan
+  itself worked. The test now asks only for the word "domain" in the text; no source code changed.
 * 2026-11-26 (S02): the guide puts the module in `src/toolforge/core/chain.py`. It is `src/toolforge/services/chain.py`, next to the runner it calls (see the
   P05, P06 and P11 entries on `core/`). It also names `ToolRunner.run(record, args)` alone; the runner gained one optional keyword, `chain_id`, which only adds
   `chain_id` to that call's `forge.call.started` and `forge.call.finished` events (nothing else changes, and a call without it writes exactly what it wrote before).
