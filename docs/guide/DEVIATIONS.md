@@ -2,6 +2,21 @@
 
 Where reality differed from the guide, newest first: what the guide said, what is true, what was done.
 
+* 2026-11-26 (S01): the guide's attestation has `signer` (a fingerprint) and `signature` only. It also carries `signer_key`, the signer's public key, and the
+  signature covers it. Without it a receiver could not check a stranger's signature at all, and the guide wants an unknown signer to be allowed and shown as
+  "unsigned by anyone you trust". Trust is still decided only by the receiver's own key list, by the fingerprint computed from the key's bytes.
+* 2026-11-26 (S01): the guide says the signature is over "the canonical JSON of the rest". `attestation.json` must also be that canonical JSON byte for byte
+  (`attestation_not_canonical` otherwise). A signature over the parsed fields alone verified a file that had a repeated key, `"schema": true` or `1.0`, which
+  another JSON reader could read differently; this was found by probing the first version of `attest.parse` and is now a test.
+* 2026-11-26 (S01): `keys.py` created the `keys/` folder with the default mode when `keys trust` ran before `keys init`, although the module promises a 0700 folder.
+  `_folder` now creates and tightens it to 0700 (the private key file was 0600 either way).
+* 2026-11-26 (S01): scope additions the guide does not list: `src/toolforge/cli_provenance.py` (the commands, registered through `cli.REGISTRARS`),
+  `ProvenanceError` in `errors.py`, six names added to `server.tools.OPERATOR_ONLY` (`export_bundle`, `import_bundle`, `load_private_key`, `init_keys`,
+  `trust_key`, `untrust_key`), `tests/provenance_helpers.py`, `tests/test_docs_provenance.py` (the error-code table is checked against the code), and the
+  README pointer. `cryptography==50.0.2` is a runtime dependency in `pyproject.toml` (the standard library cannot sign); it was already installed with `mcp`.
+* 2026-11-26 (S01): the guide's `verify_events` is reached as `toolforge.ledger.verify_chain`, which calls MiniLocker's `verify_events` through the
+  existing import boundary, so `provenance/` imports no MiniLocker module itself and `tests/test_import_boundary.py` is unchanged. A consequence worth knowing:
+  `verify-bundle` needs the MiniLocker submodule, though not Docker.
 * 2026-11-23 (P11): the guide puts the builder in `src/toolforge/core/builder.py`. It is `src/toolforge/services/builder.py`, next to the forge it
   calls (see the P05 and P06 entries on `core/`). The prompt is `src/toolforge/llm/prompts/builder.md`, as the guide says.
 * 2026-11-23 (P11): scope additions the guide does not list: `src/toolforge/cli_build.py` (the command, registered through `cli.REGISTRARS`),

@@ -14,6 +14,7 @@ dependencies = [
     "pydantic-settings==2.16.3",
     "jsonschema==4.26.0",
     "mcp==2.3.0",
+    "cryptography==50.0.2",  # Ed25519 signatures for portable bundles (S01); the standard library cannot sign
 ]
 
 [project.optional-dependencies]

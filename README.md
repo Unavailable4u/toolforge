@@ -60,6 +60,7 @@ the live demo (see `docs/guide/04-optional-resources.md`; every resource listed 
 verifies a tool, the operator runs `toolforge promote <name>@<version> --reason "..."` to make it active. Setup, client
 configuration, and the security rules are in `docs/clients.md`. How tools are ranked, described, repaired and rolled back is in
 `docs/repair.md`.
+Handing a verified tool to another operator as a signed bundle (optional patch S01) is in `docs/PROVENANCE.md`.
 
 <!-- tools:begin -->
 | Tool | Input | Returns | Since |

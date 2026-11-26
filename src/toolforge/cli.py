@@ -19,6 +19,7 @@ from toolforge import cli_health as health_commands
 from toolforge import cli_images as images_commands
 from toolforge import cli_package as package_commands
 from toolforge import cli_promote as promote_commands
+from toolforge import cli_provenance as provenance_commands
 from toolforge import cli_registry as registry_commands
 from toolforge import cli_release as release_commands
 from toolforge import cli_report as report_commands
@@ -58,6 +59,7 @@ REGISTRARS: list[Callable[[argparse._SubParsersAction], None]] = [
     images_commands.register,
     package_commands.register,
     promote_commands.register,
+    provenance_commands.register,
     registry_commands.register,
     release_commands.register,
     report_commands.register,

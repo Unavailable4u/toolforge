@@ -29,16 +29,28 @@ patch" in the same patch. Never tick a box for work that is not in the patch. Bo
 | [ ] | P19 | Landing site | P18 |
 | [ ] | P20 | Guided tour | P19 |
 | [ ] | P21 | Hardening pass and release | P01 to P20 |
-| [ ] | S01 | Optional: portable bundles and signed provenance | P12 |
+| [x] | S01 | Optional: portable bundles and signed provenance | P12 |
 | [ ] | S02 | Optional: declarative tool chains | P09, P12 |
 
 Milestones (M0 to M7) and what can be dropped: `docs/guide/05-milestones.md`.
 
 ## Notes for the next patch
 
-Done: P01 (skeleton), P02 (package spec), P03 (registry), P04 (sandbox seam), P05 (execution contract and `run`), P06 (gates G1 to G4), P07 (MCP server v1), P08 (gate G6 and Blast Radius), P09 (approvals, egress, brokered secrets), P10 (independent challenger, gate G5), P11 (server-side builder), P12 (reuse ranking, self-repair, rollback), P13 (stateful sessions), P14a (runtime image, recipes, reference packs).
+Done: P01 (skeleton), P02 (package spec), P03 (registry), P04 (sandbox seam), P05 (execution contract and `run`), P06 (gates G1 to G4), P07 (MCP server v1), P08 (gate G6 and Blast Radius), P09 (approvals, egress, brokered secrets), P10 (independent challenger, gate G5), P11 (server-side builder), P12 (reuse ranking, self-repair, rollback), P13 (stateful sessions), P14a (runtime image, recipes, reference packs), S01 (optional: portable bundles and signed provenance).
 Next: P14b (browser plans and the GUI kit; needs P14a); P16 needs P11, P12, P14a and P14b. Decisions and interfaces that later patches must respect:
 
+* S01 interfaces. `provenance/keys.py` (`init_keys`, `load_private_key`, `own_public_key`, `trust_key`, `untrust_key`, `list_trusted`, `trust_of`, `fingerprint`, `parse_public_key`),
+  `provenance/attest.py` (`Attestation`, `canonical_json`, `gate_statements`, `sign`, `parse`, `check_signature`), `provenance/bundle.py` (`read_members`, `verify_members`,
+  `verify_bundle`, `import_bundle(path, settings, registry, submit)`, `export_bundle(settings, registry, ref, out, force=, now=, image_lookup=)`, `VerifiedBundle`, `Signer`,
+  `ImportResult`, `ExportResult`, `MEMBER_LIMITS`), `cli_provenance.py` (`toolforge keys init|show|trust|untrust|list`, `export`, `verify-bundle`, `import`), `ProvenanceError` in `errors.py`.
+  `server.tools.OPERATOR_ONLY` names the S01 functions. Page: `docs/PROVENANCE.md` (its error table is checked against the code). Test helpers: `tests/provenance_helpers.py` builds real
+  verified versions with real ledger files and scripted gates, and re-packs or re-signs bundles so one check at a time can be made to fail.
+* S01 behaviour. A signature never changes a status, skips a gate or promotes: import is `Forge.submit_package` with `created_by = "import:<fingerprint>"`. The bundle's gate outcomes are shown as
+  information only. `attestation.json` must be canonical JSON byte for byte. An unknown signer verifies and is shown as "unsigned by anyone you trust". There is no key expiry or revocation, only
+  `keys untrust` on each receiver; the ledger is a hash chain, not a witness, so a signer can write a consistent history that never ran (all of this is in `docs/PROVENANCE.md`). P21 should include
+  `tests/test_provenance_*.py` and `docs/PROVENANCE.md` in its checks.
+* S01 not run: exporting and importing a tool that was verified through real Docker containers, and `toolforge export csv_summary@1.0.0` itself (the CLI tests round-trip `word_count` through the stand-in
+  sandbox with the real harness and the real MiniLocker ledger; every other test uses scripted gates). Not measured: behaviour on Windows without WSL2 (file modes cannot be enforced).
 * P14a interfaces. `images/runtime/{Dockerfile,requirements.txt}`; `cli_images.py` (`build_image`, `build_command`, `TAG`, `register`) behind `toolforge images build [--tag] [--context] [--no-cache]`; `config.RUNTIME_IMAGE` (`toolforge-runtime:py312`, now the default `runtime_image`);
   `sandbox/image_info.py::image_id(image)` (never raises, never pulls); `ToolRunner(..., image_id=)`; `forge.call.started` and `forge.session.opened` carry `image` and `image_id`; `forge_runtime_info` has `image_id`. `adapters.RECIPE_KINDS` (the one list; P14b adds `browser-plan`)
   and four recipes (`sql`, `file-format`, `http-api`, `game-state`), each with a complete example package in fenced blocks (` ```json manifest `, ` ```python tool.py `, ` ```python tests/... `) that `tests/test_recipes.py` runs through the real gates. Seven packs in `examples/toolpacks/`.

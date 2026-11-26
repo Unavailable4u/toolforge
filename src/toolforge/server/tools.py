@@ -235,7 +235,20 @@ META_TOOLS: tuple[MetaTool, ...] = (
 )
 
 # Functions that this package may never import. Each patch that adds an operator action extends this and its test.
-OPERATOR_ONLY: tuple[str, ...] = ("promote", "release", "quarantine", "decide", "rollback")
+OPERATOR_ONLY: tuple[str, ...] = (
+    "promote",
+    "release",
+    "quarantine",
+    "decide",
+    "rollback",
+    # S01 (portable bundles): signing, trusting keys and importing a bundle are the operator's alone.
+    "export_bundle",
+    "import_bundle",
+    "load_private_key",
+    "init_keys",
+    "trust_key",
+    "untrust_key",
+)
 
 STATUS_NEXT_STEP: dict[str, str] = {
     lifecycle.SUBMITTED: "verification has not finished; submit the same package again to resume it",

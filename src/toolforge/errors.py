@@ -66,6 +66,16 @@ class GateFailed(ToolForgeError):
     code = "gate_failed"
 
 
+class ProvenanceError(ToolForgeError):
+    """A signing key, a bundle or an attestation is missing, damaged, unsafe or does not verify (optional patch S01).
+
+    Every failure sets its own `code` (`key_*`, `bundle_*`, `ledger_*`, `signature_invalid`, ...), and the message never contains text
+    taken from a bundle that has not been cleaned.
+    """
+
+    code = "provenance_error"
+
+
 class Busy(ToolForgeError):
     """The server is working at its limit and a caller waited its turn in vain. Retrying later is the right response."""
 
