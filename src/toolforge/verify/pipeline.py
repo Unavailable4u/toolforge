@@ -45,6 +45,7 @@ if TYPE_CHECKING:
     from toolforge.registry import Registry
     from toolforge.registry.db import VersionRecord
     from toolforge.sandbox.base import SandboxRunner
+    from toolforge.sandbox.browser_adapter import PlanRunner
     from toolforge.verify.g7_approval import ApprovalGate
 
 log = logging.getLogger(__name__)
@@ -234,6 +235,8 @@ class GateContext:
     )
     # Argument objects that crashed, timed out or killed the sandbox in an earlier version of this tool (P12). G3 runs them as an extra input.
     regression_cases: tuple[dict[str, Any], ...] = ()
+    # The browser gate G6 audits for a browser plan (P14b). None: there is none here, so that audit is skipped.
+    browser: PlanRunner | None = None
 
     def remaining_s(self) -> float:
         return max(0.0, self.deadline - self.clock())
@@ -456,9 +459,16 @@ class Pipeline:
         fuzz_inputs: int | None = None,
         approval: ApprovalGate | None = None,
         brokers: Callable[[], Any] | None = None,
+        browser: PlanRunner | None = None,
     ) -> None:
         self._settings = settings
         self._runner = runner
+        if browser is None:
+            from toolforge.sandbox.browser_adapter import browser_for
+
+            # MiniLocker's browser for MiniLocker's sandbox, else none.
+            browser = browser_for(runner, settings)
+        self._browser = browser
         self._registry = registry
         self._ledger_factory = ledger_factory
         self._clock = clock
@@ -509,6 +519,7 @@ class Pipeline:
             blob=None,
             original_sha=self._code_sha(package, record),
             regression_cases=tuple(regression_cases),
+            browser=self._browser,
         )
         if record is not None and registry is not None:
             self._start(registry, record, ledger, package, submitted_by, run_id)

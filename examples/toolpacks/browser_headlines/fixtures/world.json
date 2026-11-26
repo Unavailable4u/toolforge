@@ -1,0 +1,11 @@
+{
+  "url": "https://headlines.example.org/section/world",
+  "title": "World - Example Headlines",
+  "text": "Example Headlines\nWorld\nTop stories\nHarbour bridge reopens after repairs\nRiver festival draws record crowd\nNew night bus links two valley towns\nMore sections\nScience",
+  "elements": [
+    {"tag": "a", "type": "", "label": "Science", "href": "https://headlines.example.org/section/science", "name": ""},
+    {"tag": "a", "type": "", "label": "Read the story: Harbour bridge", "href": "https://headlines.example.org/story/101", "name": ""},
+    {"tag": "a", "type": "", "label": "Read the story: River festival", "href": "https://headlines.example.org/story/102", "name": ""},
+    {"tag": "a", "type": "", "label": "Read the story: Night bus", "href": "https://headlines.example.org/story/103", "name": ""}
+  ]
+}

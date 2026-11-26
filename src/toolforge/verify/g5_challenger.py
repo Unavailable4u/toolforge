@@ -38,7 +38,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_valida
 from toolforge import schemacheck, textsafety
 from toolforge.errors import LLMBadReply, LLMRefused, LLMUnavailable
 from toolforge.llm import client as llm
-from toolforge.verify import checks_dsl, sandboxrun, schemagen
+from toolforge.verify import checks_dsl, plan_gates, sandboxrun, schemagen
 from toolforge.verify.checks_dsl import Check
 from toolforge.verify.pipeline import GateContext, GateResult, clip, failed, passed, skipped
 from toolforge.verify.sandboxrun import ItemOutcome
@@ -222,6 +222,11 @@ class ChallengerGate:
     # -- entry point ----------------------------------------------------------------------------------------------------
 
     def run(self, ctx: GateContext) -> GateResult:
+        if plan_gates.is_plan(ctx):
+            return skipped(
+                "the challenger does not review browser plans in this release, so G5 did not run",
+                ["a browser plan stops at verified_basic; the operator decides on it with that in view"],
+            )
         if ctx.blob is None:
             return failed(
                 "there is no built package to test",

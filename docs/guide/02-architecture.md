@@ -111,6 +111,14 @@ the versions it replaced (each of those hears `forge.deprecated`).
 
 An automatic quarantine is the existing `forge.quarantined`, actor `forge`, with the failure counts as its reason.
 
+### Browser plan calls (P14b)
+
+A call of a `browser_plan` writes the same two events. `started` adds `kind`, `steps` (how many) and carries the browser image in
+`image` and `image_id`; its `network` is the plan's hosts. While the browser runs, the chain holds `sandbox.created` (`kind`:
+`browser`, with its hardening), one `egress.<decision>` per request the proxy saw (`source`: `browser`) or `forge.egress.unobserved`
+when the proxy log could not be read, and `sandbox.destroyed`. `finished` adds `steps_run`, `pages`, `egress_attempts`,
+`egress_blocked` and `real_secret_audit: not_measured`. Page text and extracted values never enter the ledger.
+
 ### Verification events (P06)
 
 One ledger file per run, `ledgers/<tool>@<version>/verify-<run id>.jsonl`. `forge.submitted` carries the `code_sha`, who submitted, a
@@ -163,14 +171,14 @@ src/toolforge/
   __init__.py  cli.py  config.py  errors.py
   models/       package.py  results.py  events.py
   registry/     db.py  store.py  search.py  lifecycle.py
-  sandbox/      base.py  fake.py  minilocker_runner.py  harness.py  assets/harness.py  images.py
+  sandbox/      base.py  fake.py  minilocker_runner.py  browser_adapter.py  harness.py  assets/harness.py  images.py
   sdk.py        (written into every sandbox as toolforge_sdk.py)
-  verify/       pipeline.py  g1_static.py  g2_build.py  g3_selftest.py  g4_fuzz.py  g5_challenger.py  g6_containment.py
+  verify/       pipeline.py  g1_static.py  g2_build.py  g3_selftest.py  g4_fuzz.py  g5_challenger.py  g6_containment.py  plan_gates.py
   services/     runner.py  forge.py  approvals.py  sessions.py  repair.py  builder.py  chain.py (optional, S02)
   llm/          client.py  prompts/
   server/       app.py  tools.py  fences.py  signature.py  budget.py   (signature and budget: P12)
   report/       blast_radius.py
-  adapters/     recipes/  (markdown recipes the agent can fetch)
+  adapters/     recipes/  (markdown recipes the agent can fetch)  browser_plan.py  browser_fixture.py
   attacks/      catalog.py  runner.py
   dashboard/    app.py  static/
   provenance/   keys.py  attest.py  bundle.py     (optional, S01)

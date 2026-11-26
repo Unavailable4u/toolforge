@@ -11,6 +11,7 @@ from collections.abc import Callable
 from typing import Any
 
 import pytest
+from plan_helpers import plan_payload
 
 from toolforge.config import Settings
 from toolforge.models import package as package_module
@@ -58,6 +59,18 @@ def _limit(key: str, value: Any) -> Mutation:
 
 def _file(path: str, text: Any) -> Mutation:
     return lambda p: p["files"].update({path: text})
+
+
+def _plan(*changes: Mutation) -> Mutation:
+    """Replace the base package with a valid browser plan, then apply `changes` to that."""
+
+    def mutate(payload: Payload) -> None:
+        payload.clear()
+        payload.update(plan_payload())
+        for change in changes:
+            change(payload)
+
+    return mutate
 
 
 def _example(**changes: Any) -> Mutation:
@@ -191,7 +204,28 @@ ERROR_CASES: list[tuple[str, str, Mutation]] = [
     ("secrets_too_many", "permissions.secrets.too_many", _permission("secrets", [f"s{i}" for i in range(5)])),
     ("secrets_uppercase", "permissions.secrets.invalid_name", _permission("secrets", ["API_KEY"])),
     ("secrets_too_long", "permissions.secrets.invalid_name", _permission("secrets", ["a" * 25])),
-    ("browser_reserved", "permissions.browser.reserved", _permission("browser", True)),
+    ("browser_on_a_stateless_tool", "permissions.browser.kind", _permission("browser", True)),
+    ("plan_without_browser", "permissions.browser.kind", _plan(_permission("browser", False))),
+    ("plan_entrypoint_python", "plan.entrypoint", _plan(_set("entrypoint", "tool.py:run"))),
+    ("plan_with_secret", "plan.permissions", _plan(_permission("secrets", ["github"]))),
+    ("plan_with_inputs", "plan.permissions", _plan(_permission("inputs", True))),
+    (
+        "plan_example_with_files",
+        "plan.permissions",
+        _plan(lambda p: _m(p)["examples"][0].update({"files": {"inputs/a.txt": "a"}})),
+    ),
+    ("plan_requirements", "plan.requirements", _plan(_set("requirements", ["requests==2.0.0"]))),
+    ("plan_with_code", "plan.files", _plan(_file("tool.py", "def run(args):\n    return 1\n"))),
+    ("plan_with_tests", "plan.files", _plan(_file("tests/test_tool.py", "def test_a():\n    assert 1\n"))),
+    ("plan_stray_data", "plan.files", _plan(_file("data.json", "{}"))),
+    ("plan_missing", "plan.missing", _plan(lambda p: p["files"].pop("plan.json"))),
+    ("plan_not_json", "plan.invalid", _plan(_file("plan.json", "{"))),
+    ("plan_unknown_step", "plan.invalid", _plan(_file("plan.json", '{"steps": [{"step": "evaluate"}]}'))),
+    (
+        "plan_other_host",
+        "plan.invalid",
+        _plan(_permission("network", ["elsewhere.example.org"])),
+    ),
     ("timeout_zero", "limits.timeout_s.range", _limit("timeout_s", 0)),
     ("timeout_high", "limits.timeout_s.range", _limit("timeout_s", 121)),
     ("memory_low", "limits.memory_mb.range", _limit("memory_mb", 63)),
@@ -288,6 +322,12 @@ def test_breaking_one_rule_reports_its_code(
     for issue in report.issues:
         assert issue.path and issue.message and issue.hint, "every issue says where, what and what to change"
     assert not (ISSUE_CODES[code].severity != "error")
+
+
+def test_a_plan_without_hosts_is_told_both_things(settings: Settings) -> None:
+    payload = plan_payload(permissions={"network": [], "browser": True})
+    report = _validate(payload, settings)
+    assert {issue.code for issue in report.issues} == {"plan.permissions", "plan.invalid"}
 
 
 def test_package_too_large_uses_the_setting(make_payload: Callable[[], Payload]) -> None:

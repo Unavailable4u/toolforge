@@ -193,7 +193,13 @@ def activate(registry: Registry) -> Callable[[VersionRecord], VersionRecord]:
 
 # Docker tests that run tools use the default runtime image, which is built locally (`toolforge images build`, P14a) and never pulled.
 # When it is not built they skip with the command that builds it. These modules choose their own image or build it themselves.
-_OWN_IMAGE = {"test_minilocker_runner", "test_egress", "test_server_runtime_probe", "test_runtime_image"}
+_OWN_IMAGE = {
+    "test_minilocker_runner",
+    "test_egress",
+    "test_server_runtime_probe",
+    "test_runtime_image",
+    "test_browser_plans",
+}
 
 
 @lru_cache(maxsize=1)

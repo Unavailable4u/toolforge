@@ -12,8 +12,15 @@ from importlib import resources
 
 RECIPE_NAME = re.compile(r"[a-z0-9][a-z0-9-]{0,40}")
 
-# Every recipe `forge_recipe` serves. P14 adds `browser-plan` with the browser plans.
-RECIPE_KINDS: tuple[str, ...] = ("file-format", "game-state", "http-api", "package-format", "sql")
+# Every recipe `forge_recipe` serves.
+RECIPE_KINDS: tuple[str, ...] = (
+    "browser-plan",
+    "file-format",
+    "game-state",
+    "http-api",
+    "package-format",
+    "sql",
+)
 
 
 def _folder():

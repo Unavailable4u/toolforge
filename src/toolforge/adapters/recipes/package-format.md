@@ -23,10 +23,10 @@ Unknown fields are rejected. Fields you can leave out have their default.
 | `description` | 20 to 600 characters, plain text on one line. Say what the tool does, not what you want the reader to do. |
 | `when_to_use` | Optional, up to 300 characters: when an agent should pick this tool. |
 | `entrypoint` | `<file>.py:<function>`, a top-level plain `def` (not `async`, not in a class). |
-| `kind` | `stateless` (each call is separate) or `session` (a tool that keeps `state` between calls; read the `game-state` recipe). |
+| `kind` | `stateless` (each call is separate), `session` (a tool that keeps `state` between calls; read the `game-state` recipe) or `browser_plan` (a tool that reads a web page and has no code; read the `browser-plan` recipe, because the rules for files, code and tests below do not apply to it). |
 | `input_schema` | JSON Schema (Draft 2020-12), top level `type: object` and `additionalProperties: false`. Only local `$ref` (starting with `#`). At most 6 levels of nesting and 40 properties. |
 | `output_schema` | Optional, same validity rules. |
-| `permissions` | `network` (bare host names, at most 8), `secrets` (names only, at most 4), `inputs` (true if the caller provides files), `browser` (must be false). A tool that asks for network or secrets needs a human operator's approval before it can be used. |
+| `permissions` | `network` (bare host names, at most 8), `secrets` (names only, at most 4), `inputs` (true if the caller provides files), `browser` (true only for a `browser_plan`). A tool that asks for network or secrets needs a human operator's approval before it can be used. |
 | `limits` | `timeout_s` 1 to 120, `memory_mb` 64 to 512, `output_kb` 1 to 256. |
 | `requirements` | At most 10, each exactly `name==version`, installed with `--no-deps`: list the whole dependency closure. |
 | `examples` | 1 to 5. Each `input` must satisfy `input_schema`; `files` keys start with `inputs/`; `output` is what the tool should return. |
@@ -52,8 +52,9 @@ def run(args: dict) -> object:
 Tools run in an image with Python 3.12 and a fixed set of pinned libraries already installed: `duckdb`, `PyYAML`, `python-dateutil`,
 `beautifulsoup4`, `lxml`, `pillow`, `numpy`, `gymnasium`, `python-chess`, `jsonschema` and `tabulate`. Call `forge_runtime_info` for the
 exact versions and the image id. Use them directly; list in `requirements` only a library that is not in the image. Recipes for the
-common kinds of tool: `sql` (databases), `file-format` (parsing a file or binary format), `http-api` (calling a web API) and
-`game-state` (games and anything that remembers state between calls). Read the one that fits before you write the package.
+common kinds of tool: `sql` (databases), `file-format` (parsing a file or binary format), `http-api` (calling a web API),
+`game-state` (games and anything that remembers state between calls) and `browser-plan` (reading a web page). Read the one that
+fits before you write the package.
 
 ## The tests
 

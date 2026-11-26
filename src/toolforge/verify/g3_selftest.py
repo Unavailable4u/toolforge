@@ -28,7 +28,7 @@ import json
 import math
 from typing import Any
 
-from toolforge.verify import sandboxrun
+from toolforge.verify import plan_gates, sandboxrun
 from toolforge.verify.pipeline import GateContext, GateResult, clip, failed, passed
 from toolforge.verify.sandboxrun import TestReport
 
@@ -67,6 +67,9 @@ class SelfTestGate:
     OPTIONS: tuple[str, ...] = ()
 
     def run(self, ctx: GateContext) -> GateResult:
+        if plan_gates.is_plan(ctx):
+            # a browser plan is data: it runs against recorded pages, with no sandbox
+            return plan_gates.dry_run(ctx)
         if ctx.blob is None:
             return failed(
                 "there is no built package to test",

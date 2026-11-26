@@ -1,0 +1,108 @@
+{
+  "description": "Return the headline lines and story links shown on one section page of headlines.example.org, a placeholder host that does not exist.",
+  "entrypoint": "plan.json",
+  "examples": [
+    {
+      "input": {
+        "section": "world"
+      },
+      "output": {
+        "fields": {
+          "headlines": [
+            "Harbour bridge reopens after repairs",
+            "River festival draws record crowd",
+            "New night bus links two valley towns"
+          ],
+          "links": [
+            "https://headlines.example.org/story/101",
+            "https://headlines.example.org/story/102",
+            "https://headlines.example.org/story/103"
+          ]
+        }
+      }
+    },
+    {
+      "input": {
+        "section": "science"
+      },
+      "output": {
+        "fields": {
+          "headlines": [
+            "Students map the moss on one hundred old walls",
+            "A quieter pump design passes its first trial"
+          ],
+          "links": [
+            "https://headlines.example.org/story/201",
+            "https://headlines.example.org/story/202"
+          ]
+        }
+      }
+    }
+  ],
+  "input_schema": {
+    "additionalProperties": false,
+    "properties": {
+      "section": {
+        "enum": [
+          "world",
+          "science"
+        ],
+        "type": "string"
+      }
+    },
+    "required": [
+      "section"
+    ],
+    "type": "object"
+  },
+  "kind": "browser_plan",
+  "limits": {
+    "memory_mb": 256,
+    "output_kb": 64,
+    "timeout_s": 60
+  },
+  "name": "browser_headlines",
+  "output_schema": {
+    "additionalProperties": false,
+    "properties": {
+      "fields": {
+        "additionalProperties": false,
+        "properties": {
+          "headlines": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "links": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "headlines",
+          "links"
+        ],
+        "type": "object"
+      }
+    },
+    "required": [
+      "fields"
+    ],
+    "type": "object"
+  },
+  "parent_version": null,
+  "permissions": {
+    "browser": true,
+    "inputs": false,
+    "network": [
+      "headlines.example.org"
+    ],
+    "secrets": []
+  },
+  "requirements": [],
+  "version": "1.0.0",
+  "when_to_use": "A template for a headlines plan. Point the host, the anchors and the recorded pages at a real site before relying on it."
+}

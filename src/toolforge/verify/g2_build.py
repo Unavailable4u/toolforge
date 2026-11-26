@@ -21,6 +21,7 @@ from typing import Any
 
 from toolforge import textsafety
 from toolforge.errors import ToolNotRunnable
+from toolforge.models.package import entry_file
 from toolforge.services.runner import repack_blob
 from toolforge.verify import sandboxrun
 from toolforge.verify.pipeline import GateContext, GateResult, clip, failed, passed
@@ -152,7 +153,7 @@ class BuildGate:
                 metrics={"requirements": len(requirements)},
                 detail={"pip_output_tail": tail},
             )
-        entry = ctx.package.manifest.entrypoint.rpartition(":")[0]
+        entry = entry_file(ctx.package.manifest.entrypoint)
         if entry not in names:
             return failed(
                 f"the entrypoint file {clip(entry, 60)} is not in the built package",

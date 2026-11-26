@@ -29,7 +29,7 @@ URL and pin are the ones in the commands under P04 ("Adding the submodule"). The
   library. Do not install MiniLocker's FastAPI, boto3 or moto requirements for ToolForge.
 * **Small seam.** Only the modules in `ALLOWED_IMPORTERS` may `import minilocker`: `sandbox/_ml_path.py`,
   `sandbox/minilocker_runner.py`, `ledger.py` and `textsafety.py` (P04), plus `report/blast_radius.py` (P08) and
-  `sandbox/browser_adapter.py` (P14) when those patches add them. A test (`tests/test_import_boundary.py`, P04) fails if
+  `sandbox/browser_adapter.py` (P14b), added by those patches. A test (`tests/test_import_boundary.py`, P04) fails if
   any other module imports it. Everything else talks to the
   `SandboxRunner` protocol, which also has a pure-Python `FakeRunner` for unit tests.
 * Nothing from MiniLocker is copied into this repository. If MiniLocker needs a change, change it in its own
@@ -51,7 +51,7 @@ URL and pin are the ones in the commands under P04 ("Adding the submodule"). The
 | Tamper-evident history | `Ledger`, `verify_events`, `read_events` (`minilocker.ledger.chain`) | `Ledger(task_id, path=None).append(actor, type, payload)` hash-chains events; `verify_events(events)` returns `(ok, message)`. It neither creates the parent directory nor forces a write to disk, and a damaged file raises a bare `json` error on load; `toolforge.ledger.ToolforgeLedger(path, task_id)` adds the directory, an `fsync` after each append, a lock for threads and a `LedgerError`. |
 | The report | `build_report(task_id, events, read_error=None)` and `render_html(report)` (`minilocker.ledger.report`) | Nine dimensions measured from ledger events. A dimension with nothing behind it says "not measured". |
 | Untrusted text handling | `sanitize`, `scan`, `fence` (`minilocker.policy.injection`) | `sanitize` strips invisible Unicode, `scan` scores instruction-like text, `fence` wraps text in a random-nonce marker. Early warning, not a security boundary. ToolForge uses `sanitize` and `scan` from here when MiniLocker is importable, but writes its own `fence` (`toolforge.textsafety`): MiniLocker's header calls the text "untrusted web content", which is untrue for tool output. Without MiniLocker `scan` says `measured: false`, never a score of zero. |
-| Browser for tools that need a web page | `BrowserSandbox` (`minilocker.sandbox.browser`) | `BrowserSandbox(egress=None, image=None, ...)`, `.call(action, params, timeout_s)`, `.destroy()`, `BrowserUnavailable`, `image_present()`. Read the actions in `browser_worker.py` before use. |
+| Browser for tools that need a web page | `BrowserSandbox` (`minilocker.sandbox.browser`) | `BrowserSandbox(egress=None, image=None, ...)`, `.call(action, params, timeout_s)`, `.hardening()`, `.destroy()`, `.name`, `.ip`, `BrowserUnavailable`, `image_present()`, `BROWSER_IMAGE`, `BUILD_HINT`. Actions: `ping`, `goto`, `back`, `click`, `type`, `extract`, `screenshot`; replies carry the page's visible text and up to 40 interactive elements, never a read by selector. Used only by `sandbox/browser_adapter.py` (see [../browser-plans.md](../browser-plans.md)). |
 
 Before writing the adapter, open and read these files at the pinned commit. Do not rely on this table alone:
 `sandbox/docker_provider.py`, `sandbox/snapshot.py`, `sandbox/measure.py`, `egress/manager.py`, `agent/watch.py`,

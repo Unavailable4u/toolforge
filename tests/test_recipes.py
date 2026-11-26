@@ -1,8 +1,9 @@
 """The recipes `forge_recipe` serves (P14a): the registry matches the files, each fits the size cap, and every complete example
 package in a recipe is built and run through the real gates, so a recipe cannot teach a package that no longer passes.
 
-A recipe shows a package as fenced blocks: ```json manifest, ```python tool.py and ```python tests/test_<name>.py. The blocks that follow
-one manifest, up to the next manifest, are that package's files.
+A recipe shows a package as fenced blocks: ```json manifest, ```python tool.py and ```python tests/test_<name>.py (a browser plan has
+```json plan.json and ```json fixtures/<name>.json instead). The blocks that follow one manifest, up to the next manifest, are that
+package's files.
 """
 
 from __future__ import annotations
@@ -25,7 +26,7 @@ from toolforge.server.tools import MAX_RECIPE_CHARS
 from toolforge.verify.pipeline import Pipeline
 
 FENCE = re.compile(r"^```(json|python) (\S+)\n(.*?)\n```$", re.DOTALL | re.MULTILINE)
-EXPECTED = {"file-format", "game-state", "http-api", "package-format", "sql"}
+EXPECTED = {"browser-plan", "file-format", "game-state", "http-api", "package-format", "sql"}
 
 
 def packages(text: str) -> list[dict]:
@@ -33,7 +34,7 @@ def packages(text: str) -> list[dict]:
     for language, label, body in FENCE.findall(text):
         if language == "json" and label == "manifest":
             found.append({"manifest": json.loads(body), "files": {}})
-        elif found and language == "python":
+        elif found:
             found[-1]["files"][label] = body + "\n"
     return found
 
@@ -56,7 +57,7 @@ def test_a_recipe_is_served_within_the_size_cap_and_is_marked_as_operator_docume
 
 
 def test_the_new_recipes_each_show_a_complete_package() -> None:
-    for kind in ("sql", "file-format", "http-api", "game-state"):
+    for kind in ("sql", "file-format", "http-api", "game-state", "browser-plan"):
         assert len(packages(read_recipe(kind) or "")) == 1, kind
 
 
@@ -79,5 +80,28 @@ def test_the_package_in_a_recipe_passes_the_gates(kind: str, tmp_path: Path) -> 
             assert result.registered, result.text()
             assert all(gates[g] == "passed" for g in ("G1", "G3", "G4")), result.text()
             assert result.status in (lifecycle.VERIFIED_BASIC, lifecycle.PENDING_APPROVAL), result.text()
+    finally:
+        runner.cleanup()
+
+
+def test_the_plan_in_the_browser_recipe_passes_the_gates(tmp_path: Path) -> None:
+    """A plan has no code: G3 runs it against the recipe's recorded pages. With no browser here, G6 must say it measured nothing."""
+    (payload,) = packages(read_recipe("browser-plan") or "")
+    assert sorted(payload["files"]) == ["fixtures/search.json", "plan.json"]
+    settings = Settings(home=tmp_path / "home")
+    package = ToolPackage(payload["manifest"], payload["files"])
+    report = package.validate(settings)
+    assert report.ok, [f"{i.code} {i.path}: {i.message}" for i in report.issues]
+    runner = LocalRunner()
+    try:
+        with Registry(settings.home) as registry:
+            result = Pipeline(settings, runner, registry, ledger_factory=ToolforgeLedger, fuzz_inputs=6).run(
+                package, "test"
+            )
+            gates = {gate.id: gate.status for gate in result.gates}
+            assert result.registered, result.text()
+            assert all(gates[g] == "passed" for g in ("G1", "G2", "G3", "G4")), result.text()
+            assert gates["G5"] == gates["G6"] == "skipped", result.text()
+            assert result.status == lifecycle.PENDING_APPROVAL, result.text()
     finally:
         runner.cleanup()

@@ -29,7 +29,7 @@ from typing import Any
 
 from toolforge import schemacheck
 from toolforge.sandbox.base import AuditSummary, decoy_violations, decoys_planted, real_rootfs_changes
-from toolforge.verify import g4_fuzz, sandboxrun, schemagen
+from toolforge.verify import g4_fuzz, plan_gates, sandboxrun, schemagen
 from toolforge.verify.pipeline import GateContext, GateResult, clip, failed, passed, skipped
 
 BUDGET_S = 90
@@ -105,6 +105,9 @@ class ContainmentGate:
     budget_s = BUDGET_S + 90
 
     def run(self, ctx: GateContext) -> GateResult:
+        if plan_gates.is_plan(ctx):
+            # a browser plan runs in the browser sandbox, so that is what is audited
+            return plan_gates.audit(ctx)
         if ctx.blob is None:
             return failed(
                 "there is no built package to test",

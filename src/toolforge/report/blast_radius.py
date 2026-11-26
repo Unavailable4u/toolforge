@@ -64,7 +64,7 @@ DIMENSIONS = ("network", "filesystem", "secrets", "compute", "persistence")
 NOT_APPLICABLE = {
     "policy": "MiniLocker's shell policy scores an agent's commands; a tool call has none.",
     "time": "MiniLocker's wall clock needs a task start and end; ToolForge records durations per gate and per call instead.",
-    "browser": "tools do not drive a browser in this release.",
+    "browser": "MiniLocker's browser dimension describes an agent's browsing; a browser plan's connections are under network.",
     "artifacts": "a tool returns a result, not stored artifacts.",
 }
 FOOTER = (

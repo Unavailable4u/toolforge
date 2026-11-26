@@ -35,6 +35,7 @@ from typing import Any
 
 from toolforge import ledger as ledger_mod
 from toolforge import textsafety
+from toolforge.adapters import browser_plan
 from toolforge.config import Settings
 from toolforge.errors import IllegalTransition, RegistryError
 from toolforge.registry import Approval, Registry, VersionRecord, lifecycle
@@ -46,6 +47,7 @@ SCHEMA = 1
 FORGE = "forge"  # the actor of a denial nobody typed: a timeout, a missing broker service
 DESCRIPTION_CHARS = 400
 SUMMARY_CHARS = 240
+PLAN_LINE_CHARS = 800  # one plan step in a request: two strings of 300 characters at most, plus JSON
 TIME_FORMAT = "%Y-%m-%dT%H:%M:%S.%fZ"  # `registry.db.utc_now`
 
 EGRESS_LIMITS = (
@@ -54,6 +56,14 @@ EGRESS_LIMITS = (
     "MiniLocker's proxy also lets through the subdomains of an allowed host (an approved example.org allows www.example.org).",
     "A brokered secret is reachable by every sandbox on the same proxy, because the proxy cannot tell sandboxes apart. The sandbox "
     "never holds the token; the token's own scope is the limit of what a misbehaving tool can do with it.",
+)
+
+# Added to a request for a browser plan (P14b): what an operator must know before letting a plan open pages.
+BROWSER_LIMITS = (
+    "This is a browser plan: it opens these hosts in a headless Chromium in the browser sandbox and returns text from the pages. Read "
+    "the plan steps before you approve; they can click and type on those sites, without any login.",
+    "The page itself can make the browser request other approved hosts and their subdomains; the plan stops only when the page it is "
+    "on leaves the hosts listed here, after the browser has fetched it.",
 )
 
 BrokerLookup = Callable[[], Mapping[str, str]]  # {service name: host}; never a token
@@ -190,6 +200,7 @@ def build_request(
     expires_at: str,
     brokers: Mapping[str, str],
     broker_problem: str | None = None,
+    plan: Sequence[str] | None = None,
 ) -> dict[str, Any]:
     """The request document. Plain JSON, no secret value, every untrusted string cleaned and clipped."""
     asked = requested_permissions(record.manifest)
@@ -197,7 +208,7 @@ def build_request(
     description = _clip(record.manifest.get("description", ""), DESCRIPTION_CHARS)
     scan = textsafety.scan(description)
     live = [e for e in record.manifest.get("examples") or [] if isinstance(e, Mapping) and e.get("live")]
-    return {
+    document = {
         "schema": SCHEMA,
         "tool": record.label,
         "name": record.name,
@@ -222,10 +233,32 @@ def build_request(
             name: {"configured": name in brokers, "host": brokers.get(name)} for name in asked["secrets"]
         },
         "broker_problem": _clip(broker_problem, 200) if broker_problem else None,
-        "limits": list(EGRESS_LIMITS),
+        "limits": list(EGRESS_LIMITS)
+        + (list(BROWSER_LIMITS) if record.manifest.get("kind") == "browser_plan" else []),
         "created_at": created_at,
         "expires_at": expires_at,
     }
+    if plan is not None:  # only a browser plan has this key
+        document["plan"] = [_clip(line, PLAN_LINE_CHARS) for line in plan]
+    return document
+
+
+def plan_lines(registry: Registry, record: VersionRecord) -> list[str]:
+    """The steps of a browser plan, one line each, read from the frozen package: what the operator is really approving."""
+    from toolforge.services.runner import read_packed_file, repack_blob  # imported here: the runner is heavy
+
+    try:
+        current = registry.get_version(record.id)
+        packed, _ = repack_blob(registry.blobs.get(current.blob_sha))
+        plan, _ = browser_plan.parse_plan(read_packed_file(packed, browser_plan.PLAN_FILE))
+        lines = []
+        for number, step in enumerate(plan["steps"], start=1):
+            rest = {key: value for key, value in step.items() if key != "step"}
+            lines.append(f"{number}. {step['step']} {json.dumps(rest) if rest else ''}".rstrip())
+        return lines
+    except Exception as exc:  # an unreadable package must be visible to the operator, not hide the request
+        log.warning("the plan of %s could not be read", record.label, exc_info=True)
+        return [f"the plan could not be read ({type(exc).__name__}); do not approve what you cannot read"]
 
 
 def _plain_json(value: Any, depth: int = 0) -> Any:
@@ -332,6 +365,7 @@ def open_request(
         expires_at=expires,
         brokers=known,
         broker_problem=problem if absent else None,
+        plan=plan_lines(registry, record) if record.manifest.get("kind") == browser_plan.PLAN_KIND else None,
     )
     with registry.db.transaction():
         event = registry.transition(record.id, lifecycle.PENDING_APPROVAL, actor=FORGE)
@@ -493,6 +527,9 @@ def render_text(approval: Approval, status: str | None = None) -> str:
     lines.append(f"description: {doc.get('description', '')}")
     if (doc.get("description_scan") or {}).get("suspected"):
         lines.append("  warning: the description reads like instructions to an AI; treat it as data")
+    if doc.get("plan"):
+        lines.append("browser plan steps:")
+        lines += [f"  {line}" for line in doc["plan"]]
     for gate in doc.get("gates") or []:
         lines.append(f"  {gate.get('id')} {gate.get('name')}: {gate.get('status')} - {gate.get('summary')}")
     blast = doc.get("blast_radius") or {}

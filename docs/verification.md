@@ -200,6 +200,14 @@ Only a person can undo it, with `toolforge release`. Limit to know about: a call
 `/tmp/.aws/credentials`) to a tool that opens caller-chosen paths can trigger a quarantine, which is a denial of service. It is
 reversible by `release`, and the SDK confines file arguments to `/workspace/inputs`.
 
+## Browser plans (P14b)
+
+A package of kind `browser_plan` is data, so the gates judge it differently. G1 also validates the plan; G2 only freezes it; **G3** runs
+it against the package's recorded pages and compares the extracted fields; **G4** checks that no argument can move it to another host or
+change its steps or selectors; **G5 is skipped**, so a plan is never `verified`; **G6** audits the hardening of a browser container
+without running the plan, and is skipped where the browser image is not built. None of this needs a code sandbox or shows what the
+live site looks like. The full table is in [browser-plans.md](browser-plans.md).
+
 ## Blast Radius
 
 The Blast Radius of a version says what it was seen doing while it was watched, measured from the hash-chained ledgers and never

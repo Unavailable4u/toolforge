@@ -1,4 +1,5 @@
-"""The reference packs of P14a pass gates G1 to G4 and their own tests, against the REAL harness through a stand-in sandbox.
+"""The reference packs of P14a and P14b pass gates G1 to G4 and their own tests, against the REAL harness through a stand-in sandbox.
+A browser plan (P14b) has no code: its gates run in this process against its recorded pages.
 
 The stand-in is not isolated and runs the host's Python (trusted test code only), so a pack whose library is not installed here
 (`chess`, `gymnasium`) is skipped; the image has them, and `tests/docker/test_golden_packs.py` runs every pack inside it.
@@ -31,8 +32,10 @@ NEW_PACKS = [
     "chess_session",
     "blackjack_session",
     "frozenlake_session",
+    "browser_headlines",
 ]
-NETWORK_PACKS = {"http_json_fetch": ["api.github.com"]}
+NETWORK_PACKS = {"http_json_fetch": ["api.github.com"], "browser_headlines": ["headlines.example.org"]}
+PLAN_PACKS = {"browser_headlines"}
 SESSION_PACKS = {"chess_session", "blackjack_session", "frozenlake_session"}
 
 
@@ -66,7 +69,9 @@ def test_the_pack_passes_the_gates_that_can_run_without_a_container(
 def test_the_new_packs_have_the_kinds_and_permissions_the_guide_describes() -> None:
     for pack in NEW_PACKS:
         manifest = ToolPackage.from_dir(EXAMPLES / pack).manifest
-        assert manifest.kind == ("session" if pack in SESSION_PACKS else "stateless"), pack
+        kind = "browser_plan" if pack in PLAN_PACKS else "session" if pack in SESSION_PACKS else "stateless"
+        assert manifest.kind == kind, pack
+        assert manifest.permissions.browser is (pack in PLAN_PACKS), pack
         assert manifest.permissions.network == NETWORK_PACKS.get(pack, []), pack
         assert manifest.permissions.secrets == [] and manifest.requirements == [], pack
         assert manifest.permissions.inputs is (pack == "sqlite_query"), pack

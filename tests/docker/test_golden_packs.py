@@ -1,8 +1,12 @@
-"""The P14a reference packs against a real Docker daemon and the real runtime image (the 'golden' run).
+"""The P14a and P14b reference packs against a real Docker daemon and the real runtime image (the 'golden' run).
 
 Each pack goes through gates G1 to G4 and G6 in the image, offline, exactly as a submitted tool would. This is what the stand-in tests
 (`tests/test_reference_packs.py`) cannot show: that the libraries the packs import (`chess`, `gymnasium`, `sqlite3`) are in the image at
 the pinned versions, and that a session pack replays the same inside a container after a restart of its sandbox.
+
+A browser plan (`browser_headlines`) runs no code in that image. Its G3 and G4 run in this process against its recorded pages, and G6
+starts MiniLocker's browser container; the pack is skipped when the browser image is not built (`docs/browser-plans.md`). The pack's
+host does not exist, so nothing here opens a page.
 
 Skipped when no daemon answers or the image is not built (`toolforge images build`).
 """
@@ -17,6 +21,7 @@ import pytest
 from toolforge.config import Settings
 from toolforge.models.package import ToolPackage
 from toolforge.registry import lifecycle
+from toolforge.sandbox.browser_adapter import BrowserAdapter
 from toolforge.sandbox.minilocker_runner import MiniLockerRunner
 from toolforge.verify.pipeline import Pipeline
 
@@ -31,8 +36,10 @@ GOLDEN = [
     "chess_session",
     "blackjack_session",
     "frozenlake_session",
+    "browser_headlines",
 ]
-NEEDS_APPROVAL = {"http_json_fetch"}  # declares a network host
+NEEDS_APPROVAL = {"http_json_fetch", "browser_headlines"}  # they declare a network host
+PLAN_PACKS = {"browser_headlines"}
 
 
 @pytest.fixture
@@ -51,6 +58,10 @@ def sandbox(settings: Settings) -> Iterator[MiniLockerRunner]:
 def test_a_golden_pack_passes_the_gates_in_the_real_image(
     pack: str, settings: Settings, sandbox: MiniLockerRunner
 ) -> None:
+    if pack in PLAN_PACKS:
+        present, why = BrowserAdapter(settings).available()
+        if not present:
+            pytest.skip(why)
     report = Pipeline(settings, sandbox, None).run(ToolPackage.from_dir(PACKS / pack), "test")
     statuses = {gate.id: gate.status for gate in report.gates}
     assert [statuses[g] for g in ("G1", "G2", "G3", "G4", "G6")] == ["passed"] * 5, report.text()

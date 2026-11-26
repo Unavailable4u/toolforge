@@ -39,6 +39,7 @@ from pydantic import AfterValidator, BaseModel, ConfigDict, Field
 from pydantic import ValidationError as PydanticValidationError
 from pydantic_core import PydanticCustomError
 
+from toolforge.adapters import browser_plan
 from toolforge.errors import ValidationError as PackageInvalid
 from toolforge.models.results import Issue, ValidationReport
 from toolforge.packaging import (
@@ -78,7 +79,10 @@ SCHEMA_CHECK_ISOLATED = (
     True  # tests of other rules turn this off for speed; the shipped behaviour is isolated
 )
 DRAFT_2020_12 = "https://json-schema.org/draft/2020-12/schema"
-KINDS = ("stateless", "session")
+KINDS = ("stateless", "session", browser_plan.PLAN_KIND)
+# What a browser plan's package may hold besides the manifest: the plan, recorded pages and notes. Never code.
+_PLAN_NOTES = re.compile(r"(?:[^/]+/)*[^/]+\.(?:md|txt)")
+_PLAN_FIXTURE = re.compile(r"fixtures/[^/]+\.json")
 TEST_FILE = re.compile(r"tests/test_[^/]+\.py")
 
 
@@ -173,7 +177,7 @@ ISSUE_CODES: dict[str, CodeInfo] = {
     # Entrypoint and kind
     "entrypoint.format": CodeInfo(
         "error",
-        "`entrypoint` is `<relative .py path>:<function name>`.",
+        "`entrypoint` is `<relative .py path>:<function name>` (a browser plan uses `plan.json`).",
         "Write it as tool.py:run: a relative .py path, a colon, then the function name.",
     ),
     "entrypoint.missing_file": CodeInfo(
@@ -246,10 +250,41 @@ ISSUE_CODES: dict[str, CodeInfo] = {
         f"Each secret name matches `{SECRET_PATTERN}`.",
         "Use a lower-case name such as weather_key: letters, digits and underscores.",
     ),
-    "permissions.browser.reserved": CodeInfo(
+    "permissions.browser.kind": CodeInfo(
         "error",
-        "`permissions.browser` is false; it is reserved for a later release.",
-        "Set browser to false.",
+        "`permissions.browser` is true for `kind: browser_plan` and false for every other kind.",
+        "Set browser to true only in a browser plan.",
+    ),
+    # Browser plans (kind: browser_plan)
+    "plan.entrypoint": CodeInfo(
+        "error",
+        "A browser plan's `entrypoint` is `plan.json`.",
+        'Set "entrypoint": "plan.json".',
+    ),
+    "plan.permissions": CodeInfo(
+        "error",
+        "A browser plan declares at least one host in `permissions.network`, and no secrets, no input files and no example files.",
+        "List the hosts the plan opens; remove secrets, inputs and example files (a plan never carries a credential).",
+    ),
+    "plan.requirements": CodeInfo(
+        "error",
+        "A browser plan has no `requirements`.",
+        "Remove requirements: a plan is data, nothing is installed.",
+    ),
+    "plan.files": CodeInfo(
+        "error",
+        "A browser plan's files are `plan.json`, `fixtures/*.json` and notes (`.md`, `.txt`): no code.",
+        "Remove every other file; a plan is data, not code.",
+    ),
+    "plan.missing": CodeInfo(
+        "error",
+        "A browser plan has a `plan.json` file.",
+        "Add plan.json (forge_recipe 'browser-plan' shows one).",
+    ),
+    "plan.invalid": CodeInfo(
+        "error",
+        "`plan.json` uses only the documented steps and arguments, within their limits, and opens only declared hosts.",
+        "Fix the step the message names; forge_recipe 'browser-plan' lists the whole vocabulary.",
     ),
     "limits.timeout_s.range": CodeInfo(
         "error",
@@ -527,7 +562,16 @@ def entrypoint_problem(value: str) -> str | None:
     return None
 
 
+def entry_file(entrypoint: str) -> str:
+    """The package file an entrypoint names: `tool.py` for `tool.py:run`, `plan.json` for a browser plan."""
+    path, colon, _ = entrypoint.rpartition(":")
+    return path if colon else entrypoint
+
+
 def _check_entrypoint(value: str) -> str:
+    # Whether this kind may use it is checked with the rest of the plan rules.
+    if value == browser_plan.PLAN_FILE:
+        return value
     problem = entrypoint_problem(value)
     if problem:
         raise _err("entrypoint.format", f"entrypoint {_clip(value)} {problem}")
@@ -571,12 +615,6 @@ def _check_secret(value: str) -> str:
         raise _err(
             "permissions.secrets.invalid_name", f"secret name {_clip(value)} does not match {SECRET_PATTERN}"
         )
-    return value
-
-
-def _check_browser(value: bool) -> bool:
-    if value:
-        raise _err("permissions.browser.reserved", "permissions.browser must be false; it is reserved")
     return value
 
 
@@ -682,7 +720,7 @@ class Permissions(_Model):
         list[SecretName], AfterValidator(_max_items("permissions.secrets.too_many", "secrets", MAX_SECRETS))
     ] = Field(default_factory=list)
     inputs: bool = False
-    browser: Annotated[bool, AfterValidator(_check_browser)] = False
+    browser: bool = False
 
 
 class Limits(_Model):
@@ -989,6 +1027,7 @@ class ToolPackage:
         if manifest is not None:
             self._check_examples(out, manifest, schema_ok)
             self._check_relations(out, manifest)
+            self._check_kind_rules(out, manifest)
             self._check_advice(out, manifest)
 
     def _check_manifest(self, out: _Collector, limit: int) -> tuple[Manifest | None, int]:
@@ -1094,7 +1133,9 @@ class ToolPackage:
             for node in tree.body
             if isinstance(node, ast.FunctionDef) and node.name.startswith("test_")
         )
-        if count < MIN_TESTS:
+        is_plan = isinstance(self._raw, dict) and self._raw.get("kind") == browser_plan.PLAN_KIND
+        # A plan is data: its tests are the examples, run against recorded pages (G3).
+        if count < MIN_TESTS and not is_plan:
             out.add(
                 "tests.too_few",
                 "tests",
@@ -1103,6 +1144,8 @@ class ToolPackage:
         return trees
 
     def _check_entrypoint(self, out: _Collector, trees: dict[str, ast.Module | str]) -> None:
+        if isinstance(self._raw, dict) and self._raw.get("kind") == browser_plan.PLAN_KIND:
+            return  # a plan names no Python file; `_check_kind_rules` judges its entrypoint
         raw = self._raw.get("entrypoint") if isinstance(self._raw, dict) else None
         if not isinstance(raw, str) or entrypoint_problem(raw) is not None:
             return  # absent or malformed: the manifest rules above already reported it
@@ -1237,6 +1280,60 @@ class ToolPackage:
                 "parent_version",
                 f"parent_version {manifest.parent_version} must be lower than version {manifest.version}",
             )
+
+    def _check_kind_rules(self, out: _Collector, manifest: Manifest) -> None:
+        """The rules that tie `kind`, `permissions.browser`, the entrypoint and the files together."""
+        permissions = manifest.permissions
+        if manifest.kind != browser_plan.PLAN_KIND:
+            if permissions.browser:
+                out.add(
+                    "permissions.browser.kind",
+                    "permissions.browser",
+                    f"permissions.browser is true, but the kind is {manifest.kind}, not {browser_plan.PLAN_KIND}",
+                )
+            if manifest.entrypoint == browser_plan.PLAN_FILE:
+                out.add(
+                    "entrypoint.format", "entrypoint", "only a browser plan has plan.json as its entrypoint"
+                )
+            return
+        if not permissions.browser:
+            out.add(
+                "permissions.browser.kind",
+                "permissions.browser",
+                "a browser plan must set permissions.browser to true",
+            )
+        if manifest.entrypoint != browser_plan.PLAN_FILE:
+            out.add("plan.entrypoint", "entrypoint", "a browser plan's entrypoint is plan.json")
+        if not permissions.network:
+            out.add("plan.permissions", "permissions.network", "a browser plan must list the hosts it opens")
+        if permissions.secrets:
+            out.add("plan.permissions", "permissions.secrets", "a browser plan never gets a secret")
+        if permissions.inputs:
+            out.add("plan.permissions", "permissions.inputs", "a browser plan takes no input files")
+        if any(example.files for example in manifest.examples):
+            out.add("plan.permissions", "examples", "a browser plan's examples have no files")
+        if manifest.requirements:
+            out.add("plan.requirements", "requirements", "a browser plan installs nothing")
+        for path in sorted(str(p) for p in self.files):
+            if path != browser_plan.PLAN_FILE and not (
+                _PLAN_FIXTURE.fullmatch(path) or _PLAN_NOTES.fullmatch(path)
+            ):
+                out.add("plan.files", _safe(path), "this file does not belong in a browser plan")
+        text = self.files.get(browser_plan.PLAN_FILE)
+        if not isinstance(text, str):
+            if browser_plan.PLAN_FILE not in self._skipped:
+                out.add("plan.missing", browser_plan.PLAN_FILE, "the package has no plan.json")
+            return
+        plan, issues = browser_plan.parse_plan(text)
+        if plan is not None:
+            properties = manifest.input_schema.get("properties")
+            issues = browser_plan.validate_plan(
+                plan,
+                hosts=permissions.network,
+                arg_names=set(properties) if isinstance(properties, dict) else set(),
+            )
+        for issue in issues[:20]:
+            out.add("plan.invalid", _safe(issue.path), _safe(issue.message, 240))
 
     @staticmethod
     def _check_advice(out: _Collector, manifest: Manifest) -> None:

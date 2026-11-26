@@ -33,6 +33,7 @@ toolforge approvals deny <id> --reason "<why>"
 * for each secret, whether a broker service of that name is configured here,
 * the tool's description (cleaned and clipped; a warning when it reads like instructions to an AI), one line per gate, and the Blast
   Radius summary,
+* for a [browser plan](browser-plans.md), every step of the plan, read from the frozen package, and two extra limits,
 * how many `live` examples will run, the limits below, the `code_sha` and the expiry.
 
 The same document is written to `$TOOLFORGE_HOME/approvals/<id>.json` for other tools to read. The registry holds the state; the file

@@ -20,7 +20,7 @@ from __future__ import annotations
 from typing import Any
 
 from toolforge import schemacheck
-from toolforge.verify import sandboxrun, schemagen
+from toolforge.verify import plan_gates, sandboxrun, schemagen
 from toolforge.verify.pipeline import GateContext, GateResult, clip, failed, passed, skipped
 
 DEFAULT_INPUTS = 30
@@ -53,6 +53,9 @@ class FuzzGate:
         self.count = fuzz_inputs
 
     def run(self, ctx: GateContext) -> GateResult:
+        if plan_gates.is_plan(ctx):
+            # no code to fuzz: the plan's templates, hosts and step limits are checked instead
+            return plan_gates.limits(ctx)
         if ctx.blob is None:
             return failed(
                 "there is no built package to test",

@@ -1,0 +1,10 @@
+{
+  "url": "https://headlines.example.org/section/science",
+  "title": "Science - Example Headlines",
+  "text": "Example Headlines\nScience\nTop stories\nStudents map the moss on one hundred old walls\nA quieter pump design passes its first trial\nMore sections\nWorld",
+  "elements": [
+    {"tag": "a", "type": "", "label": "World", "href": "https://headlines.example.org/section/world", "name": ""},
+    {"tag": "a", "type": "", "label": "Read the story: Moss survey", "href": "https://headlines.example.org/story/201", "name": ""},
+    {"tag": "a", "type": "", "label": "Read the story: Quieter pump", "href": "https://headlines.example.org/story/202", "name": ""}
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "steps": [
+    {"step": "goto", "url": "https://headlines.example.org/section/{{section}}"},
+    {"step": "extract_text", "field": "headlines", "as": "lines", "after": "Top stories", "before": "More sections", "limit": 10},
+    {"step": "extract_attr", "field": "links", "attr": "href", "match": "read the story", "limit": 10}
+  ]
+}

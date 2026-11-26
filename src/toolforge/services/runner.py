@@ -24,6 +24,9 @@ Security properties, and the tests that prove them (`tests/test_tool_runner.py` 
   MiniLocker's placeholder, never a token, and a secret with no broker service is refused
   (`test_a_secret_without_a_broker_service_is_refused`). A package run straight from a folder never gets a network or a secret
   (`test_an_unverified_run_gets_no_network_and_no_secret`).
+* A browser plan (P14b) is data: it is validated again, rendered on the host (an argument that cannot be rendered safely is refused before
+  anything opens) and run in the browser sandbox, never in a code sandbox. It needs the same recorded approval as any network tool, and a
+  missing browser is the operator's problem (`SandboxUnavailable`), never a failed call (`tests/test_plan_run.py`).
 * A call that ends in a failure of the tool (`Crash`, `Timeout`, `SandboxCrashed`, `NoResult`, `PolicyViolation`) is captured with its error class
   and a shape fingerprint (P12, `services/failures.py`), and a failure rate over 40 percent in the last calls quarantines the active version
   (`tests/test_failures.py`). Only measured outcomes count; a handled `ToolError` does not.
@@ -58,15 +61,17 @@ from pydantic import BaseModel, ConfigDict, model_validator
 from pydantic import ValidationError as PydanticValidationError
 
 from toolforge import schemacheck, textsafety
+from toolforge.adapters import browser_plan
 from toolforge.config import Settings
-from toolforge.errors import RegistryError, SandboxError, ToolNotRunnable
+from toolforge.errors import RegistryError, SandboxError, SandboxUnavailable, ToolNotRunnable
 from toolforge.ledger import OPERATOR_LEDGER
-from toolforge.models.package import ToolPackage, json_problem
+from toolforge.models.package import ToolPackage, entry_file, json_problem
 from toolforge.models.results import CallError, CallResult
 from toolforge.packaging import check_rel_path
 from toolforge.registry import VersionRecord, lifecycle
 from toolforge.sandbox import harness
 from toolforge.sandbox.base import RunOutput, SandboxRunner, SandboxSpec, decoy_violations
+from toolforge.sandbox.browser_adapter import PlanOutcome, PlanRunner, browser_for
 from toolforge.sandbox.image_info import image_id as _image_id
 from toolforge.services import failures
 
@@ -209,6 +214,18 @@ def _member_name(name: str) -> str | None:
     if "\x00" in name or clean.startswith("/") or ".." in parts or clean == ".":
         return None
     return clean
+
+
+def read_packed_file(packed: bytes, name: str) -> str:
+    """The text of the package file `name` from what `repack_blob` returned. Nothing is extracted to disk."""
+    try:
+        with tarfile.open(fileobj=io.BytesIO(packed), mode="r:gz") as archive:
+            handle = archive.extractfile(f"pkg/{name}")
+            if handle is None:
+                raise _unusable(f"{name} is not a file in it")
+            return handle.read().decode("utf-8")
+    except (KeyError, UnicodeDecodeError):
+        raise _unusable(f"{name} cannot be read from it") from None
 
 
 def repack_blob(blob: bytes) -> tuple[bytes, list[str]]:
@@ -365,8 +382,11 @@ class ToolRunner:
         session_sleep: Callable[[float], None] | None = None,
         session_reaper: bool = True,
         image_id: Callable[[str], str | None] | None = None,
+        browser: PlanRunner | None = None,
     ) -> None:
         self._image_id = image_id or _image_id
+        # Runs browser plans (P14b). The default is MiniLocker's browser when `runner` is MiniLocker's sandbox, else none.
+        self._browser = browser if browser is not None else browser_for(runner, settings)
         self._broker_services = (
             broker_services  # `{service: host}` the operator configured; None asks MiniLocker when needed
         )
@@ -405,8 +425,11 @@ class ToolRunner:
         live smoke run of an approval uses it).
         """
         target = self._resolve(name_or_version, tuple(allow_status))
-        if target.manifest.get("kind", "stateless") == "session":
+        kind = target.manifest.get("kind", "stateless")
+        if kind == "session":
             return self.sessions.call(target, args, files, session_id, record_stats)
+        if kind == browser_plan.PLAN_KIND:
+            return self._execute_plan(target, args, files, session_id, record_stats)
         return self._execute(target, args, files, session_id, record_stats)
 
     def run_unverified(
@@ -505,6 +528,12 @@ class ToolRunner:
 
     @staticmethod
     def _require_stateless(target: _Target) -> None:
+        if target.manifest.get("kind") == browser_plan.PLAN_KIND:
+            raise ToolNotRunnable(
+                f"{target.label} is a browser plan, which opens web pages and so never runs straight from a folder",
+                code="unverified_no_permissions",
+                hint="submit it (`toolforge submit`) and have the operator approve it (`toolforge approvals`)",
+            )
         if target.manifest.get("kind", "stateless") != "stateless":
             raise ToolNotRunnable(
                 f"{target.label} is a session tool, and a package run straight from a folder keeps no sessions",
@@ -681,7 +710,7 @@ class ToolRunner:
             hosts, brokered = (), ()
         limits = self._limits(manifest)
         packed, package_files = repack_blob(target.load_blob())
-        entry = str(manifest["entrypoint"]).rpartition(":")[0]
+        entry = entry_file(str(manifest["entrypoint"]))
         if entry not in package_files:
             raise _unusable(f"the entrypoint file {_shown(entry)} is not in it")
 
@@ -789,6 +818,162 @@ class ToolRunner:
                 log.exception(
                     "call %s of %s finished but its ledger event could not be written", call_id, target.label
                 )
+
+    # -- a browser plan (P14b) ------------------------------------------------------------------------------------------
+
+    def _plan_steps(
+        self, manifest: dict[str, Any], packed: bytes, args: dict, hosts: tuple[str, ...]
+    ) -> list[dict[str, Any]]:
+        """The frozen plan, validated again against the approved hosts and rendered with `args`. Raises `PlanError` for the caller's
+        arguments and `ToolNotRunnable` for a plan that is not valid."""
+        plan, issues = browser_plan.parse_plan(read_packed_file(packed, browser_plan.PLAN_FILE))
+        if plan is not None:
+            properties = (manifest.get("input_schema") or {}).get("properties") or {}
+            issues = browser_plan.validate_plan(plan, hosts=hosts, arg_names=set(properties))
+        if issues or plan is None:
+            raise _unusable("its plan.json is not a valid plan for the hosts it declares")
+        return browser_plan.render_plan(plan, args, hosts)
+
+    def _execute_plan(
+        self,
+        target: _Target,
+        args: dict,
+        files: Mapping[str, bytes] | None,
+        session_id: str | None,
+        record_stats: bool,
+    ) -> CallResult:
+        call_id = self._new_id()
+        manifest = target.manifest
+        refusal = self._check_args(manifest, args) or self._check_files(manifest, files)
+        if refusal is not None:
+            return CallResult(ok=False, error=refusal, version=target.label, call_id=call_id)
+        hosts = tuple(_requested(manifest)["network"])
+        self._authorize(target, hosts, ())  # a plan has hosts and never a secret
+        packed, package_files = repack_blob(target.load_blob())
+        if browser_plan.PLAN_FILE not in package_files:
+            raise _unusable("it holds no plan.json")
+        try:
+            steps = self._plan_steps(manifest, packed, args, hosts)
+        except browser_plan.PlanError as exc:  # the caller's arguments: nothing opens, nothing is recorded
+            error = CallError(
+                type="InvalidArguments",
+                message=_plain(exc.message, MESSAGE_CAP),
+                hint="send plain, short values for the arguments the plan puts into a page",
+            )
+            return CallResult(ok=False, error=error, version=target.label, call_id=call_id)
+        browser = self._browser
+        ready, why = (False, "no browser sandbox is configured") if browser is None else browser.available()
+        if browser is None or not ready:
+            raise SandboxUnavailable(why, hint="see docs/browser-plans.md and run `toolforge doctor`")
+
+        limits = self._limits(manifest)
+        args_json = json.dumps(args, sort_keys=True).encode("utf-8")
+        ledger_path = self._ledger_path(target, call_id)
+        session = _plain(session_id, 80) if session_id is not None else None
+        self._append(
+            ledger_path,
+            call_id,
+            "forge.call.started",
+            {
+                "call_id": call_id,
+                "tool": target.label,
+                "kind": browser_plan.PLAN_KIND,
+                "code_sha": target.code_sha,
+                "unverified": target.unverified,
+                "session_id": session,
+                "args_sha256": hashlib.sha256(args_json).hexdigest(),
+                "args_bytes": len(args_json),
+                "files": 0,
+                "file_bytes": 0,
+                "limits": limits,
+                "network": list(hosts),
+                "secrets": [],
+                "image": browser.image,
+                "image_id": self._image_id(browser.image),
+                "steps": len(steps),
+            },
+        )
+        finished: dict[str, Any] = {"call_id": call_id, "ok": False, "error_type": "Aborted"}
+        try:
+            run = browser.run(
+                steps,
+                hosts=hosts,
+                timeout_s=limits["timeout_s"],
+                ledger_path=ledger_path,
+                label=f"call:{target.label}",
+            )
+            # Nothing ran: not the tool's fault, and nothing is held against it.
+            if run.error_type == "BrowserUnavailable":
+                raise SandboxUnavailable(_plain(run.message, MESSAGE_CAP), hint="run `toolforge doctor`")
+            outcome = self._from_plan(run, limits["output_kb"])
+            finished.update(
+                ok=outcome.ok,
+                error_type=outcome.error.type if outcome.error else None,
+                duration_ms=run.duration_ms,
+                truncated=outcome.truncated,
+                sandbox_timed_out=outcome.sandbox_timed_out,
+                result_bytes=outcome.result_bytes,
+                cleanup_ok=run.cleanup_ok,
+                steps_run=run.steps_run,
+                pages=len(run.pages),
+                egress_attempts=run.egress_attempts,
+                egress_blocked=run.blocked,
+                real_secret_audit="not_measured",
+            )
+            if record_stats:
+                self._record(target, outcome, run.duration_ms, session, call_id)
+                health = self._after_failure(target, outcome, args, {}, call_id)
+                if health:
+                    finished.update(health)
+            return CallResult(
+                ok=outcome.ok,
+                result=outcome.result,
+                error=outcome.error,
+                duration_ms=run.duration_ms,
+                version=target.label,
+                call_id=call_id,
+                sandbox_timed_out=outcome.sandbox_timed_out,
+            )
+        except BaseException as exc:
+            finished["error_type"] = type(exc).__name__
+            raise
+        finally:
+            try:
+                self._append(ledger_path, call_id, "forge.call.finished", finished)
+            except Exception:
+                log.exception(
+                    "call %s of %s finished but its ledger event could not be written", call_id, target.label
+                )
+
+    @staticmethod
+    def _from_plan(run: PlanOutcome, output_kb: int) -> _Outcome:
+        """A `PlanOutcome` as a call's outcome. A step or page that fails counts against the tool (the plan no longer fits the site)."""
+        if run.ok:
+            result = {"fields": run.fields or {}}
+            size = len(json.dumps(result, ensure_ascii=False).encode("utf-8", "replace"))
+            if size > output_kb * 1024:
+                return _failure(
+                    "OutputTooLarge",
+                    f"the result is {size // 1024} KB as JSON but limits.output_kb is {output_kb}",
+                    "extract less: use `limit` and `max_chars` on the extract steps",
+                )
+            return _Outcome(ok=True, result=result, result_bytes=size)
+        message = _plain(run.message, MESSAGE_CAP)  # it can quote the browser, which quotes the page
+        if run.error_type == "Timeout":
+            return _failure(
+                "Timeout",
+                message,
+                "the site may be slow; limits.timeout_s may be raised up to 120",
+                sandbox_timed_out=True,
+            )
+        if run.error_type == "SandboxCrashed":
+            return _failure("SandboxCrashed", message, "try the call again")
+        hint = (
+            "the page led to a host the plan is not approved for; a new version must declare it and be approved"
+            if run.error_type == "HostLeft"
+            else "the page may have changed; report it (forge_report_problem) so the plan can be updated"
+        )
+        return _failure("Crash", message, hint)
 
     def _in_sandbox(
         self,
@@ -1079,6 +1264,7 @@ __all__ = [
     "ToolRunner",
     "real_secret_audit",
     "parse_envelope",
+    "read_packed_file",
     "repack_blob",
     "sdk_source",
 ]

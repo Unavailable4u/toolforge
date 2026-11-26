@@ -21,7 +21,7 @@ patch" in the same patch. Never tick a box for work that is not in the patch. Bo
 | [x] | P12 | Reuse ranking, self-repair, rollback | P07, P11 |
 | [x] | P13 | Stateful sessions | P05, P08 |
 | [x] | P14a | Runtime image, recipes and reference packs (software use) | P13 |
-| [ ] | P14b | Browser plans and the GUI kit | P14a |
+| [x] | P14b | Browser plans and the GUI kit | P14a |
 | [ ] | P15 | Forge Attack Lab | P09, P10 |
 | [ ] | P16 | Benchmark harness | P11, P12, P14a, P14b |
 | [ ] | P17 | Dashboard | P09, P12, P13 |
@@ -36,8 +36,17 @@ Milestones (M0 to M7) and what can be dropped: `docs/guide/05-milestones.md`.
 
 ## Notes for the next patch
 
-Done: P01 (skeleton), P02 (package spec), P03 (registry), P04 (sandbox seam), P05 (execution contract and `run`), P06 (gates G1 to G4), P07 (MCP server v1), P08 (gate G6 and Blast Radius), P09 (approvals, egress, brokered secrets), P10 (independent challenger, gate G5), P11 (server-side builder), P12 (reuse ranking, self-repair, rollback), P13 (stateful sessions), P14a (runtime image, recipes, reference packs), S01 (optional: portable bundles and signed provenance).
-Next: P14b (browser plans and the GUI kit; needs P14a); P16 needs P11, P12, P14a and P14b. Decisions and interfaces that later patches must respect:
+Done: P01 (skeleton), P02 (package spec), P03 (registry), P04 (sandbox seam), P05 (execution contract and `run`), P06 (gates G1 to G4), P07 (MCP server v1), P08 (gate G6 and Blast Radius), P09 (approvals, egress, brokered secrets), P10 (independent challenger, gate G5), P11 (server-side builder), P12 (reuse ranking, self-repair, rollback), P13 (stateful sessions), P14a (runtime image, recipes, reference packs), P14b (browser plans and the GUI kit), S01 (optional: portable bundles and signed provenance).
+Next: P15 (Forge Attack Lab; needs P09 and P10). P16 (needs P11, P12, P14a and P14b) is unblocked too. Decisions and interfaces that later patches must respect:
+
+* P14b interfaces. `adapters/browser_plan.py` (`STEPS` and `LIMITS` are the one vocabulary; `parse_plan`, `validate_plan`, `template_args`, `render_plan`, `run_steps`, `host_of`, `PlanError`, `PlanFailure`);
+  `adapters/browser_fixture.py` (`load_fixtures`, `FixtureBrowser`); `sandbox/browser_adapter.py` (`PlanRunner`, `BrowserAdapter`, `PlanOutcome`, `BrowserAudit`, `browser_for`; in `ALLOWED_IMPORTERS`); `verify/plan_gates.py`
+  (`is_plan`, `dry_run`, `limits`, `audit`, `HOSTILE_VALUES`); `GateContext.browser`; `approvals.plan_lines`. Manifest: `kind: "browser_plan"`, `entrypoint: "plan.json"`, `permissions.browser: true`; the permission view has `browser` only when true.
+  Recipe `browser-plan` (in `RECIPE_KINDS`), pack `examples/toolpacks/browser_headlines/`, pages `docs/browser-plans.md` and `docs/gui-kit.md` (documentation only: no GUI kit exists).
+* P14b behaviour. Whatever lists, runs or measures tools now meets a kind with no code: G5 is skipped, so a plan is never `verified`; G6 is hardening only and skipped without the browser image; `toolforge run --dev-unverified` and direct tool exposure do not run plans.
+  P15 can attack the plan validator, the templates, page text and the proxy's host rules. P16's browser task needs the real browser image and a real site, or says it was not measured. P17 should show `kind` and the plan steps.
+* P14b not run here: loading a real page through the egress proxy; MiniLocker's own `minilocker-browser` image and the real runtime and proxy images (Docker Hub could not be reached, so the audit, the proxy block and the `browser_headlines` golden test were run with stand-in images made from this machine's files); every other `docker` test (the other golden packs among them); the `llm` tests.
+* P14b not handled (pick up where it fits): the builder prompt is written for Python tools and `forge_repair` without a `package` asks it even for a plan (refuse, or teach it); `toolforge doctor` does not check the browser image; a Blast Radius report calls blocked third-party page resources a violation; a skipped G6 needs a new version to be measured; no command shows a package's files; `output_path` files are still discarded; an exported plan's attestation records the code runtime image (if any), not the browser image.
 
 * S01 interfaces. `provenance/keys.py` (`init_keys`, `load_private_key`, `own_public_key`, `trust_key`, `untrust_key`, `list_trusted`, `trust_of`, `fingerprint`, `parse_public_key`),
   `provenance/attest.py` (`Attestation`, `canonical_json`, `gate_statements`, `sign`, `parse`, `check_signature`), `provenance/bundle.py` (`read_members`, `verify_members`,

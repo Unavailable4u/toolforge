@@ -15,6 +15,8 @@ tests/test_*.py         # at least three top-level `def test_*` functions across
 (other .py / .json / .txt / .md / .csv files, small)
 ```
 
+A [browser plan](#a-browser-plan-kind-browser_plan) is laid out differently: it holds data and no code.
+
 Files hold text only: valid UTF-8, no NUL characters. Paths are relative, use `/`, contain no `..`, no leading `/`, no backslash,
 and no segment starting with a dot. Allowed extensions: `.py .json .txt .md .csv`. At most 40 files, each at most 64 KB, and the
 whole package within `TOOLFORGE_MAX_PACKAGE_KB` (default 256). Symbolic links are refused. Folders such as `__pycache__` and
@@ -49,14 +51,14 @@ Unknown fields are rejected, so a typo is an error and not a silently ignored se
 | `parent_version` | Optional, same form. The version this one replaces; it must be lower than `version`. Whether it is the currently active version is checked when the package is submitted (a later patch). |
 | `description` | 20 to 600 characters after stripping. Plain text on one line: no control, invisible or line-separator characters. |
 | `when_to_use` | Optional, up to 300 characters, same text rules. Tells an agent when to pick this tool. |
-| `entrypoint` | `<relative .py path>:<function>`. The file must be in the package and parse, and the function must be defined at module top level with plain `def` (not `async`, not inside a class or an `if`, not an assignment). It is found by reading the syntax tree. |
-| `kind` | `stateless` or `session`. Sessions are not built yet: the value is accepted now and execution is refused until they exist (a later patch). |
+| `entrypoint` | `<relative .py path>:<function>`. The file must be in the package and parse, and the function must be defined at module top level with plain `def` (not `async`, not inside a class or an `if`, not an assignment). It is found by reading the syntax tree. For a browser plan it is exactly `plan.json`. |
+| `kind` | `stateless` (each call is separate), `session` (state is kept between calls, see [../sessions.md](../sessions.md)) or `browser_plan` (data that operates a web page, see below). |
 | `input_schema` | A valid JSON Schema (Draft 2020-12). Top level `type: object` and `additionalProperties: false`. No remote `$ref` (every reference starts with `#`) and every local reference must resolve. At most 6 levels of nested subschemas and 40 properties in total. |
 | `output_schema` | Optional. Same validity rules (it does not need the two top-level requirements). |
 | `permissions.network` | At most 8 bare host names: lower case, no scheme, port, path or wildcard, no IP address. Empty means no network. |
 | `permissions.secrets` | At most 4 names matching `^[a-z][a-z0-9_]{0,23}$`. Names only, never values. |
 | `permissions.inputs` | Whether the tool receives files the caller provides. |
-| `permissions.browser` | Reserved. Must be `false`. |
+| `permissions.browser` | `true` for a browser plan, `false` for every other kind. |
 | `limits.timeout_s` | 1 to 120 seconds. Unset means the setting default applies at run time. |
 | `limits.memory_mb` | 64 to 512. |
 | `limits.output_kb` | 1 to 256. |
@@ -76,6 +78,23 @@ Gate G3 runs the tests with ToolForge's own runner, not pytest, so the supported
 `unittest.TestCase` methods, plain `assert`, helper modules imported from `tests/`, and `import tool`. There are no fixtures, no
 `parametrize`, no `conftest.py` and no async tests. Each test runs in its own process with a 10 second limit. `docs/verification.md`
 describes every gate.
+
+A browser plan has no Python tests: its examples are its tests (next section).
+
+## A browser plan (`kind: "browser_plan"`)
+
+```
+manifest.json
+plan.json               # {"steps": [...]}
+fixtures/*.json         # recorded pages the examples run against
+(.md / .txt notes)
+```
+
+Beyond the rules above: `permissions.browser` is `true`, `entrypoint` is `plan.json`, `permissions.network` lists at least one host,
+there are no `secrets`, no `inputs`, no `requirements` and no example `files`, and no other file is allowed. The plan uses a closed
+vocabulary of steps; its rules, templates and fixture format are in the `browser-plan` recipe
+(`src/toolforge/adapters/recipes/browser-plan.md`), and what the host does with it is in [../browser-plans.md](../browser-plans.md).
+Its output is always `{"fields": {...}}`. The sections below about code, the sandbox and the harness do not apply to it.
 
 ## Validating
 
@@ -116,10 +135,10 @@ The `code` of an issue is stable and safe to match on. This table is generated f
 | `description.invalid_chars` | error | `description` is plain text: no control, invisible or line-separator characters. |
 | `when_to_use.length` | error | `when_to_use` is at most 300 characters after stripping. |
 | `when_to_use.invalid_chars` | error | `when_to_use` is plain text: no control, invisible or line-separator characters. |
-| `entrypoint.format` | error | `entrypoint` is `<relative .py path>:<function name>`. |
+| `entrypoint.format` | error | `entrypoint` is `<relative .py path>:<function name>` (a browser plan uses `plan.json`). |
 | `entrypoint.missing_file` | error | The entrypoint file is in the package. |
 | `entrypoint.missing_function` | error | The entrypoint file defines the function at module top level with plain `def` (not async, not an assignment). |
-| `kind.invalid` | error | `kind` is one of: stateless, session. |
+| `kind.invalid` | error | `kind` is one of: stateless, session, browser_plan. |
 | `schema.invalid` | error | `input_schema` and `output_schema` are valid JSON Schema (Draft 2020-12) and every local `$ref` resolves. |
 | `schema.not_object` | error | `input_schema` has top-level `type: object`. |
 | `schema.additional_properties` | error | `input_schema` sets top-level `additionalProperties: false`. |
@@ -131,7 +150,13 @@ The `code` of an issue is stable and safe to match on. This table is generated f
 | `permissions.network.invalid_host` | error | Each network host is a bare lower-case hostname: no scheme, port, path, wildcard or IP address. |
 | `permissions.secrets.too_many` | error | `permissions.secrets` lists at most 4 names. |
 | `permissions.secrets.invalid_name` | error | Each secret name matches `[a-z][a-z0-9_]{0,23}`. |
-| `permissions.browser.reserved` | error | `permissions.browser` is false; it is reserved for a later release. |
+| `permissions.browser.kind` | error | `permissions.browser` is true for `kind: browser_plan` and false for every other kind. |
+| `plan.entrypoint` | error | A browser plan's `entrypoint` is `plan.json`. |
+| `plan.permissions` | error | A browser plan declares at least one host in `permissions.network`, and no secrets, no input files and no example files. |
+| `plan.requirements` | error | A browser plan has no `requirements`. |
+| `plan.files` | error | A browser plan's files are `plan.json`, `fixtures/*.json` and notes (`.md`, `.txt`): no code. |
+| `plan.missing` | error | A browser plan has a `plan.json` file. |
+| `plan.invalid` | error | `plan.json` uses only the documented steps and arguments, within their limits, and opens only declared hosts. |
 | `limits.timeout_s.range` | error | `limits.timeout_s` is 1 to 120. |
 | `limits.memory_mb.range` | error | `limits.memory_mb` is 64 to 512. |
 | `limits.output_kb.range` | error | `limits.output_kb` is 1 to 256. |
@@ -192,7 +217,7 @@ the package, harness and SDK are put back before every call, so keep everything 
 | --- | --- |
 | `ToolError(message)` | A handled failure. The message goes to the caller, so say what to change. |
 | `input_path(name)` | The path of a file the caller provided, under `/workspace/inputs/`. `name` is relative to that folder, and one leading `inputs/` is accepted, so the `path` argument a caller sent (`inputs/data.csv`) works as given. Raises `ToolError` listing the files that were provided when there is no such file. |
-| `output_path(name)` | `/workspace/outputs/<name>`, with its folders created. Files written there are discarded with the sandbox: delivering them to the caller is patch P14. Return results through `run`. |
+| `output_path(name)` | `/workspace/outputs/<name>`, with its folders created. Files written there are discarded with the sandbox: delivering them to the caller is not built. Return results through `run`. |
 
 ### What is in the sandbox
 
@@ -269,5 +294,4 @@ that fan out) can otherwise keep the checker busy for hours; if it cannot finish
 
 These parts of the format are described in the guide but are not implemented, so nothing above depends on them:
 
-* Sessions (`kind: session`): patch P13.
-* The browser permission, and delivering the files a tool writes with `output_path`: patch P14.
+* Delivering the files a tool writes with `output_path` to the caller.
