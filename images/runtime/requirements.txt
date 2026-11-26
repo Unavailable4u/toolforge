@@ -1,6 +1,7 @@
 # The runtime image's libraries (docs/runtime-image.md). Every line is an exact pin and the list is the whole dependency closure:
 # the Dockerfile installs it with `--no-deps --only-binary=:all:`, so nothing outside this file can get in.
 # The first block is what the guide names; the second is only what those need to import.
+# Every pin must have a wheel on PyPI: `--only-binary=:all:` refuses a release that is source-only (chess 1.11.x is, so 1.10.0 is pinned).
 duckdb==2.0.1
 PyYAML==6.0.4
 python-dateutil==4.0.0
@@ -9,7 +10,7 @@ lxml==6.1.3
 pillow==13.0.0
 numpy==2.5.5
 gymnasium==1.4.0
-chess==1.11.2
+chess==1.10.0
 jsonschema==4.26.0
 tabulate==0.10.0
 # dependencies of the libraries above

@@ -30,7 +30,7 @@ and `tests/docker/test_runtime_image.py` checks that a real build holds exactly 
 | `pillow` | 13.0.0 | reading and converting images |
 | `numpy` | 2.5.5 | arrays and numeric work |
 | `gymnasium` | 1.4.0 | toy-text environments (FrozenLake, Taxi, Blackjack) |
-| `chess` | 1.11.2 | chess rules, moves and FEN (`python-chess`) |
+| `chess` | 1.10.0 | chess rules, moves and FEN (`python-chess`) |
 | `jsonschema` | 4.26.0 | checking JSON against a schema |
 | `tabulate` | 0.10.0 | plain-text tables |
 
@@ -62,7 +62,9 @@ here; it is installed in the build gate (G2) with network access to `TOOLFORGE_B
 ## Changing it
 
 Edit `images/runtime/requirements.txt` (an exact pin, plus whatever the new library needs, the whole closure), update the tables above, run
-`toolforge images build`, then `pytest -m docker`. The reference packs in `examples/toolpacks/` are the check that the image still runs them.
+`toolforge images build`, then `pytest -m docker`. Every pin needs a **wheel** for CPython 3.12 on Linux, because the image installs with
+`--only-binary=:all:`; a release that is source-only fails the build (`python-chess` 1.11.x is, which is why 1.10.0 is pinned). Check a change
+before building with `pip download --no-deps --only-binary=:all: --python-version 3.12 --implementation cp --abi cp312 --platform manylinux_2_28_x86_64 -r images/runtime/requirements.txt -d /tmp/wheels`. The reference packs in `examples/toolpacks/` are the check that the image still runs them.
 
 ## Honest limits
 

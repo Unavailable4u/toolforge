@@ -73,7 +73,7 @@ def build_image(
     configured: str | None = None,
     run: Run = _run,
     inspect: Inspect = _inspect,
-    which: Callable[[str], str | None] = shutil.which,
+    which: Callable[[str], str | None] | None = None,
     out=None,
 ) -> int:
     """Build the runtime image and print what was built. Returns Docker's exit code (0 on success)."""
@@ -91,7 +91,7 @@ def build_image(
             code="no_dockerfile",
             hint="run this from a checkout of the repository (it holds images/runtime/), or name the folder with --context",
         )
-    if which("docker") is None:
+    if (which if which is not None else shutil.which)("docker") is None:
         raise ToolForgeError(
             "the docker command was not found",
             code="no_docker_cli",
