@@ -70,7 +70,7 @@ configuration, and the security rules are in `docs/clients.md`. How tools are ra
 | `forge_submit` | `package: {manifest, files}` | the verification report: status, gates with summaries and hints, `next_action` | P07 |
 | `forge_status` | `name: str`, `version: str | null` | status, `next_step`, gate summaries and approval state | P07 |
 | `forge_list` | `status: str | null` | versions with name, version, status and a short description (capped) | P07 |
-| `forge_recipe` | `kind: str` | the documentation text (v1 ships `package-format`) | P07 |
+| `forge_recipe` | `kind: str` | the documentation text (a recipe per kind of tool; an unknown kind lists them) | P07 |
 | `forge_runtime_info` | none | Python version, runtime image, sandbox limits, preinstalled libraries (or null: not measured) | P07 |
 | `forge_build` | `goal: str`, `examples: [{input, output?}] | null`, `sample_files: object | null`, `constraints: str | null` | `reused` or the built `tool` and `version`, its `status`, `rounds`, `usage`, the verification `report` and `next_action` | P11 |
 | `forge_repair` | `name: str`, `problem: str`, `package: {manifest, files} | null` | `ok`, the new `version` and its `status`, `rounds`, the verification `report` and `next_action` | P12 |

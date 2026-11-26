@@ -1,0 +1,84 @@
+{
+  "description": "GET one JSON document from api.github.com over HTTPS (path and query chosen by the caller) and return it, or only the named top-level keys.",
+  "entrypoint": "tool.py:run",
+  "examples": [
+    {
+      "input": {
+        "path": "/repos/python/cpython",
+        "pick": [
+          "full_name",
+          "default_branch"
+        ]
+      },
+      "live": true,
+      "output": {
+        "data": {
+          "default_branch": "main",
+          "full_name": "python/cpython"
+        },
+        "status": 200
+      }
+    }
+  ],
+  "input_schema": {
+    "additionalProperties": false,
+    "properties": {
+      "path": {
+        "maxLength": 200,
+        "minLength": 1,
+        "type": "string"
+      },
+      "pick": {
+        "items": {
+          "type": "string"
+        },
+        "maxItems": 20,
+        "type": "array"
+      },
+      "query": {
+        "additionalProperties": {
+          "type": "string"
+        },
+        "maxProperties": 5,
+        "type": "object"
+      }
+    },
+    "required": [
+      "path"
+    ],
+    "type": "object"
+  },
+  "kind": "stateless",
+  "limits": {
+    "memory_mb": 256,
+    "output_kb": 64,
+    "timeout_s": 20
+  },
+  "name": "http_json_fetch",
+  "output_schema": {
+    "additionalProperties": false,
+    "properties": {
+      "data": {},
+      "status": {
+        "type": "integer"
+      }
+    },
+    "required": [
+      "status",
+      "data"
+    ],
+    "type": "object"
+  },
+  "parent_version": null,
+  "permissions": {
+    "browser": false,
+    "inputs": false,
+    "network": [
+      "api.github.com"
+    ],
+    "secrets": []
+  },
+  "requirements": [],
+  "version": "1.0.0",
+  "when_to_use": "The task needs data from the GitHub REST API that a plain GET without a token can return."
+}

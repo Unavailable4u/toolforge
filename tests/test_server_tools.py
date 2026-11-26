@@ -416,7 +416,7 @@ def test_an_unknown_recipe_lists_the_valid_kinds_and_reads_no_file(env: Env, kin
 def test_runtime_info_reports_the_image_and_the_limits(env: Env) -> None:
     out = data(env.call("forge_runtime_info"))
     assert (
-        out["runtime_image"] == "python:3.12-slim"
+        out["runtime_image"] == "toolforge-runtime:py312"
         and out["python"] == "3.12.4"
         and out["python_status"] == "measured"
     )

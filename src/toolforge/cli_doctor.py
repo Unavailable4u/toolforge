@@ -21,7 +21,7 @@ from datetime import datetime
 from typing import Any, Literal
 
 from toolforge import textsafety
-from toolforge.config import Settings, load_settings
+from toolforge.config import RUNTIME_IMAGE, Settings, load_settings
 from toolforge.errors import SandboxUnavailable
 from toolforge.sandbox import _ml_path
 
@@ -134,6 +134,14 @@ def check_runtime_image(env: DoctorEnv) -> CheckResult:
         found = client.images.get(image)
     except Exception as exc:
         if type(exc).__name__ == "ImageNotFound":
+            if (
+                image == RUNTIME_IMAGE
+            ):  # built here from images/runtime/, so it is on no registry and cannot be pulled
+                return CheckResult(
+                    "warn",
+                    f"{image} is not built yet; it is a local image, so a sandbox cannot pull it",
+                    "build it once (needs internet): toolforge images build",
+                )
             return CheckResult(
                 "warn",
                 f"{image} is not present locally; the first sandbox run pulls it (needs internet once)",

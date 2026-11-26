@@ -15,6 +15,8 @@ from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 from toolforge.errors import ConfigError
 
 ENV_PREFIX = "TOOLFORGE_"
+# The image tool sandboxes run in by default: built locally from images/runtime/ by `toolforge images build` (P14), never pulled.
+RUNTIME_IMAGE = "toolforge-runtime:py312"
 
 
 class Settings(BaseSettings):
@@ -28,7 +30,7 @@ class Settings(BaseSettings):
     # Storage and sandbox
     home: Path = Path("~/.toolforge")
     minilocker_path: Path | None = None
-    runtime_image: str = "python:3.12-slim"
+    runtime_image: str = RUNTIME_IMAGE
     build_allow: Annotated[list[str], NoDecode] = Field(
         default_factory=lambda: ["pypi.org", "files.pythonhosted.org"]
     )

@@ -354,6 +354,8 @@ class SessionManager:
                 "secrets": list(brokered),
                 "ttl_s": self._ttl(),
                 "max_s": self._max(),
+                "image": self._settings.runtime_image,
+                "image_id": self._tools._image_id(self._settings.runtime_image),
             },
         )
         self._start_reaper()

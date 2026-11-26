@@ -52,7 +52,8 @@ Read `PROGRESS.md` for status and `05-milestones.md` for the route. Each patch h
 | P11 | `P11-builder.md` | Server-side tool builder |
 | P12 | `P12-reuse-and-repair.md` | Ranking, self-repair, rollback |
 | P13 | `P13-sessions.md` | Stateful tools |
-| P14 | `P14-adapters.md` | Runtime image and software-use kits |
+| P14a | `P14a-runtime-image-and-kits.md` | Runtime image, recipes and software-use packs |
+| P14b | `P14b-browser-plans.md` | Browser plans and the GUI kit |
 | P15 | `P15-attack-lab.md` | Hostile-author attack suite |
 | P16 | `P16-benchmark.md` | Benchmark harness |
 | P17 | `P17-dashboard.md` | Web dashboard |

@@ -12,7 +12,7 @@ import pytest
 
 from toolforge import cli_doctor
 from toolforge.cli_doctor import Check, CheckResult, DoctorEnv, render, run_checks, run_doctor
-from toolforge.config import load_settings
+from toolforge.config import RUNTIME_IMAGE, load_settings
 from toolforge.errors import SandboxUnavailable
 from toolforge.sandbox import _ml_path
 
@@ -132,7 +132,7 @@ def by_name(results: list[tuple[Check, CheckResult]]) -> dict[str, CheckResult]:
 
 
 def test_everything_ready_exits_zero(pinned: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    client = FakeClient(images={"python:3.12-slim": image()})
+    client = FakeClient(images={RUNTIME_IMAGE: image()})
     assert run_doctor(env_for(client)) == 0
     out = capsys.readouterr().out
     assert "[ ok ] python" in out and "engine 27.3.1" in out and "sha256:" + "ab" * 6 in out
@@ -215,13 +215,22 @@ def test_a_data_directory_under_a_file_fails(monkeypatch: pytest.MonkeyPatch, tm
 # -- the runtime and proxy images ------------------------------------------------------------------------------------------------
 
 
-def test_a_missing_runtime_image_is_a_warning_with_the_pull_command(pinned: Path) -> None:
+def test_a_missing_runtime_image_is_a_warning_with_the_pull_command(
+    pinned: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("TOOLFORGE_RUNTIME_IMAGE", "python:3.12-slim")
     result = cli_doctor.check_runtime_image(env_for(FakeClient(images={})))
     assert (
         result.status == "warn"
         and "docker pull python:3.12-slim" in (result.hint or "")
         and "internet" in result.message
     )
+
+
+def test_a_missing_default_runtime_image_says_to_build_it_not_to_pull_it(pinned: Path) -> None:
+    result = cli_doctor.check_runtime_image(env_for(FakeClient(images={})))
+    assert result.status == "warn" and "toolforge images build" in (result.hint or "")
+    assert "pull" in result.message and "docker pull" not in (result.hint or "")
 
 
 def test_the_runtime_image_setting_is_honoured(pinned: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -233,7 +242,7 @@ def test_the_runtime_image_setting_is_honoured(pinned: Path, monkeypatch: pytest
 
 def test_an_image_without_a_repo_digest_shows_its_id(pinned: Path) -> None:
     local = SimpleNamespace(attrs={"RepoDigests": []}, id="sha256:" + "ef" * 32)
-    result = cli_doctor.check_runtime_image(env_for(FakeClient(images={"python:3.12-slim": local})))
+    result = cli_doctor.check_runtime_image(env_for(FakeClient(images={RUNTIME_IMAGE: local})))
     assert result.status == "ok" and "sha256:" + "ef" * 6 in result.message
 
 

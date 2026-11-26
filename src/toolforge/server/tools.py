@@ -26,7 +26,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
-from toolforge.adapters import read_recipe, recipe_kinds
+from toolforge.adapters import RECIPE_KINDS, read_recipe, recipe_kinds
 from toolforge.config import Settings
 from toolforge.errors import RegistryError, ToolNotRunnable, ValidationError
 from toolforge.models.package import MEMORY_RANGE, OUTPUT_RANGE, TIMEOUT_RANGE
@@ -142,10 +142,13 @@ META_TOOLS: tuple[MetaTool, ...] = (
         "forge_recipe",
         "Operator-written documentation for tool authors.",
         "`kind: str`",
-        "the documentation text (v1 ships `package-format`)",
+        "the documentation text (a recipe per kind of tool; an unknown kind lists them)",
         "P07",
         "Read documentation for people and agents who write tools. kind 'package-format' explains the package layout, the manifest, "
-        "the mini test runner, limits, and gives one complete example. An unknown kind returns the list of valid kinds.",
+        "the mini test runner and limits; the others ("
+        + ", ".join(f"'{kind}'" for kind in RECIPE_KINDS if kind != "package-format")
+        + ") "
+        "each give a complete small example for one kind of software. An unknown kind returns the list of valid kinds.",
     ),
     MetaTool(
         "forge_runtime_info",
@@ -796,6 +799,7 @@ def runtime_facts(settings: Settings, probe: runtime_info.Probe | None = None) -
     image = runtime_info.read_image(settings.runtime_image, probe)
     return {
         "runtime_image": settings.runtime_image,
+        "image_id": image.get("image_id"),
         "python": image["python"],
         "python_status": "measured" if image["python"] else "not measured",
         "libraries": image["libraries"],

@@ -1,0 +1,140 @@
+{
+  "description": "Run one read-only SELECT on a SQLite database file or a text SQL dump the caller provided; returns the column names and up to max_rows rows.",
+  "entrypoint": "tool.py:run",
+  "examples": [
+    {
+      "files": {
+        "inputs/shop.sql": "CREATE TABLE items (id INTEGER PRIMARY KEY, name TEXT, price REAL);\nINSERT INTO items VALUES (1, 'pen', 1.5), (2, 'book', 12.0), (3, 'lamp', 30.25);\n"
+      },
+      "input": {
+        "params": [
+          5
+        ],
+        "path": "inputs/shop.sql",
+        "sql": "SELECT name, price FROM items WHERE price > ? ORDER BY price"
+      },
+      "output": {
+        "columns": [
+          "name",
+          "price"
+        ],
+        "row_count": 2,
+        "rows": [
+          [
+            "book",
+            12.0
+          ],
+          [
+            "lamp",
+            30.25
+          ]
+        ],
+        "truncated": false
+      }
+    },
+    {
+      "files": {
+        "inputs/shop.sql": "CREATE TABLE items (id INTEGER PRIMARY KEY, name TEXT, price REAL);\nINSERT INTO items VALUES (1, 'pen', 1.5), (2, 'book', 12.0), (3, 'lamp', 30.25);\n"
+      },
+      "input": {
+        "path": "inputs/shop.sql",
+        "sql": "SELECT count(*) AS items, max(price) AS dearest FROM items"
+      },
+      "output": {
+        "columns": [
+          "items",
+          "dearest"
+        ],
+        "row_count": 1,
+        "rows": [
+          [
+            3,
+            30.25
+          ]
+        ],
+        "truncated": false
+      }
+    }
+  ],
+  "input_schema": {
+    "additionalProperties": false,
+    "properties": {
+      "max_rows": {
+        "maximum": 500,
+        "minimum": 1,
+        "type": "integer"
+      },
+      "params": {
+        "items": {
+          "type": [
+            "string",
+            "number",
+            "null"
+          ]
+        },
+        "maxItems": 20,
+        "type": "array"
+      },
+      "path": {
+        "type": "string"
+      },
+      "sql": {
+        "maxLength": 2000,
+        "minLength": 1,
+        "type": "string"
+      }
+    },
+    "required": [
+      "path",
+      "sql"
+    ],
+    "type": "object"
+  },
+  "kind": "stateless",
+  "limits": {
+    "memory_mb": 256,
+    "output_kb": 64,
+    "timeout_s": 20
+  },
+  "name": "sqlite_query",
+  "output_schema": {
+    "additionalProperties": false,
+    "properties": {
+      "columns": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "row_count": {
+        "type": "integer"
+      },
+      "rows": {
+        "items": {
+          "type": "array"
+        },
+        "type": "array"
+      },
+      "truncated": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "columns",
+      "rows",
+      "row_count",
+      "truncated"
+    ],
+    "type": "object"
+  },
+  "parent_version": null,
+  "permissions": {
+    "browser": false,
+    "inputs": true,
+    "network": [],
+    "secrets": []
+  },
+  "requirements": [],
+  "version": "1.0.0",
+  "when_to_use": "The task gives a database (a .db or .sqlite file, or a .sql dump) and asks a question that one SELECT can answer."
+}

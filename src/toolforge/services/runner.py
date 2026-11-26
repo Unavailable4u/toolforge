@@ -67,6 +67,7 @@ from toolforge.packaging import check_rel_path
 from toolforge.registry import VersionRecord, lifecycle
 from toolforge.sandbox import harness
 from toolforge.sandbox.base import RunOutput, SandboxRunner, SandboxSpec, decoy_violations
+from toolforge.sandbox.image_info import image_id as _image_id
 from toolforge.services import failures
 
 log = logging.getLogger(__name__)
@@ -363,7 +364,9 @@ class ToolRunner:
         session_clock: Callable[[], float] | None = None,
         session_sleep: Callable[[float], None] | None = None,
         session_reaper: bool = True,
+        image_id: Callable[[str], str | None] | None = None,
     ) -> None:
+        self._image_id = image_id or _image_id
         self._broker_services = (
             broker_services  # `{service: host}` the operator configured; None asks MiniLocker when needed
         )
@@ -718,6 +721,8 @@ class ToolRunner:
                 "limits": limits,
                 "network": list(hosts) or "none",
                 "secrets": list(brokered),
+                "image": spec.image,
+                "image_id": self._image_id(spec.image),  # None is "not read", never a guess
             },
         )
         finished: dict[str, Any] = {"call_id": call_id, "ok": False, "error_type": "Aborted"}

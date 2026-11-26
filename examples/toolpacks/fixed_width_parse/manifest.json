@@ -1,0 +1,197 @@
+{
+  "description": "Cut fixed-width text into records using column positions the caller gives (name, start, width, type); bad cells become null and are listed.",
+  "entrypoint": "tool.py:run",
+  "examples": [
+    {
+      "input": {
+        "columns": [
+          {
+            "name": "id",
+            "start": 0,
+            "type": "int",
+            "width": 4
+          },
+          {
+            "name": "name",
+            "start": 4,
+            "width": 10
+          },
+          {
+            "name": "amount",
+            "start": 14,
+            "type": "float",
+            "width": 8
+          }
+        ],
+        "skip_lines": 1,
+        "text": "ID  NAME      AMOUNT\n0001Ada          12.50\n0002Grace Hop   3.25\n"
+      },
+      "output": {
+        "errors": [],
+        "row_count": 2,
+        "rows": [
+          {
+            "amount": 12.5,
+            "id": 1,
+            "name": "Ada"
+          },
+          {
+            "amount": 3.25,
+            "id": 2,
+            "name": "Grace Hop"
+          }
+        ],
+        "truncated": false
+      }
+    },
+    {
+      "input": {
+        "columns": [
+          {
+            "name": "id",
+            "start": 0,
+            "type": "int",
+            "width": 4
+          },
+          {
+            "name": "name",
+            "start": 4,
+            "width": 10
+          },
+          {
+            "name": "amount",
+            "start": 14,
+            "type": "float",
+            "width": 8
+          }
+        ],
+        "text": "0001Ada          x\n"
+      },
+      "output": {
+        "errors": [
+          {
+            "column": "amount",
+            "line": 1,
+            "message": "'x' is not a float"
+          }
+        ],
+        "row_count": 1,
+        "rows": [
+          {
+            "amount": null,
+            "id": 1,
+            "name": "Ada"
+          }
+        ],
+        "truncated": false
+      }
+    }
+  ],
+  "input_schema": {
+    "additionalProperties": false,
+    "properties": {
+      "columns": {
+        "items": {
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,30}$",
+              "type": "string"
+            },
+            "start": {
+              "maximum": 10000,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "type": {
+              "enum": [
+                "string",
+                "int",
+                "float"
+              ],
+              "type": "string"
+            },
+            "width": {
+              "maximum": 1000,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "name",
+            "start",
+            "width"
+          ],
+          "type": "object"
+        },
+        "maxItems": 30,
+        "minItems": 1,
+        "type": "array"
+      },
+      "skip_lines": {
+        "maximum": 1000,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "strip": {
+        "type": "boolean"
+      },
+      "text": {
+        "maxLength": 50000,
+        "type": "string"
+      }
+    },
+    "required": [
+      "text",
+      "columns"
+    ],
+    "type": "object"
+  },
+  "kind": "stateless",
+  "limits": {
+    "memory_mb": 256,
+    "output_kb": 64,
+    "timeout_s": 20
+  },
+  "name": "fixed_width_parse",
+  "output_schema": {
+    "additionalProperties": false,
+    "properties": {
+      "errors": {
+        "items": {
+          "type": "object"
+        },
+        "type": "array"
+      },
+      "row_count": {
+        "type": "integer"
+      },
+      "rows": {
+        "items": {
+          "type": "object"
+        },
+        "type": "array"
+      },
+      "truncated": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "rows",
+      "row_count",
+      "truncated",
+      "errors"
+    ],
+    "type": "object"
+  },
+  "parent_version": null,
+  "permissions": {
+    "browser": false,
+    "inputs": false,
+    "network": [],
+    "secrets": []
+  },
+  "requirements": [],
+  "version": "1.0.0",
+  "when_to_use": "The task gives fixed-width text (a mainframe or legacy report) together with the column positions."
+}

@@ -1,0 +1,253 @@
+{
+  "description": "Walk a FrozenLake grid (gymnasium) across calls: new (4x4 or 8x8, optional slippery ice and seed), move left/down/right/up, or show the grid.",
+  "entrypoint": "tool.py:run",
+  "examples": [
+    {
+      "input": {
+        "action": "new"
+      },
+      "output": {
+        "directions": [
+          "left",
+          "down",
+          "right",
+          "up"
+        ],
+        "done": false,
+        "grid": [
+          "PFFF",
+          "FHFH",
+          "FFFH",
+          "HFFG"
+        ],
+        "outcome": "playing",
+        "position": [
+          0,
+          0
+        ],
+        "reward": 0.0,
+        "steps": 0
+      }
+    },
+    {
+      "input": {
+        "action": "move",
+        "direction": "down"
+      },
+      "output": {
+        "directions": [
+          "left",
+          "down",
+          "right",
+          "up"
+        ],
+        "done": false,
+        "grid": [
+          "SFFF",
+          "PHFH",
+          "FFFH",
+          "HFFG"
+        ],
+        "outcome": "playing",
+        "position": [
+          1,
+          0
+        ],
+        "reward": 0.0,
+        "steps": 1
+      }
+    },
+    {
+      "input": {
+        "action": "move",
+        "direction": "down"
+      },
+      "output": {
+        "directions": [
+          "left",
+          "down",
+          "right",
+          "up"
+        ],
+        "done": false,
+        "grid": [
+          "SFFF",
+          "FHFH",
+          "PFFH",
+          "HFFG"
+        ],
+        "outcome": "playing",
+        "position": [
+          2,
+          0
+        ],
+        "reward": 0.0,
+        "steps": 2
+      }
+    },
+    {
+      "input": {
+        "action": "move",
+        "direction": "right"
+      },
+      "output": {
+        "directions": [
+          "left",
+          "down",
+          "right",
+          "up"
+        ],
+        "done": false,
+        "grid": [
+          "SFFF",
+          "FHFH",
+          "FPFH",
+          "HFFG"
+        ],
+        "outcome": "playing",
+        "position": [
+          2,
+          1
+        ],
+        "reward": 0.0,
+        "steps": 3
+      }
+    },
+    {
+      "input": {
+        "action": "show"
+      },
+      "output": {
+        "directions": [
+          "left",
+          "down",
+          "right",
+          "up"
+        ],
+        "done": false,
+        "grid": [
+          "SFFF",
+          "FHFH",
+          "FPFH",
+          "HFFG"
+        ],
+        "outcome": "playing",
+        "position": [
+          2,
+          1
+        ],
+        "reward": 0.0,
+        "steps": 3
+      }
+    }
+  ],
+  "input_schema": {
+    "additionalProperties": false,
+    "properties": {
+      "action": {
+        "enum": [
+          "new",
+          "move",
+          "show"
+        ],
+        "type": "string"
+      },
+      "direction": {
+        "enum": [
+          "left",
+          "down",
+          "right",
+          "up"
+        ],
+        "type": "string"
+      },
+      "map": {
+        "enum": [
+          "4x4",
+          "8x8"
+        ],
+        "type": "string"
+      },
+      "seed": {
+        "maximum": 2147483647,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "slippery": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "action"
+    ],
+    "type": "object"
+  },
+  "kind": "session",
+  "limits": {
+    "memory_mb": 256,
+    "output_kb": 64,
+    "timeout_s": 20
+  },
+  "name": "frozenlake_session",
+  "output_schema": {
+    "additionalProperties": false,
+    "properties": {
+      "directions": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "done": {
+        "type": "boolean"
+      },
+      "grid": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "outcome": {
+        "enum": [
+          "playing",
+          "won",
+          "fell",
+          "timeout"
+        ],
+        "type": "string"
+      },
+      "position": {
+        "items": {
+          "type": "integer"
+        },
+        "type": "array"
+      },
+      "reward": {
+        "type": "number"
+      },
+      "steps": {
+        "type": "integer"
+      }
+    },
+    "required": [
+      "grid",
+      "position",
+      "steps",
+      "done",
+      "reward",
+      "outcome",
+      "directions"
+    ],
+    "type": "object"
+  },
+  "parent_version": null,
+  "permissions": {
+    "browser": false,
+    "inputs": false,
+    "network": [],
+    "secrets": []
+  },
+  "requirements": [],
+  "version": "1.0.0",
+  "when_to_use": "The task is a grid-world navigation or reinforcement-learning exercise where the position must be remembered between calls."
+}

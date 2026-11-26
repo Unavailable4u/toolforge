@@ -1,7 +1,8 @@
 """Material shipped for the agents that use ToolForge. `recipes/` holds operator-authored guides served by `forge_recipe`.
 
-P07 ships one recipe, `package-format`. Later patches add framework adapters and more recipes here; `recipe_kinds()` lists whatever
-the folder holds, so adding a kind is adding a file.
+`RECIPE_KINDS` is the list of recipes this release serves, and `tests/test_recipes.py` checks that it matches the files in `recipes/`
+exactly: adding a kind is adding a file and one name here. Every recipe's complete example package is built and run through the real
+gates by that test, so a recipe cannot teach something that no longer passes.
 """
 
 from __future__ import annotations
@@ -11,6 +12,9 @@ from importlib import resources
 
 RECIPE_NAME = re.compile(r"[a-z0-9][a-z0-9-]{0,40}")
 
+# Every recipe `forge_recipe` serves. P14 adds `browser-plan` with the browser plans.
+RECIPE_KINDS: tuple[str, ...] = ("file-format", "game-state", "http-api", "package-format", "sql")
+
 
 def _folder():
     return resources.files("toolforge.adapters").joinpath("recipes")
@@ -18,7 +22,7 @@ def _folder():
 
 def recipe_kinds() -> list[str]:
     """The kinds of recipe that exist, sorted."""
-    return sorted(entry.name[: -len(".md")] for entry in _folder().iterdir() if entry.name.endswith(".md"))
+    return sorted(RECIPE_KINDS)
 
 
 def read_recipe(kind: str) -> str | None:
@@ -29,4 +33,4 @@ def read_recipe(kind: str) -> str | None:
     return _folder().joinpath(f"{kind}.md").read_text(encoding="utf-8")
 
 
-__all__ = ["read_recipe", "recipe_kinds"]
+__all__ = ["RECIPE_KINDS", "read_recipe", "recipe_kinds"]

@@ -63,3 +63,22 @@ def test_a_very_long_library_list_is_capped_and_says_so() -> None:
 def test_without_a_docker_daemon_the_real_probe_answers_none(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("DOCKER_HOST", "unix:///nonexistent/docker.sock")
     assert runtime_info.docker_probe("python:3.12-slim") is None
+
+
+def test_the_image_id_is_reported_when_docker_gave_one_and_null_otherwise() -> None:
+    identifier = "sha256:" + "ef" * 32
+    facts = runtime_info.read_image(
+        "img:5", lambda image: {"python": "3.12.4", "libraries": [], "image_id": identifier}
+    )
+    assert facts["image_id"] == identifier
+    assert (
+        runtime_info.read_image("img:6", lambda image: {"python": "3.12.4", "libraries": []})["image_id"]
+        is None
+    )
+    assert (
+        runtime_info.read_image("img:7", lambda image: {"python": "3.12.4", "image_id": "not-a-digest"})[
+            "image_id"
+        ]
+        is None
+    )
+    assert runtime_info.read_image("img:8", lambda image: None)["image_id"] is None

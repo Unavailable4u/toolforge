@@ -32,7 +32,7 @@ from pathlib import Path
 from typing import Any
 
 from toolforge import textsafety
-from toolforge.config import Settings
+from toolforge.config import RUNTIME_IMAGE, Settings
 from toolforge.errors import SandboxError, SandboxUnavailable
 from toolforge.ledger import ToolforgeLedger
 from toolforge.sandbox import _ml_path
@@ -492,7 +492,11 @@ class MiniLockerRunner:
         except _docker_errors() as exc:
             raise SandboxUnavailable(
                 f"Docker could not start the sandbox: {type(exc).__name__}: {str(exc)[:200]}",
-                hint="run `toolforge doctor`; the first run needs internet to pull the image",
+                hint=(
+                    "build the runtime image once with `toolforge images build` (it is local, so it cannot be pulled), then run `toolforge doctor`"
+                    if spec.image == RUNTIME_IMAGE
+                    else "run `toolforge doctor`; the first run needs internet to pull the image"
+                ),
             ) from exc
 
     @staticmethod

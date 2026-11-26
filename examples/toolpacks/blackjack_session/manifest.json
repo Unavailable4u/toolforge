@@ -1,0 +1,177 @@
+{
+  "description": "Play a hand of blackjack across calls with a seeded shuffle (same seed, same deal): new, hit, stand or show; the dealer draws to 17.",
+  "entrypoint": "tool.py:run",
+  "examples": [
+    {
+      "input": {
+        "action": "new",
+        "seed": 2
+      },
+      "output": {
+        "available": [
+          "hit",
+          "stand"
+        ],
+        "dealer": [
+          "3"
+        ],
+        "dealer_total": null,
+        "player": [
+          "6",
+          "A"
+        ],
+        "player_total": 17,
+        "status": "playing"
+      }
+    },
+    {
+      "input": {
+        "action": "hit"
+      },
+      "output": {
+        "available": [
+          "hit",
+          "stand"
+        ],
+        "dealer": [
+          "3"
+        ],
+        "dealer_total": null,
+        "player": [
+          "6",
+          "A",
+          "3"
+        ],
+        "player_total": 20,
+        "status": "playing"
+      }
+    },
+    {
+      "input": {
+        "action": "show"
+      },
+      "output": {
+        "available": [
+          "hit",
+          "stand"
+        ],
+        "dealer": [
+          "3"
+        ],
+        "dealer_total": null,
+        "player": [
+          "6",
+          "A",
+          "3"
+        ],
+        "player_total": 20,
+        "status": "playing"
+      }
+    },
+    {
+      "input": {
+        "action": "stand"
+      },
+      "output": {
+        "available": [],
+        "dealer": [
+          "3",
+          "7",
+          "6",
+          "A"
+        ],
+        "dealer_total": 17,
+        "player": [
+          "6",
+          "A",
+          "3"
+        ],
+        "player_total": 20,
+        "status": "player_win"
+      }
+    }
+  ],
+  "input_schema": {
+    "additionalProperties": false,
+    "properties": {
+      "action": {
+        "enum": [
+          "new",
+          "hit",
+          "stand",
+          "show"
+        ],
+        "type": "string"
+      },
+      "seed": {
+        "maximum": 2147483647,
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "action"
+    ],
+    "type": "object"
+  },
+  "kind": "session",
+  "limits": {
+    "memory_mb": 256,
+    "output_kb": 64,
+    "timeout_s": 20
+  },
+  "name": "blackjack_session",
+  "output_schema": {
+    "additionalProperties": false,
+    "properties": {
+      "available": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "dealer": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "dealer_total": {
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "player": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "player_total": {
+        "type": "integer"
+      },
+      "status": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "player",
+      "player_total",
+      "dealer",
+      "status",
+      "available"
+    ],
+    "type": "object"
+  },
+  "parent_version": null,
+  "permissions": {
+    "browser": false,
+    "inputs": false,
+    "network": [],
+    "secrets": []
+  },
+  "requirements": [],
+  "version": "1.0.0",
+  "when_to_use": "The task is to play blackjack, test a strategy or replay a hand, and the hand must be remembered between calls."
+}

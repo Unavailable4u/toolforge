@@ -20,9 +20,10 @@ patch" in the same patch. Never tick a box for work that is not in the patch. Bo
 | [x] | P11 | Server-side builder | P07, P10 |
 | [x] | P12 | Reuse ranking, self-repair, rollback | P07, P11 |
 | [x] | P13 | Stateful sessions | P05, P08 |
-| [ ] | P14 | Runtime image and adapter kits (software use) | P13 |
+| [x] | P14a | Runtime image, recipes and reference packs (software use) | P13 |
+| [ ] | P14b | Browser plans and the GUI kit | P14a |
 | [ ] | P15 | Forge Attack Lab | P09, P10 |
-| [ ] | P16 | Benchmark harness | P11, P12, P14 |
+| [ ] | P16 | Benchmark harness | P11, P12, P14a, P14b |
 | [ ] | P17 | Dashboard | P09, P12, P13 |
 | [ ] | P18 | Demo, packaging, project docs | P15, P16, P17 |
 | [ ] | P19 | Landing site | P18 |
@@ -35,8 +36,16 @@ Milestones (M0 to M7) and what can be dropped: `docs/guide/05-milestones.md`.
 
 ## Notes for the next patch
 
-Done: P01 (skeleton), P02 (package spec), P03 (registry), P04 (sandbox seam), P05 (execution contract and `run`), P06 (gates G1 to G4), P07 (MCP server v1), P08 (gate G6 and Blast Radius), P09 (approvals, egress, brokered secrets), P10 (independent challenger, gate G5), P11 (server-side builder), P12 (reuse ranking, self-repair, rollback), P13 (stateful sessions).
-Next: P14 (needs P13); P16 needs P11, P12 and P14. Decisions and interfaces that later patches must respect:
+Done: P01 (skeleton), P02 (package spec), P03 (registry), P04 (sandbox seam), P05 (execution contract and `run`), P06 (gates G1 to G4), P07 (MCP server v1), P08 (gate G6 and Blast Radius), P09 (approvals, egress, brokered secrets), P10 (independent challenger, gate G5), P11 (server-side builder), P12 (reuse ranking, self-repair, rollback), P13 (stateful sessions), P14a (runtime image, recipes, reference packs).
+Next: P14b (browser plans and the GUI kit; needs P14a); P16 needs P11, P12, P14a and P14b. Decisions and interfaces that later patches must respect:
+
+* P14a interfaces. `images/runtime/{Dockerfile,requirements.txt}`; `cli_images.py` (`build_image`, `build_command`, `TAG`, `register`) behind `toolforge images build [--tag] [--context] [--no-cache]`; `config.RUNTIME_IMAGE` (`toolforge-runtime:py312`, now the default `runtime_image`);
+  `sandbox/image_info.py::image_id(image)` (never raises, never pulls); `ToolRunner(..., image_id=)`; `forge.call.started` and `forge.session.opened` carry `image` and `image_id`; `forge_runtime_info` has `image_id`. `adapters.RECIPE_KINDS` (the one list; P14b adds `browser-plan`)
+  and four recipes (`sql`, `file-format`, `http-api`, `game-state`), each with a complete example package in fenced blocks (` ```json manifest `, ` ```python tool.py `, ` ```python tests/... `) that `tests/test_recipes.py` runs through the real gates. Seven packs in `examples/toolpacks/`.
+  Page: `docs/runtime-image.md` (its library table is checked against `requirements.txt`). `scripts/check_guide.py` now accepts a patch id with a letter suffix and treats a bare `P14` as P14a and P14b together.
+* P14a behaviour. Docker tests that run tools skip when `toolforge-runtime:py312` is not built (`tests/conftest.py`); build it with `toolforge images build`. A manifest example can only carry text, so `sqlite_query` takes a `.db` file or a `.sql` dump and its example uses the dump.
+  A tool with `permissions.network` needs an input-schema property with no `pattern` or G4 is skipped and the version cannot be approved. P14b needs to know: `permissions.browser` is still rejected as reserved, there is no `browser_plan` kind, and `output_path` files are still discarded (not in P14a's scope).
+* P14a not run: every `docker` test (`tests/docker/test_runtime_image.py`, `tests/docker/test_golden_packs.py`, and the existing docker tests, which now need the built image), a real `docker build` (the pins were resolved in a Python 3.12 venv, not inside the base image), and the seven packs inside a container. The stand-in sandbox is not isolated.
 
 * P13 interfaces. `registry/sessions.py` (plain storage; `new_session_id`, `split_session_id`, `secret_matches`, `SessionRow`, ...) behind `Registry.open_session`, `get_session`,
   `list_sessions`, `count_open_sessions`, `open_sessions_of`, `touch_session`, `note_session_rewind`, `session_heartbeat`, `request_session_close`, `close_session`; migration 4 adds

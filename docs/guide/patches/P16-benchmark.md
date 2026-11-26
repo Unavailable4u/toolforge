@@ -1,6 +1,6 @@
 # P16: Benchmark harness
 
-Depends on: P11, P12, P14.
+Depends on: P11, P12, P14a, P14b.
 
 ## Goal
 

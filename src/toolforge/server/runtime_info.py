@@ -2,7 +2,8 @@
 
 The Python version and the installed libraries are properties of the image, so they are read from it: one throwaway container with no
 network, a read-only root filesystem, no capabilities and a small memory limit runs a fixed script that lists the installed
-distributions. The script and the image name are ToolForge's own; nothing from a caller reaches the container.
+distributions. The script and the image name are ToolForge's own; nothing from a caller reaches the container. `image_id` is the id Docker reports for
+the image (the same value the ledgers record), or `null` when it could not be read.
 
 When Docker is not available, the image is not present locally (the probe never pulls, so it never uses the network) or the probe
 fails, `python` and `libraries` are `null` and `libraries_status` says "not measured" and why. An empty list always means "the image
@@ -46,7 +47,7 @@ def docker_probe(image: str) -> dict[str, Any] | None:
     try:
         client = docker.from_env(timeout=5)
         client.ping()
-        client.images.get(image)  # never pull: that would be network access chosen by a request
+        found = client.images.get(image)  # never pull: that would be network access chosen by a request
         container = client.containers.run(
             image,
             ["python", "-I", "-c", _SCRIPT],
@@ -62,7 +63,12 @@ def docker_probe(image: str) -> dict[str, Any] | None:
         container.wait(timeout=PROBE_TIMEOUT_S)
         out = container.logs(stdout=True, stderr=False).decode("utf-8", "replace").strip().splitlines()
         data = json.loads(out[-1]) if out else None
-        return data if isinstance(data, dict) else None
+        if not isinstance(data, dict):
+            return None
+        identifier = str(getattr(found, "id", "") or "")
+        if identifier.startswith("sha256:"):
+            data["image_id"] = identifier
+        return data
     except Exception:
         log.info("could not read the runtime image (Docker unavailable, image missing or the probe failed)")
         log.debug("probe failure detail", exc_info=True)
@@ -98,12 +104,15 @@ def read_image(image: str, probe: Probe | None = None) -> dict[str, Any]:
             "python": None,
             "libraries": None,
             "libraries_status": "not measured: the runtime image could not be read (Docker is not available, or the image is not present locally)",
+            "image_id": None,
         }
     shown = [
         {"name": str(name)[:80], "version": str(version)[:40]} for name, version in libraries[:MAX_LIBRARIES]
     ]
+    image_id = data.get("image_id") if isinstance(data, dict) else None
     facts: dict[str, Any] = {
         "python": python[:20],
+        "image_id": image_id[:80] if isinstance(image_id, str) and image_id.startswith("sha256:") else None,
         "libraries": shown,
         "libraries_status": "measured"
         if len(libraries) <= MAX_LIBRARIES

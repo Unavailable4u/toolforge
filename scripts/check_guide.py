@@ -17,7 +17,7 @@ import re
 import sys
 from pathlib import Path
 
-PATCH_ID = re.compile(r"\b([PS]\d{2})\b")
+PATCH_ID = re.compile(r"\b([PS]\d{2}[a-z]?)\b")
 RANGE = re.compile(r"\b(P\d{2}) to (P\d{2})\b")
 TEXT_SUFFIXES = {
     ".md",
@@ -55,6 +55,11 @@ def expand_ids(text: str) -> list[str]:
         ids.extend(f"P{n:02d}" for n in range(int(a[1:]), int(b[1:]) + 1))
     ids.extend(PATCH_ID.findall(RANGE.sub("", text)))
     return sorted(set(ids))
+
+
+def is_defined(ref: str, rows: dict[str, dict]) -> bool:
+    """A patch id is defined if it has a row, or it names a split patch whose parts have rows (P14 is P14a and P14b)."""
+    return ref in rows or any(r.startswith(ref) for r in rows)
 
 
 def read_progress(root: Path) -> dict[str, dict]:
@@ -109,11 +114,11 @@ def check_patches(root: Path, errors: list[str]) -> dict[str, dict]:
             if not re.search(rf"^## {section}\b", text, re.MULTILINE):
                 errors.append(f"{path.name}: missing a '## {section}' section")
         for ref in expand_ids(dep.group(1)) if dep else []:
-            if ref not in rows:
+            if not is_defined(ref, rows):
                 errors.append(f"{pid}: depends on {ref}, which is not defined")
     for pid, row in rows.items():
         for ref in expand_ids(row["deps"]):
-            if ref not in rows:
+            if not is_defined(ref, rows):
                 errors.append(f"PROGRESS.md: {pid} depends on {ref}, which is not defined")
             elif ref == pid:
                 errors.append(f"PROGRESS.md: {pid} depends on itself")
@@ -178,7 +183,11 @@ def check_references(root: Path, rows: dict[str, dict], errors: list[str]) -> No
             continue  # these describe history, including old numbers
         for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
             for pid in PATCH_ID.findall(line):
-                if pid not in rows and re.fullmatch(r"[PS]\d{2}", pid):
+                if (
+                    pid not in rows
+                    and re.fullmatch(r"[PS]\d{2}", pid)
+                    and not any(r.startswith(pid) for r in rows)
+                ):  # "P14" names P14a and P14b together
                     errors.append(
                         f"{path.relative_to(root)}:{number}: mentions {pid}, which is not a defined patch"
                     )

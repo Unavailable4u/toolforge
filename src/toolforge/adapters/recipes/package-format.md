@@ -23,7 +23,7 @@ Unknown fields are rejected. Fields you can leave out have their default.
 | `description` | 20 to 600 characters, plain text on one line. Say what the tool does, not what you want the reader to do. |
 | `when_to_use` | Optional, up to 300 characters: when an agent should pick this tool. |
 | `entrypoint` | `<file>.py:<function>`, a top-level plain `def` (not `async`, not in a class). |
-| `kind` | `stateless`. (`session` is accepted but cannot run yet.) |
+| `kind` | `stateless` (each call is separate) or `session` (a tool that keeps `state` between calls; read the `game-state` recipe). |
 | `input_schema` | JSON Schema (Draft 2020-12), top level `type: object` and `additionalProperties: false`. Only local `$ref` (starting with `#`). At most 6 levels of nesting and 40 properties. |
 | `output_schema` | Optional, same validity rules. |
 | `permissions` | `network` (bare host names, at most 8), `secrets` (names only, at most 4), `inputs` (true if the caller provides files), `browser` (must be false). A tool that asks for network or secrets needs a human operator's approval before it can be used. |
@@ -44,7 +44,16 @@ def run(args: dict) -> object:
   an object that is not JSON is an error, and so is a result larger than `limits.output_kb`.
 - Anything other than `ToolError` that is raised counts as a crash against the tool. Printing is captured, not returned.
 - `toolforge_sdk.input_path(name)` gives the path of a file the caller provided (when `permissions.inputs` is true).
-- Each call runs in a fresh sandbox with no network. Nothing is kept between calls.
+- Each call of a stateless tool runs in a fresh sandbox, and nothing is kept between calls. There is no network unless the manifest lists
+  hosts in `permissions.network` and an operator approved them (read the `http-api` recipe).
+
+## The runtime image and the other recipes
+
+Tools run in an image with Python 3.12 and a fixed set of pinned libraries already installed: `duckdb`, `PyYAML`, `python-dateutil`,
+`beautifulsoup4`, `lxml`, `pillow`, `numpy`, `gymnasium`, `python-chess`, `jsonschema` and `tabulate`. Call `forge_runtime_info` for the
+exact versions and the image id. Use them directly; list in `requirements` only a library that is not in the image. Recipes for the
+common kinds of tool: `sql` (databases), `file-format` (parsing a file or binary format), `http-api` (calling a web API) and
+`game-state` (games and anything that remembers state between calls). Read the one that fits before you write the package.
 
 ## The tests
 

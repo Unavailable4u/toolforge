@@ -1,0 +1,365 @@
+{
+  "description": "Play chess across calls with python-chess doing the rules: start (optionally from a FEN), play a move in SAN or UCI for either side, or look at the position.",
+  "entrypoint": "tool.py:run",
+  "examples": [
+    {
+      "input": {
+        "action": "new"
+      },
+      "output": {
+        "board": [
+          "r n b q k b n r",
+          "p p p p p p p p",
+          ". . . . . . . .",
+          ". . . . . . . .",
+          ". . . . . . . .",
+          ". . . . . . . .",
+          "P P P P P P P P",
+          "R N B Q K B N R"
+        ],
+        "fen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+        "in_check": false,
+        "last_move": null,
+        "legal_moves": [
+          "Na3",
+          "Nc3",
+          "Nf3",
+          "Nh3",
+          "a3",
+          "a4",
+          "b3",
+          "b4",
+          "c3",
+          "c4",
+          "d3",
+          "d4",
+          "e3",
+          "e4",
+          "f3",
+          "f4",
+          "g3",
+          "g4",
+          "h3",
+          "h4"
+        ],
+        "result": "*",
+        "status": "ongoing",
+        "turn": "white",
+        "winner": null
+      }
+    },
+    {
+      "input": {
+        "action": "move",
+        "move": "e4"
+      },
+      "output": {
+        "board": [
+          "r n b q k b n r",
+          "p p p p p p p p",
+          ". . . . . . . .",
+          ". . . . . . . .",
+          ". . . . P . . .",
+          ". . . . . . . .",
+          "P P P P . P P P",
+          "R N B Q K B N R"
+        ],
+        "fen": "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1",
+        "in_check": false,
+        "last_move": "e4",
+        "legal_moves": [
+          "Na6",
+          "Nc6",
+          "Nf6",
+          "Nh6",
+          "a5",
+          "a6",
+          "b5",
+          "b6",
+          "c5",
+          "c6",
+          "d5",
+          "d6",
+          "e5",
+          "e6",
+          "f5",
+          "f6",
+          "g5",
+          "g6",
+          "h5",
+          "h6"
+        ],
+        "result": "*",
+        "status": "ongoing",
+        "turn": "black",
+        "winner": null
+      }
+    },
+    {
+      "input": {
+        "action": "move",
+        "move": "e7e5"
+      },
+      "output": {
+        "board": [
+          "r n b q k b n r",
+          "p p p p . p p p",
+          ". . . . . . . .",
+          ". . . . p . . .",
+          ". . . . P . . .",
+          ". . . . . . . .",
+          "P P P P . P P P",
+          "R N B Q K B N R"
+        ],
+        "fen": "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2",
+        "in_check": false,
+        "last_move": "e5",
+        "legal_moves": [
+          "Ba6",
+          "Bb5",
+          "Bc4",
+          "Bd3",
+          "Be2",
+          "Ke2",
+          "Na3",
+          "Nc3",
+          "Ne2",
+          "Nf3",
+          "Nh3",
+          "Qe2",
+          "Qf3",
+          "Qg4",
+          "Qh5",
+          "a3",
+          "a4",
+          "b3",
+          "b4",
+          "c3",
+          "c4",
+          "d3",
+          "d4",
+          "f3",
+          "f4",
+          "g3",
+          "g4",
+          "h3",
+          "h4"
+        ],
+        "result": "*",
+        "status": "ongoing",
+        "turn": "white",
+        "winner": null
+      }
+    },
+    {
+      "input": {
+        "action": "move",
+        "move": "Qh5"
+      },
+      "output": {
+        "board": [
+          "r n b q k b n r",
+          "p p p p . p p p",
+          ". . . . . . . .",
+          ". . . . p . . Q",
+          ". . . . P . . .",
+          ". . . . . . . .",
+          "P P P P . P P P",
+          "R N B . K B N R"
+        ],
+        "fen": "rnbqkbnr/pppp1ppp/8/4p2Q/4P3/8/PPPP1PPP/RNB1KBNR b KQkq - 1 2",
+        "in_check": false,
+        "last_move": "Qh5",
+        "legal_moves": [
+          "Ba3",
+          "Bb4",
+          "Bc5",
+          "Bd6",
+          "Be7",
+          "Ke7",
+          "Na6",
+          "Nc6",
+          "Ne7",
+          "Nf6",
+          "Nh6",
+          "Qe7",
+          "Qf6",
+          "Qg5",
+          "Qh4",
+          "a5",
+          "a6",
+          "b5",
+          "b6",
+          "c5",
+          "c6",
+          "d5",
+          "d6",
+          "g5",
+          "g6",
+          "h6"
+        ],
+        "result": "*",
+        "status": "ongoing",
+        "turn": "black",
+        "winner": null
+      }
+    },
+    {
+      "input": {
+        "action": "show"
+      },
+      "output": {
+        "board": [
+          "r n b q k b n r",
+          "p p p p . p p p",
+          ". . . . . . . .",
+          ". . . . p . . Q",
+          ". . . . P . . .",
+          ". . . . . . . .",
+          "P P P P . P P P",
+          "R N B . K B N R"
+        ],
+        "fen": "rnbqkbnr/pppp1ppp/8/4p2Q/4P3/8/PPPP1PPP/RNB1KBNR b KQkq - 1 2",
+        "in_check": false,
+        "last_move": "Qh5",
+        "legal_moves": [
+          "Ba3",
+          "Bb4",
+          "Bc5",
+          "Bd6",
+          "Be7",
+          "Ke7",
+          "Na6",
+          "Nc6",
+          "Ne7",
+          "Nf6",
+          "Nh6",
+          "Qe7",
+          "Qf6",
+          "Qg5",
+          "Qh4",
+          "a5",
+          "a6",
+          "b5",
+          "b6",
+          "c5",
+          "c6",
+          "d5",
+          "d6",
+          "g5",
+          "g6",
+          "h6"
+        ],
+        "result": "*",
+        "status": "ongoing",
+        "turn": "black",
+        "winner": null
+      }
+    }
+  ],
+  "input_schema": {
+    "additionalProperties": false,
+    "properties": {
+      "action": {
+        "enum": [
+          "new",
+          "move",
+          "show"
+        ],
+        "type": "string"
+      },
+      "fen": {
+        "maxLength": 100,
+        "type": "string"
+      },
+      "move": {
+        "maxLength": 12,
+        "minLength": 2,
+        "type": "string"
+      }
+    },
+    "required": [
+      "action"
+    ],
+    "type": "object"
+  },
+  "kind": "session",
+  "limits": {
+    "memory_mb": 256,
+    "output_kb": 64,
+    "timeout_s": 20
+  },
+  "name": "chess_session",
+  "output_schema": {
+    "additionalProperties": false,
+    "properties": {
+      "board": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "fen": {
+        "type": "string"
+      },
+      "in_check": {
+        "type": "boolean"
+      },
+      "last_move": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "legal_moves": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "result": {
+        "type": "string"
+      },
+      "status": {
+        "enum": [
+          "ongoing",
+          "checkmate",
+          "stalemate",
+          "draw"
+        ],
+        "type": "string"
+      },
+      "turn": {
+        "enum": [
+          "white",
+          "black"
+        ],
+        "type": "string"
+      },
+      "winner": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "board",
+      "fen",
+      "turn",
+      "status",
+      "legal_moves"
+    ],
+    "type": "object"
+  },
+  "parent_version": null,
+  "permissions": {
+    "browser": false,
+    "inputs": false,
+    "network": [],
+    "secrets": []
+  },
+  "requirements": [],
+  "version": "1.0.0",
+  "when_to_use": "The task is to play, analyse or step through a chess game and the position must be remembered between calls."
+}

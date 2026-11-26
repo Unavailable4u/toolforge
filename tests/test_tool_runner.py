@@ -963,6 +963,18 @@ def test_ledger_events_surround_the_sandbox(rig: Rig) -> None:
     assert finished["payload"]["result_bytes"] == len(json.dumps({"words": 2}))
 
 
+def test_the_started_event_names_the_image_and_its_id_and_never_guesses_one(rig: Rig) -> None:
+    rig.runner._image_id = lambda image: "sha256:" + "ab" * 32
+    rig.run()
+    payload = rig.events[0]["payload"]
+    assert payload["image"] == rig.settings.runtime_image == "toolforge-runtime:py312"
+    assert payload["image_id"] == "sha256:" + "ab" * 32
+    rig.events.clear()
+    rig.runner._image_id = lambda image: None  # Docker could not say: recorded as not read
+    rig.run()
+    assert rig.events[0]["payload"]["image_id"] is None
+
+
 def test_a_call_that_cannot_be_recorded_does_not_run(rig: Rig) -> None:
     rig.ledger_fail = "forge.call.started"
     with pytest.raises(OSError):

@@ -1,0 +1,117 @@
+{
+  "description": "Decode a TLV-7 binary message given as hex (magic A7, version 1, tag-length-value records, END record, checksum) into typed records.",
+  "entrypoint": "tool.py:run",
+  "examples": [
+    {
+      "input": {
+        "hex": "a70101000873656e736f722d3702000201020300010104000441ac0000000000b0"
+      },
+      "output": {
+        "record_count": 4,
+        "records": [
+          {
+            "tag": 1,
+            "type": "text",
+            "value": "sensor-7"
+          },
+          {
+            "tag": 2,
+            "type": "uint",
+            "value": 258
+          },
+          {
+            "tag": 3,
+            "type": "flag",
+            "value": true
+          },
+          {
+            "tag": 4,
+            "type": "real",
+            "value": 21.5
+          }
+        ],
+        "version": 1
+      }
+    },
+    {
+      "input": {
+        "hex": "a70105000901000161060002dead000000ac"
+      },
+      "output": {
+        "record_count": 1,
+        "records": [
+          {
+            "tag": 5,
+            "type": "group",
+            "value": [
+              {
+                "tag": 1,
+                "type": "text",
+                "value": "a"
+              },
+              {
+                "tag": 6,
+                "type": "bytes",
+                "value": "dead"
+              }
+            ]
+          }
+        ],
+        "version": 1
+      }
+    }
+  ],
+  "input_schema": {
+    "additionalProperties": false,
+    "properties": {
+      "hex": {
+        "maxLength": 20000,
+        "type": "string"
+      }
+    },
+    "required": [
+      "hex"
+    ],
+    "type": "object"
+  },
+  "kind": "stateless",
+  "limits": {
+    "memory_mb": 256,
+    "output_kb": 64,
+    "timeout_s": 20
+  },
+  "name": "tlv_decode",
+  "output_schema": {
+    "additionalProperties": false,
+    "properties": {
+      "record_count": {
+        "type": "integer"
+      },
+      "records": {
+        "items": {
+          "type": "object"
+        },
+        "type": "array"
+      },
+      "version": {
+        "type": "integer"
+      }
+    },
+    "required": [
+      "version",
+      "records",
+      "record_count"
+    ],
+    "type": "object"
+  },
+  "parent_version": null,
+  "permissions": {
+    "browser": false,
+    "inputs": false,
+    "network": [],
+    "secrets": []
+  },
+  "requirements": [],
+  "version": "1.0.0",
+  "when_to_use": "The task gives a hex dump of a TLV-7 message and asks what it contains; the format is described in the tool's source."
+}

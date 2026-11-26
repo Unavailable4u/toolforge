@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from toolforge.config import Settings
+from toolforge.config import RUNTIME_IMAGE, Settings
 from toolforge.models.package import ToolPackage
 from toolforge.registry import Registry, VersionRecord
 
@@ -189,3 +189,32 @@ def activate(registry: Registry) -> Callable[[VersionRecord], VersionRecord]:
         return found
 
     return run
+
+
+# Docker tests that run tools use the default runtime image, which is built locally (`toolforge images build`, P14a) and never pulled.
+# When it is not built they skip with the command that builds it. These modules choose their own image or build it themselves.
+_OWN_IMAGE = {"test_minilocker_runner", "test_egress", "test_server_runtime_probe", "test_runtime_image"}
+
+
+@lru_cache(maxsize=1)
+def _runtime_image_built() -> bool:
+    try:
+        import docker
+
+        client = docker.from_env(timeout=5)
+        try:
+            client.images.get(RUNTIME_IMAGE)
+            return True
+        finally:
+            client.close()
+    except Exception:
+        return False
+
+
+@pytest.fixture(autouse=True)
+def _docker_tests_need_the_runtime_image(request: pytest.FixtureRequest) -> None:
+    path = Path(str(request.node.path))
+    if path.parent.name != "docker" or path.stem in _OWN_IMAGE:
+        return
+    if not _runtime_image_built():
+        pytest.skip(f"the runtime image {RUNTIME_IMAGE} is not built: run `toolforge images build`")

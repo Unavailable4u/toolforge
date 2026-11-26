@@ -11,7 +11,7 @@ from toolforge.errors import ConfigError
 def test_defaults() -> None:
     s = load_settings()
     assert s.home == Path("~/.toolforge").expanduser()
-    assert s.runtime_image == "python:3.12-slim"
+    assert s.runtime_image == "toolforge-runtime:py312"
     assert s.build_allow == ["pypi.org", "files.pythonhosted.org"]
     assert (s.server_host, s.server_port, s.dashboard_host, s.dashboard_port) == (
         "127.0.0.1",
