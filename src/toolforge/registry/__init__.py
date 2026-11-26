@@ -71,6 +71,21 @@ class GateResult:
 
 
 @dataclass(frozen=True)
+class CallRow:
+    """One finished call as the registry stored it (no arguments, no result). `session_id` is whatever the caller passed, so a reader
+    that shows it must show only the part before the first dot (the public half of a session id)."""
+
+    id: int
+    version_id: int
+    label: str
+    ok: bool
+    duration_ms: int
+    error_class: str | None
+    session_id: str | None
+    ts: str
+
+
+@dataclass(frozen=True)
 class Approval:
     id: int
     version_id: int
@@ -286,6 +301,48 @@ class Registry:
                 hint="use a version id, name@version or a tool name",
             )
         return call_stats(self.db, record.id)
+
+    # -- calls (read-only views for the dashboard, P17) ----------------------------------------------------------------------
+
+    @staticmethod
+    def _call_row(r: sqlite3.Row) -> CallRow:
+        return CallRow(
+            r["id"],
+            r["version_id"],
+            f"{r['name']}@{r['version']}",
+            bool(r["ok"]),
+            r["duration_ms"],
+            r["error_class"],
+            r["session_id"],
+            r["ts"],
+        )
+
+    def recent_calls(
+        self, version_id: int, *, limit: int = 20, before_id: int | None = None
+    ) -> list[CallRow]:
+        """The newest calls of a version, newest first. `before_id` pages backwards: pass the smallest id of the previous page."""
+        limit = max(1, min(int(limit), 200))
+        rows = self.db.query(
+            "SELECT c.*, v.name, v.version FROM calls c JOIN versions v ON v.id = c.version_id "
+            "WHERE c.version_id = ? AND (? IS NULL OR c.id < ?) ORDER BY c.id DESC LIMIT ?",
+            (version_id, before_id, before_id, limit),
+        )
+        return [self._call_row(r) for r in rows]
+
+    def calls_after(self, after_id: int, *, limit: int = 200) -> list[CallRow]:
+        """Calls of every version with an id above `after_id`, oldest first: what a live view polls for."""
+        limit = max(1, min(int(limit), 1000))
+        rows = self.db.query(
+            "SELECT c.*, v.name, v.version FROM calls c JOIN versions v ON v.id = c.version_id "
+            "WHERE c.id > ? ORDER BY c.id ASC LIMIT ?",
+            (int(after_id), limit),
+        )
+        return [self._call_row(r) for r in rows]
+
+    def last_call_id(self) -> int:
+        """The id of the newest call recorded, 0 when there is none."""
+        row = self.db.query_one("SELECT COALESCE(MAX(id), 0) AS n FROM calls")
+        return int(row["n"]) if row else 0
 
     # -- gate results ------------------------------------------------------------------------------------------------------
 
@@ -516,6 +573,7 @@ __all__ = [
     "STATS_MIN_CALLS",
     "STATS_WINDOW",
     "Approval",
+    "CallRow",
     "GateResult",
     "Hit",
     "Registry",

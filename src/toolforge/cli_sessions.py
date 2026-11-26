@@ -113,6 +113,9 @@ def _close_one(settings: Any, registry: Registry, public: str, *, wait_s: float 
     )
 
 
+close_one = _close_one  # the dashboard (P17) closes a session the same way, so it uses this function rather than a copy
+
+
 def _cmd_close(args: argparse.Namespace) -> int:
     if args.all == bool(args.session):
         print("error [bad_arguments]: name one session, or use --all", file=sys.stderr)
@@ -151,7 +154,7 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     closing.set_defaults(handler=_cmd_close)
 
 
-__all__ = ["register", "render_list"]
+__all__ = ["close_one", "register", "render_list"]
 
 if __name__ == "__main__":  # pragma: no cover
     sys.exit("run this through the `toolforge` command")

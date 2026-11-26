@@ -87,8 +87,18 @@ class Settings(BaseSettings):
     dashboard_host: str = "127.0.0.1"
     dashboard_port: int = Field(8787, ge=1, le=65535)
     dashboard_token: SecretStr | None = None
+    # Extra `Origin` and `Host` values the dashboard accepts beyond loopback and its own bound address (P17; same rules as the server's).
+    dashboard_allowed_origins: Annotated[list[str], NoDecode] = Field(default_factory=list)
+    dashboard_allowed_hosts: Annotated[list[str], NoDecode] = Field(default_factory=list)
 
-    @field_validator("build_allow", "server_allowed_origins", "server_allowed_hosts", mode="before")
+    @field_validator(
+        "build_allow",
+        "server_allowed_origins",
+        "server_allowed_hosts",
+        "dashboard_allowed_origins",
+        "dashboard_allowed_hosts",
+        mode="before",
+    )
     @classmethod
     def _split_hosts(cls, value: object) -> object:
         if isinstance(value, str):

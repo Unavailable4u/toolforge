@@ -15,6 +15,7 @@ dependencies = [
     "jsonschema==4.26.0",
     "mcp==2.3.0",
     "cryptography==50.0.2",  # Ed25519 signatures for portable bundles (S01); the standard library cannot sign
+    "fastapi==0.165.0",
 ]
 
 [project.optional-dependencies]
@@ -36,6 +37,7 @@ where = ["src"]
 [tool.setuptools.package-data]
 "toolforge.adapters" = ["recipes/*.md"]
 "toolforge.llm" = ["prompts/*.md"]
+"toolforge.dashboard" = ["static/*"]
 
 [tool.ruff]
 line-length = 110

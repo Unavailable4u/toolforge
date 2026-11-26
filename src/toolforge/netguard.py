@@ -8,6 +8,9 @@ Security properties, each proved in `tests/test_netguard.py` (and, through a rea
 * A listener bound to anything but a loopback address must have a bearer token, or it refuses to start (`require_token`). An empty or
   blank token counts as no token, so a `TOOLFORGE_SERVER_TOKEN=` line left in `.env` cannot switch the check off.
 * With a token, every request must carry `Authorization: Bearer <token>`, compared in constant time. Anything else is a bare 401.
+* A listener may ask for the token on some paths only (`token_paths`): the dashboard serves its own page without one, because a browser
+  cannot attach a bearer header to a page load, and asks for it on everything under `/api`. `Host` and `Origin` are checked on every path.
+  A request whose path is not known is treated as needing the token (fail closed), and `/api` does not cover `/apiary`.
 * The `Host` header must be one the listener expects (its own bound address, a loopback name, or an operator-configured value) and an
   `Origin` header, when present, must be a loopback origin or a configured one. This is what stops a web page from reaching a
   loopback listener through DNS rebinding. Anything else is a bare 403. A request with two `Host` or two `Origin` headers is refused.
@@ -175,20 +178,41 @@ class NetGuard:
         token: object = None,
         allowed_hosts: Iterable[str] = (),
         allowed_origins: Iterable[str] = (),
+        token_paths: Iterable[str] | None = None,
+        env_var: str = "TOOLFORGE_SERVER_TOKEN",
+        what: str = "the server",
     ) -> None:
         self._app = app
         self._token = token_text(token)
+        # An empty list, or one holding only "/", names no path: that must not switch the check off, so it means every path.
+        self._token_paths = (
+            tuple(str(p).rstrip("/") for p in token_paths if str(p).strip("/"))
+            if token_paths is not None
+            else ()
+        ) or None
         self._hosts = host_header_values(bind_host, port, allowed_hosts)
         self._origins = tuple(
             str(origin).strip().lower() for origin in allowed_origins if str(origin).strip()
         )
-        require_token(bind_host, self._token)
+        # `TOOLFORGE_DASHBOARD_TOKEN` -> `TOOLFORGE_DASHBOARD_ALLOWED_*`: the log line names the settings of the listener that refused.
+        self._allowed_setting = env_var.removesuffix("_TOKEN") + "_ALLOWED_*"
+        require_token(bind_host, self._token, env_var=env_var, what=what)
 
     def __repr__(self) -> str:
         return f"NetGuard(hosts={sorted(self._hosts)!r}, token={'set' if self._token else 'none'})"
 
-    def evaluate(self, headers: Headers) -> int | None:
-        """None when the request may proceed, else the status code to answer with: 403 for `Host` or `Origin`, 401 for the token."""
+    def _needs_token(self, path: str | None) -> bool:
+        if self._token is None:
+            return False
+        if self._token_paths is None or path is None:
+            return True
+        return any(path == prefix or path.startswith(prefix + "/") for prefix in self._token_paths)
+
+    def evaluate(self, headers: Headers, path: str | None = None) -> int | None:
+        """None when the request may proceed, else the status code to answer with: 403 for `Host` or `Origin`, 401 for the token.
+
+        `path` matters only when the guard was given `token_paths`; without it the token is asked for on every path.
+        """
         hosts, origins = _values(headers, b"host"), _values(headers, b"origin")
         if len(hosts) != 1 or hosts[0].strip().lower() not in self._hosts:
             self._refuse("Host", hosts)
@@ -196,9 +220,9 @@ class NetGuard:
         if len(origins) > 1 or (origins and not origin_allowed(origins[0], self._origins)):
             self._refuse("Origin", origins)
             return 403
-        if self._token is not None:
+        if self._needs_token(path):
             authorization = _values(headers, b"authorization")
-            if len(authorization) != 1 or not bearer_matches(authorization[0], self._token):
+            if len(authorization) != 1 or not bearer_matches(authorization[0], self._token or ""):
                 log.warning("refused a request: missing or wrong bearer token")
                 return 401
         return None
@@ -206,9 +230,10 @@ class NetGuard:
     def _refuse(self, which: str, values: list[str]) -> None:
         shown = [self._shown(value) for value in values[:2]]
         log.warning(
-            "refused a request: the %s header %s is not allowed (see TOOLFORGE_SERVER_ALLOWED_*)",
+            "refused a request: the %s header %s is not allowed (see %s)",
             which,
             shown,
+            self._allowed_setting,
         )
 
     def _shown(self, value: str) -> str:
@@ -225,7 +250,7 @@ class NetGuard:
             if kind == "websocket":
                 await send({"type": "websocket.close", "code": 1008})
             return
-        status = self.evaluate(scope.get("headers") or [])
+        status = self.evaluate(scope.get("headers") or [], scope.get("path"))
         if status is None:
             await self._app(scope, receive, send)
             return

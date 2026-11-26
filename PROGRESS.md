@@ -24,7 +24,7 @@ patch" in the same patch. Never tick a box for work that is not in the patch. Bo
 | [x] | P14b | Browser plans and the GUI kit | P14a |
 | [x] | P15 | Forge Attack Lab | P09, P10 |
 | [ ] | P16 | Benchmark harness | P11, P12, P14a, P14b |
-| [ ] | P17 | Dashboard | P09, P12, P13 |
+| [x] | P17 | Dashboard | P09, P12, P13 |
 | [ ] | P18 | Demo, packaging, project docs | P15, P16, P17 |
 | [ ] | P19 | Landing site | P18 |
 | [ ] | P20 | Guided tour | P19 |
@@ -36,9 +36,19 @@ Milestones (M0 to M7) and what can be dropped: `docs/guide/05-milestones.md`.
 
 ## Notes for the next patch
 
-Done: P01 (skeleton), P02 (package spec), P03 (registry), P04 (sandbox seam), P05 (execution contract and `run`), P06 (gates G1 to G4), P07 (MCP server v1), P08 (gate G6 and Blast Radius), P09 (approvals, egress, brokered secrets), P10 (independent challenger, gate G5), P11 (server-side builder), P12 (reuse ranking, self-repair, rollback), P13 (stateful sessions), P14a (runtime image, recipes, reference packs), P14b (browser plans and the GUI kit), S01 (optional: portable bundles and signed provenance), S02 (optional: declarative tool chains), P15 (Forge Attack Lab).
-Next: P16 (benchmark harness; needs P11, P12, P14a and P14b, all done) and P17 (dashboard). P18 needs P15, P16 and P17. Decisions and interfaces that later patches must respect:
+Done: P01 (skeleton), P02 (package spec), P03 (registry), P04 (sandbox seam), P05 (execution contract and `run`), P06 (gates G1 to G4), P07 (MCP server v1), P08 (gate G6 and Blast Radius), P09 (approvals, egress, brokered secrets), P10 (independent challenger, gate G5), P11 (server-side builder), P12 (reuse ranking, self-repair, rollback), P13 (stateful sessions), P14a (runtime image, recipes, reference packs), P14b (browser plans and the GUI kit), S01 (optional: portable bundles and signed provenance), S02 (optional: declarative tool chains), P15 (Forge Attack Lab), P17 (dashboard).
+Next: P16 (benchmark harness; needs P11, P12, P14a and P14b, all done). P18 needs P15, P16 and P17 (P15 and P17 are done). Decisions and interfaces that later patches must respect:
 
+* P17 interfaces. `dashboard/app.py` (`build_dashboard(settings, *, registry=, runs_dir=, ledger_factory=, event_interval_s=, session_close_wait_s=) -> Dashboard` with `.app` (FastAPI), `.guarded` (the
+  `NetGuard` to serve) and `.close()`; `serve`, `describe_listener`, `status_for`), `dashboard/views.py` (read-side JSON), `dashboard/events.py` (`EventFeed.cursor/poll`, `summarize_event`),
+  `dashboard/results.py` (`stored_results(runs_dir, "attacks"|"bench", name=None)`), `static/{index.html,app.js,style.css}`; `cli_dashboard.py` behind `toolforge dashboard [--host] [--port] [--runs-dir]`;
+  `Registry.recent_calls/calls_after/last_call_id` and `CallRow`; `cli_sessions.close_one`; `NetGuard(token_paths=, env_var=, what=)`; settings `dashboard_allowed_hosts/origins`. Page: `docs/dashboard.md`.
+* P17 for P15 and P16: the dashboard reads `<runs>/attacks/*.json` (what `toolforge attacks run --json` writes; drawn from its real fields) and `<runs>/bench/<run>/summary.json`, and runs nothing. P16's format is not
+  fixed yet: `static/app.js` `resultView` shows a table for `configs` and the raw JSON otherwise; adjust it, and the paths in `dashboard/results.py`, once P16's file is final.
+* P17 and P14b: the pages show `kind`, `permissions.browser` and the steps of a browser plan; the approval page shows the plan steps the request carries (the P14b note asked for this).
+* P17 for P18 and P19: `docs/dashboard.md` is the dashboard's page; the README has a short section. The dashboard page has not been exercised in a real browser (see its Limits); P19 and P20 own browser tests.
+* P17 not run: `toolforge dashboard` in a real browser, and the Docker-dependent paths (approving a version with live examples, closing an orphaned session's container). The decision to follow the
+  patch file over the P09 note about `decide` is in `DEVIATIONS.md`.
 * P15 interfaces. `attacks/catalog.py` (`Attack`, `Check`, `evaluate`, `verdict_of`, `ATTACKS`, `get_attack`, `attacks_markdown`, `package`: the hostile packages are built here as strings) and `attacks/runner.py` (`Lab`, `run_one`, `run_attacks`,
   `render_table`, `write_json`, `exit_code`, `docker_problem`) behind `toolforge attacks list [--markdown]` and `toolforge attacks run [--only ID]... [--json] [--deadline S]` (`cli_attacks.py`); `docs/ATTACKS.md` embeds the generated table between
   `attacks:begin/end` markers (drift-tested); the `attacks` marker suite is `tests/attacks/test_attacks.py`; `--json` writes `runs/attacks/attacks-<time>.json` (P18 and P20 can read it as evidence). No new setting, ledger event or registry column. Written before S01, P14b and S02 landed, then brought up to date: seven more attacks (`plan_host_escape`, `plan_vocabulary`, `plan_page_text`, `bundle_forgery`, `bundle_stranger`, `chain_laundering`, `chain_ref_abuse`) attack the plan validator, signed bundles and chains, all without Docker; `Lab` gained `stranger()` (another person's data directory that signs and exports bundles), `trust`, `approve`, `quarantine`, `chain_service`, `mcp_tool_names_for(chain_enabled)`, `import_bundle`, `created_by_of`, `home_snapshot` and `scratch`; `approval_over_mcp` now lists the server with chains on and also forbids import, export, trust and bundle in a tool name.

@@ -83,6 +83,12 @@ The optional `forge_chain` tool (off unless `TOOLFORGE_CHAIN_ENABLED=true`, see 
 | `forge_chain` | `steps: [{id, tool, args}]` | per step `status` (`ok`, `failed`, `skipped`), `run_id`, `duration_ms` and the fenced `output` or `error`; `stop_reason`, `flags` | S02 |
 <!-- tools:end -->
 
+## The operator dashboard
+
+`toolforge dashboard` serves a local web page (http://127.0.0.1:8787/) where you read the registry, the gates and the Blast Radius report,
+see the permission diff of an approval request, and approve, deny, promote, quarantine, release or roll back with the same refusals as the
+command line. It is a separate process from `toolforge serve`; an agent has no route to it. See [docs/dashboard.md](docs/dashboard.md).
+
 ## Working on this repository with an AI agent
 
 The build plan is split into patches. Give any coding agent the repository link and a prompt such as:

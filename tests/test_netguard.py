@@ -142,6 +142,52 @@ def test_with_a_token_every_request_needs_it() -> None:
     assert g.evaluate(headers(authorization=[f"Bearer {TOKEN}", f"Bearer {TOKEN}"])) == 401
 
 
+def test_the_token_can_be_asked_for_on_some_paths_only() -> None:
+    g = guard(token=TOKEN, token_paths=("/api",))
+    ok = headers(authorization=f"Bearer {TOKEN}")
+    for path in ("/api", "/api/tools", "/api/versions/a/b/report"):
+        assert g.evaluate(headers(), path) == 401 and g.evaluate(ok, path) is None, path
+    for path in ("/", "/static/app.js", "/apiary", "/api-docs", "/x/api"):
+        assert g.evaluate(headers(), path) is None, path
+    # Host and Origin are checked on every path, with or without the token.
+    assert g.evaluate(headers("evil.com"), "/") == 403
+    assert g.evaluate(headers(origin="https://evil.example"), "/static/app.js") == 403
+
+
+def test_an_unknown_path_and_an_empty_path_list_fail_closed() -> None:
+    assert guard(token=TOKEN, token_paths=("/api",)).evaluate(headers(), None) == 401
+    for paths in ((), ("/",), ("", "//")):
+        g = guard(token=TOKEN, token_paths=paths)
+        assert g.evaluate(headers(), "/anything") == 401, paths
+    assert guard(token=TOKEN).evaluate(headers(), "/anything") == 401  # no token_paths: every path, as before
+
+
+def test_the_guard_passes_the_request_path_to_evaluate() -> None:
+    g = guard(token=TOKEN, token_paths=("/api",))
+    sent, reached = run_asgi(g, {"type": "http", "path": "/", "headers": headers()})
+    assert reached and sent[0]["status"] == 200
+    sent, reached = run_asgi(g, {"type": "http", "path": "/api/tools", "headers": headers()})
+    assert not reached and sent[0]["status"] == 401
+    sent, reached = run_asgi(g, {"type": "http", "headers": headers()})  # a scope with no path
+    assert not reached and sent[0]["status"] == 401
+
+
+def test_the_log_line_names_the_allow_list_settings_of_its_own_listener(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(logging.WARNING, logger="toolforge.netguard")
+    guard(env_var="TOOLFORGE_DASHBOARD_TOKEN", what="the dashboard").evaluate(headers("evil.com"), "/")
+    guard().evaluate(headers("evil.com"), "/")
+    text = caplog.text
+    assert "TOOLFORGE_DASHBOARD_ALLOWED_*" in text and "TOOLFORGE_SERVER_ALLOWED_*" in text
+
+
+def test_the_refusal_can_name_another_variable() -> None:
+    with pytest.raises(ConfigError) as caught:
+        guard(bind_host="0.0.0.0", env_var="TOOLFORGE_DASHBOARD_TOKEN", what="the dashboard")
+    assert "TOOLFORGE_DASHBOARD_TOKEN" in str(caught.value) and "the dashboard" in str(caught.value)
+
+
 def test_without_a_token_a_loopback_listener_needs_no_header() -> None:
     assert guard().evaluate(headers()) is None
 

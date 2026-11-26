@@ -2,6 +2,32 @@
 
 Where reality differed from the guide, newest first: what the guide said, what is true, what was done.
 
+* 2026-11-27 (P17): the P09 notes in `PROGRESS.md` said the dashboard should read approvals and "never `decide`". The P17 patch file lists `POST /approvals/{id}`
+  (approve or deny with a reason) and says the dashboard imports the approval functions. The patch file was followed: the dashboard calls `operator_actions.decide`.
+  What keeps the P09 intent: it passes no tool runner, so approving a version with live examples is refused (`smoke_needs_sandbox`, nothing changes) and the page
+  says to use the command line; denying, which needs no sandbox, works. The P09 note is kept in `PROGRESS.md` as written.
+* 2026-11-27 (P17): the guide lists `FastAPI` as the dashboard's framework and no dependency line. `fastapi==0.165.0` is added to `pyproject.toml`. It installs beside the
+  pinned `mcp==2.3.0` (`starlette 1.10.0`, `uvicorn 0.54.0` both arrive through `mcp`; `pip check` is clean). The dashboard uses `uvicorn` the way the MCP server does,
+  without a line of its own.
+* 2026-11-27 (P17): `NetGuard` gains three optional arguments, `token_paths`, `env_var` and `what` (and `evaluate(headers, path=None)`). The patch says to reuse `netguard`, but
+  a page cannot carry a bearer header, so the dashboard asks for the token on `/api` only while `Host` and `Origin` are checked on every path. With no `token_paths` the
+  behaviour is unchanged (every path); an empty list, `"/"` and an unknown path all mean every path, so the option cannot switch the check off by accident. `env_var` and `what`
+  make the refusal name `TOOLFORGE_DASHBOARD_TOKEN`. The routes check the token again themselves.
+* 2026-11-27 (P17): settings added: `dashboard_allowed_origins` and `dashboard_allowed_hosts` (`TOOLFORGE_DASHBOARD_ALLOWED_ORIGINS` and `..._HOSTS`), as the P07 notes
+  allowed ("add ... or reuse the server ones"). The dashboard has its own, so one listener's exceptions do not open the other. Both are in `.env.example`.
+* 2026-11-27 (P17): scope additions the patch file does not list: `dashboard/{__init__,views,events,results}.py` (the guide names only `app.py` and `static/`), `cli_dashboard.py`
+  (registered through `cli.REGISTRARS`), `docs/dashboard.md`, `tests/dashboard_helpers.py`, and in `registry/__init__.py` the read-only `CallRow`, `recent_calls`, `calls_after` and
+  `last_call_id` (the dashboard must not run SQL of its own: the registry is the only reader of tool state). `cli_sessions.close_one` is a public name for the function the CLI
+  already used to close a session, so the dashboard does not copy it.
+* 2026-11-27 (P17): the patch file puts "Live (event stream and sessions)" on one tab. They are two tabs, Live and Sessions, because the sessions list has its own close buttons.
+* 2026-11-27 (P17): `GET /versions/{name}/{version}/report` returns the **stored** report and never generates one (a GET that writes files is the wrong shape). A version with none gets
+  `stored: false` and a `not_measured` summary, and `?format=html` is `404` with the command that makes one (`toolforge report`). The page also has an `/api/.../calls` route, which the
+  patch file does not list, to page a version's calls.
+* 2026-11-27 (P17): `/attacks` reads `<runs>/attacks/*.json`, which is exactly what `toolforge attacks run --json` writes (`attacks-<time>.json`, P15), and the page draws it from its real fields (summary,
+  verdict, evidence, checks). Only `contained` is green; `breached` is red and `inconclusive` and `skipped` stay amber. `/bench` reads `<runs>/bench/<run>/summary.json`; P16 is not built, so its file shape is not
+  fixed: the page shows a table when a file has `configs` and the raw JSON otherwise. `<runs>` is `./runs` or `toolforge dashboard --runs-dir`, not a setting.
+* 2026-11-27 (P17): the P14b notes ask P17 to "show `kind` and the plan steps". Done: the registry, tool and version pages show `kind`, a version shows `permissions.browser` and (for a browser plan) its steps read from the
+  frozen package through `approvals.plan_lines`, and an approval request shows the plan steps it carries. The dashboard approves or denies a plan like any other; approving one that has live examples is not possible here.
 * 2026-11-27 (Fix P14b): the real-page test expected `https://example.com` to show "Example Domain". The visible text the browser
   container read on 2026-11-27 starts "This domain is for use in documentation examples" and does not hold that heading. The plan
   itself worked. The test now asks only for the word "domain" in the text; no source code changed.
