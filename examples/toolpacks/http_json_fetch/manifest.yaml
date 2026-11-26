@@ -1,15 +1,53 @@
 description: Fetch and validate JSON from HTTP API
-kind: http-api
-name: http_json_fetch
-recipe:
-  description: Fetch and validate JSON from HTTP API
-  headers:
-    Accept: application/json
-  method: GET
-  url: https://api.example.com/data
-  validation_schema:
-    properties:
-      status:
+entrypoint: tool.py:run
+examples:
+  - input:
+      url: "https://api.example.com/data"
+      method: "GET"
+      headers:
+        Accept: "application/json"
+    output:
+      status: "ok"
+      data:
+        items: [1, 2, 3]
+input_schema:
+  additionalProperties: false
+  properties:
+    url:
+      type: string
+    method:
+      default: "GET"
+      type: string
+    headers:
+      additionalProperties:
         type: string
-    type: object
+      type: object
+  required:
+    - url
+  type: object
+kind: http-api
+limits:
+  memory_mb: 128
+  output_kb: 64
+  timeout_s: 30
+name: http_json_fetch
+output_schema:
+  additionalProperties: false
+  properties:
+    status:
+      type: string
+    data:
+      type: object
+  required:
+    - status
+  type: object
+parent_version: null
+permissions:
+  browser: false
+  inputs: false
+  network:
+    - api.example.com
+  secrets: []
+requirements: []
 version: 1.0.0
+when_to_use: The task requires fetching and validating JSON from an HTTP API endpoint.

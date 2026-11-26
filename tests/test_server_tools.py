@@ -416,7 +416,7 @@ def test_an_unknown_recipe_lists_the_valid_kinds_and_reads_no_file(env: Env, kin
 def test_runtime_info_reports_the_image_and_the_limits(env: Env) -> None:
     out = data(env.call("forge_runtime_info"))
     assert (
-        out["runtime_image"] == "python:3.12-slim"
+        out["runtime_image"] == "toolforge-runtime:py312"
         and out["python"] == "3.12.4"
         and out["python_status"] == "measured"
     )
@@ -620,6 +620,7 @@ def test_describe_shows_a_missing_blast_radius_as_not_measured(env: Env) -> None
     assert "evidence, not proof" in out["blast_radius_notice"]
 
 
+@pytest.mark.usefixtures("minilocker")
 def test_describe_shows_a_stored_blast_radius_cleaned_and_scanned(env: Env) -> None:
     from toolforge.report import blast_radius
 

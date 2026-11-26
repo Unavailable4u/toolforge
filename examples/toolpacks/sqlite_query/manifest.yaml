@@ -1,29 +1,61 @@
-name: sqlite-query-demo
-version: 1.0.0
 description: Example SQLite query tool demonstrating the SQL recipe
-
-tools:
-  - name: query-products
-    description: Query products from SQLite database
-    kind: sql
-    permissions:
-      files: true
-    inputs:
-      - name: products.db
-        description: SQLite products database
-    parameters:
-      - name: query
-        description: SQL SELECT query (use ? for parameters)
+entrypoint: tool.py:run
+examples:
+  - input:
+      query: "SELECT * FROM products WHERE price > ?"
+      params: ["100"]
+    output:
+      columns:
+        - id
+        - name
+        - price
+      rows:
+        - ["1", "Laptop", "999.99"]
+        - ["2", "Phone", "599.99"]
+    files:
+      inputs/products.db: "binary-sqlite-content"
+input_schema:
+  additionalProperties: false
+  properties:
+    query:
+      type: string
+    params:
+      default: []
+      items:
         type: string
-        required: true
-      - name: params
-        description: Query parameters as JSON array
+      type: array
+  required:
+    - query
+  type: object
+kind: sql
+limits:
+  memory_mb: 256
+  output_kb: 64
+  timeout_s: 30
+name: sqlite_query
+output_schema:
+  additionalProperties: false
+  properties:
+    columns:
+      items:
+        type: string
+      type: array
+    rows:
+      items:
+        items:
+          type: string
         type: array
-        default: []
-    outputs:
-      - name: rows
-        description: Query result rows
-        type: array
-      - name: columns
-        description: Column names
-        type: array
+      type: array
+  required:
+    - columns
+    - rows
+  type: object
+parent_version: null
+permissions:
+  browser: false
+  inputs: true
+  network: []
+  secrets: []
+requirements: []
+version: 1.0.0
+when_to_use: The task requires querying a SQLite database file provided in inputs.

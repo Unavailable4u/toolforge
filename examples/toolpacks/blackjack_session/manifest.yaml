@@ -1,12 +1,68 @@
 description: Blackjack game simulation
+entrypoint: tool.py:run
+examples:
+  - input:
+      action: "new_game"
+      seed: 42
+    output:
+      state:
+        player_hand: ["AH", "KH"]
+        dealer_hand: ["10D", "??"]
+        turn: "player"
+      legal_actions: ["hit", "stand", "double", "split"]
+      observation: "Your hand: AH KH (21). Dealer shows: 10D"
+  - input:
+      action: "stand"
+    output:
+      state:
+        player_hand: ["AH", "KH"]
+        dealer_hand: ["10D", "QD"]
+        turn: "done"
+      legal_actions: []
+      observation: "Dealer: 10D QD (20). You win with 21!"
+      result: "win"
+input_schema:
+  additionalProperties: false
+  properties:
+    action:
+      enum: ["new_game", "hit", "stand", "double", "split"]
+      type: string
+    seed:
+      type: integer
+  required:
+    - action
+  type: object
 kind: game-state
+limits:
+  memory_mb: 256
+  output_kb: 32
+  timeout_s: 30
 name: blackjack_session
-recipe:
-  decks: 6
-  description: Blackjack game simulation
-  players: 4
-  rules:
-    dealer_hits_soft_17: true
-    double_after_split: true
-    surrender: false
+output_schema:
+  additionalProperties: false
+  properties:
+    legal_actions:
+      items:
+        type: string
+      type: array
+    observation:
+      type: string
+    result:
+      type: string
+    state:
+      additionalProperties: true
+      type: object
+  required:
+    - legal_actions
+    - observation
+    - state
+  type: object
+parent_version: null
+permissions:
+  browser: false
+  inputs: false
+  network: []
+  secrets: []
+requirements: []
 version: 1.0.0
+when_to_use: The task requests playing or simulating a blackjack game session with deterministic replay.

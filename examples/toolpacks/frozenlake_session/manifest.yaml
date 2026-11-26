@@ -1,10 +1,67 @@
 description: FrozenLake reinforcement learning environment
+entrypoint: tool.py:run
+examples:
+  - input:
+      action: "new_game"
+      seed: 42
+    output:
+      state:
+        grid: ["SFFF", "FHFH", "FFFH", "HFFG"]
+        position: [0, 0]
+      legal_actions: ["up", "down", "left", "right"]
+      observation: "Start at (0,0). Goal at (3,3). Holes at (1,1), (1,3), (2,3), (3,0)."
+  - input:
+      action: "step"
+      direction: "right"
+    output:
+      state:
+        grid: ["SFFF", "FHFH", "FFFH", "HFFG"]
+        position: [0, 1]
+      legal_actions: ["up", "down", "left", "right"]
+      observation: "Moved right to (0,1). Ice is slippery."
+input_schema:
+  additionalProperties: false
+  properties:
+    action:
+      enum: ["new_game", "step"]
+      type: string
+    direction:
+      enum: ["up", "down", "left", "right"]
+      type: string
+    seed:
+      type: integer
+  required:
+    - action
+  type: object
 kind: game-state
+limits:
+  memory_mb: 128
+  output_kb: 32
+  timeout_s: 20
 name: frozenlake_session
-recipe:
-  description: FrozenLake reinforcement learning environment
-  is_slippery: true
-  map: 4x4
-  max_steps: 100
-  render_mode: ansi
+output_schema:
+  additionalProperties: false
+  properties:
+    legal_actions:
+      items:
+        type: string
+      type: array
+    observation:
+      type: string
+    state:
+      additionalProperties: true
+      type: object
+  required:
+    - legal_actions
+    - observation
+    - state
+  type: object
+parent_version: null
+permissions:
+  browser: false
+  inputs: false
+  network: []
+  secrets: []
+requirements: []
 version: 1.0.0
+when_to_use: The task requests running or simulating a FrozenLake RL environment episode.

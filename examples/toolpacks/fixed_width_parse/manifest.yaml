@@ -1,13 +1,79 @@
 description: Parse fixed-width text files
+entrypoint: tool.py:run
+examples:
+  - input:
+      content: "001     Alice           123.45\n002     Bob             678.90"
+      columns:
+        - name: id
+          width: 8
+        - name: name
+          width: 20
+        - name: amount
+          width: 10
+    output:
+      rows:
+        - id: "001"
+          name: "Alice"
+          amount: "123.45"
+        - id: "002"
+          name: "Bob"
+          amount: "678.90"
+input_schema:
+  additionalProperties: false
+  properties:
+    content:
+      type: string
+    columns:
+      items:
+        additionalProperties: false
+        properties:
+          name:
+            type: string
+          width:
+            type: integer
+        required:
+          - name
+          - width
+        type: object
+      type: array
+  required:
+    - content
+    - columns
+  type: object
 kind: file-format
+limits:
+  memory_mb: 128
+  output_kb: 64
+  timeout_s: 20
 name: fixed_width_parse
-recipe:
-  columns:
-  - id:8
-  - name:20
-  - amount:10
-  description: Parse fixed-width text files
-  sample: '001     Alice           123.45
-
-    002     Bob             678.90'
+output_schema:
+  additionalProperties: false
+  properties:
+    rows:
+      items:
+        additionalProperties: false
+        properties:
+          id:
+            type: string
+          name:
+            type: string
+          amount:
+            type: string
+        required:
+          - id
+          - name
+          - amount
+        type: object
+      type: array
+  required:
+    - rows
+  type: object
+parent_version: null
+permissions:
+  browser: false
+  inputs: true
+  network: []
+  secrets: []
+requirements: []
 version: 1.0.0
+when_to_use: The task provides a fixed-width text file and column definitions, and asks to parse it into structured data.

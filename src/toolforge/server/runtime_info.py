@@ -1,219 +1,123 @@
-"""The MCP server's own runtime information: version, capabilities, the image details that run each tool.
+"""`forge_runtime_info`: what a tool's code will find when it runs. Read from the runtime image, never guessed.
 
-Returned to clients as a transparent json-schema compatible object, and used by the CLI's `toolforge doctor`.
+The Python version and the installed libraries are properties of the image, so they are read from it: one throwaway container with no
+network, a read-only root filesystem, no capabilities and a small memory limit runs a fixed script that lists the installed
+distributions. The script and the image name are ToolForge's own; nothing from a caller reaches the container.
+
+When Docker is not available, the image is not present locally (the probe never pulls, so it never uses the network) or the probe
+fails, `python` and `libraries` are `null` and `libraries_status` says "not measured" and why. An empty list always means "the image
+has no libraries", never "not looked".
+
+Proven by `tests/test_server_runtime_info.py` and `tests/test_server_tools.py` (a stand-in probe), and `tests/docker/test_server_runtime_probe.py` (the real one, with Docker).
 """
 
 from __future__ import annotations
 
 import json
-import os
-import platform
-from dataclasses import dataclass
-from datetime import datetime, timezone
-from pathlib import Path
-from typing import TYPE_CHECKING
+import logging
+import threading
+from collections.abc import Callable
+from typing import Any
 
-import importlib.metadata
-import pkg_resources  # fallback
+log = logging.getLogger(__name__)
 
-if TYPE_CHECKING:
-    from toolforge.config import Settings
+PROBE_TIMEOUT_S = 30
+MAX_LIBRARIES = 400
+_SCRIPT = (
+    "import json, sys\n"
+    "from importlib import metadata\n"
+    "libs = sorted({(d.metadata['Name'] or '', d.version or '') for d in metadata.distributions() if d.metadata['Name']})\n"
+    "print(json.dumps({'python': '%d.%d.%d' % sys.version_info[:3], 'libraries': [list(x) for x in libs]}))\n"
+)
 
-
-@dataclass(frozen=True)
-class RuntimeImageInfo:
-    """A runtime image: a Docker container with software installed that can run tools."""
-
-    # The exact digest of the runtime image, prefixed with its repository (e.g. `toolforge/runtime:latest@sha256:...`).
-    digest: str
-
-    # The friendly name that appears in logs and in the tool's `runtime_image` field.
-    name: str
-
-    # When this image was built (iso8601), for freshness checks.
-    built_at: str
-
-    # A list of software packages and their versions included in this image.
-    packages: dict[str, str]
-
-    # Whether this image is considered deprecated: newer tools should not target it.
-    deprecated: bool = False
+Probe = Callable[[str], "dict[str, Any] | None"]
+_cache: dict[str, dict[str, Any]] = {}
+_lock = threading.Lock()
 
 
-class RuntimeInfo:
-    """Collects runtime‑image information and other static facts about this ToolForge server."""
-
-    def __init__(self, settings: Settings) -> None:
-        self.settings = settings
-        self.images: dict[str, RuntimeImageInfo] = {}
-        self._load_images()
-
-    def _load_images(self) -> None:
-        """Read the images registered under `self.settings.images_dir` (default `$TOOLFORGE_HOME/images/`)."""
-        # Default location: $TOOLFORGE_HOME/images/, or the configurable setting.
-        images_dir = self.settings.images_dir
-        if not images_dir or not os.path.isdir(images_dir):
-            # No images have been built yet.
-            return
-
-        for manifest_file in Path(images_dir).glob("*/manifest.json"):
-            try:
-                with open(manifest_file) as f:
-                    data = json.load(f)
-                image = RuntimeImageInfo(
-                    digest=data["digest"],
-                    name=data["name"],
-                    built_at=data["built_at"],
-                    packages=data.get("packages", {}),
-                    deprecated=data.get("deprecated", False),
-                )
-                self.images[image.name] = image
-            except (OSError, json.JSONDecodeError, KeyError):
-                continue  # skip malformed manifests silently
-
-    def to_dict(self) -> dict[str, object]:
-        """Everything a client may want to know about the server, as plain JSON."""
-
-        from toolforge.sandbox.minilocker_runner import MiniLockerSandbox
-
-        # Which sandbox backends are usable (some may be unavailable on this system).
-        backends: dict[str, bool] = {}
-        backends["fake"] = True  # always available
+def docker_probe(image: str) -> dict[str, Any] | None:
+    """`{"python": "3.12.4", "libraries": [["name", "version"], ...]}` read from `image`, or None when it cannot be read."""
+    try:
+        import docker
+    except ImportError:
+        return None
+    client = None
+    container = None
+    try:
+        client = docker.from_env(timeout=5)
+        client.ping()
+        client.images.get(image)  # never pull: that would be network access chosen by a request
+        container = client.containers.run(
+            image,
+            ["python", "-I", "-c", _SCRIPT],
+            detach=True,
+            network_mode="none",
+            read_only=True,
+            cap_drop=["ALL"],
+            security_opt=["no-new-privileges"],
+            mem_limit="128m",
+            pids_limit=64,
+            user="65534:65534",
+        )
+        container.wait(timeout=PROBE_TIMEOUT_S)
+        out = container.logs(stdout=True, stderr=False).decode("utf-8", "replace").strip().splitlines()
+        data = json.loads(out[-1]) if out else None
+        return data if isinstance(data, dict) else None
+    except Exception:
+        log.info("could not read the runtime image (Docker unavailable, image missing or the probe failed)")
+        log.debug("probe failure detail", exc_info=True)
+        return None
+    finally:
         try:
-            # The import may already have happened; we just need to know whether the backend can be instantiated.
-            sandbox = MiniLockerSandbox()
-            backends["minilocker"] = True
-            sandbox.close()
+            if container is not None:
+                container.remove(force=True)
         except Exception:
-            backends["minilocker"] = False
-
-        version = "unknown"
-        try:
-            # Prefer importlib.metadata (Python 3.8+)
-            version = importlib.metadata.version("toolforge")
-        except Exception:
+            log.debug("could not remove the probe container", exc_info=True)
+        if client is not None:
             try:
-                # Fallback for older Python or development installs
-                version = pkg_resources.get_distribution("toolforge").version
+                client.close()
             except Exception:
                 pass
 
+
+def read_image(image: str, probe: Probe | None = None) -> dict[str, Any]:
+    """The facts about `image`: `python` and `libraries` (None when not measured), `libraries_status`. Cached for the process."""
+    with _lock:
+        cached = _cache.get(image)
+    if cached is not None:
+        return cached
+    data = (probe or docker_probe)(image)
+    libraries = data.get("libraries") if isinstance(data, dict) else None
+    python = data.get("python") if isinstance(data, dict) else None
+    if (
+        not isinstance(libraries, list)
+        or not isinstance(python, str)
+        or not all(isinstance(x, list | tuple) and len(x) == 2 for x in libraries)
+    ):
         return {
-            "server": {
-                "version": version,
-                "python": {
-                    "implementation": platform.python_implementation(),
-                    "version": platform.python_version(),
-                },
-                "platform": {
-                    "system": platform.system(),
-                    "machine": platform.machine(),
-                    "release": platform.release(),
-                },
-                "settings": {
-                    "home": str(self.settings.home),
-                    "images_dir": str(self.settings.images_dir),
-                    "sandbox": self.settings.sandbox,
-                    "sandbox_timeout_s": self.settings.sandbox_timeout_s,
-                    "log_level": self.settings.log_level,
-                    "max_blob_bytes": self.settings.max_blob_bytes,
-                    "max_input_bytes": self.settings.max_input_bytes,
-                    "max_output_bytes": self.settings.max_output_bytes,
-                },
-            },
-            "sandboxes": {
-                "available": backends,
-                "selected": self.settings.sandbox,
-            },
-            "images": {
-                name: {
-                    "digest": image.digest,
-                    "built_at": image.built_at,
-                    "packages": image.packages,
-                    "deprecated": image.deprecated,
-                }
-                for name, image in self.images.items()
-            },
-            "now": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+            "python": None,
+            "libraries": None,
+            "libraries_status": "not measured: the runtime image could not be read (Docker is not available, or the image is not present locally)",
         }
-
-
-# === P14: Restored missing functions ===
-
-def read_image(image_name: str, probe: "Probe | None" = None) -> dict[str, object]:
-    """Get runtime facts about an image, caching the result.
-    
-    Args:
-        image_name: Docker image name (e.g., "python:3.12-slim" or "toolforge-runtime:py312")
-        probe: Optional probe function that can inspect the image
-        
-    Returns:
-        Dict with Python version, installed libraries, and other facts
-    """
-    from typing import TYPE_CHECKING
-    if TYPE_CHECKING:
-        from typing import Callable
-        Probe = Callable[[str], dict[str, object] | None]
-    
-    # For P14: toolforge-runtime:py312 has all pinned wheels
-    if image_name == "toolforge-runtime:py312":
-        return {
-            "python": "3.12.4",
-            "libraries": {
-                "duckdb": "0.9.2",
-                "pyyaml": "6.0.1",
-                "python-dateutil": "2.9.0",
-                "beautifulsoup4": "4.12.3",
-                "lxml": "5.2.1",
-                "pillow": "10.2.0",
-                "numpy": "1.26.4",
-                "gymnasium": "1.0.0",
-                "chess": "1.10.0",
-                "jsonschema": "4.22.0",
-                "tabulate": "0.9.0",
-                "requests": "2.31.0",
-            }
-        }
-    elif "python:3.12" in image_name:
-        return {
-            "python": "3.12.4",
-            "libraries": {}
-        }
-    else:
-        # Generic fallback
-        return {
-            "python": "unknown",
-            "libraries": {}
-        }
-
-
-def docker_probe(image_name: str) -> dict[str, object] | None:
-    """Probe a Docker image to discover its Python and library versions.
-    
-    This is the default probe used when no custom probe is provided.
-    
-    Args:
-        image_name: Docker image name
-        
-    Returns:
-        Dict with runtime facts, or None if probing fails
-    """
-    # Simple implementation - would run actual Docker probe in production
-    return None
+    shown = [
+        {"name": str(name)[:80], "version": str(version)[:40]} for name, version in libraries[:MAX_LIBRARIES]
+    ]
+    facts: dict[str, Any] = {
+        "python": python[:20],
+        "libraries": shown,
+        "libraries_status": "measured"
+        if len(libraries) <= MAX_LIBRARIES
+        else f"measured; first {MAX_LIBRARIES} of {len(libraries)}",
+    }
+    with _lock:
+        _cache[image] = facts
+    return facts
 
 
 def forget() -> None:
-    """Clear any cached image facts.
-    
-    Used by tests to ensure fresh state between test cases.
-    """
-    # Simple no-op implementation - would clear cache in production
-    pass
+    """Drop what was read (tests)."""
+    with _lock:
+        _cache.clear()
 
 
-# Type alias for probe functions
-from typing import Callable, TypeAlias
-Probe: TypeAlias = Callable[[str], dict[str, object] | None]
-def runtime_info(settings: Settings) -> dict[str, object]:
-    """Helper for the single‑endpoint case."""
-    return RuntimeInfo(settings).to_dict()
+__all__ = ["Probe", "docker_probe", "forget", "read_image"]

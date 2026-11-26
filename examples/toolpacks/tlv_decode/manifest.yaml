@@ -1,13 +1,78 @@
 description: Decode TLV (Type-Length-Value) binary format
+entrypoint: tool.py:run
+examples:
+  - input:
+      hex_data: "010548656C6C6F"
+      schema:
+        big_endian: true
+        tags:
+          "0x01": string
+          "0x02": uint32
+        type: TLV
+    output:
+      fields:
+        - tag: "0x01"
+          type: string
+          value: "Hello"
+input_schema:
+  additionalProperties: false
+  properties:
+    hex_data:
+      type: string
+    schema:
+      additionalProperties: false
+      properties:
+        big_endian:
+          type: boolean
+        tags:
+          additionalProperties:
+            type: string
+          type: object
+        type:
+          type: string
+      required:
+        - big_endian
+        - tags
+        - type
+      type: object
+  required:
+    - hex_data
+    - schema
+  type: object
 kind: file-format
+limits:
+  memory_mb: 128
+  output_kb: 32
+  timeout_s: 20
 name: tlv_decode
-recipe:
-  description: Decode TLV (Type-Length-Value) binary format
-  sample_hex: 010548656C6C6F
-  schema:
-    big_endian: true
-    tags:
-      '0x01': string
-      '0x02': uint32
-    type: TLV
+output_schema:
+  additionalProperties: false
+  properties:
+    fields:
+      items:
+        additionalProperties: false
+        properties:
+          tag:
+            type: string
+          type:
+            type: string
+          value:
+            type: string
+        required:
+          - tag
+          - type
+          - value
+        type: object
+      type: array
+  required:
+    - fields
+  type: object
+parent_version: null
+permissions:
+  browser: false
+  inputs: true
+  network: []
+  secrets: []
+requirements: []
 version: 1.0.0
+when_to_use: The task provides TLV-encoded binary data in hex format and a schema, and asks to decode it into structured fields.

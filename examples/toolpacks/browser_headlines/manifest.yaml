@@ -1,23 +1,44 @@
 description: Extract news headlines from website
+entrypoint: tool.py:run
+examples:
+  - input:
+      url: "https://news.example.com"
+    output:
+      headlines:
+        - "Breaking: Major tech announcement"
+        - "Stocks rally on earnings beat"
+        - "New AI model released"
+input_schema:
+  additionalProperties: false
+  properties:
+    url:
+      type: string
+  required:
+    - url
+  type: object
 kind: browser-plan
+limits:
+  memory_mb: 512
+  output_kb: 64
+  timeout_s: 60
 name: browser_headlines
-recipe:
-  description: Extract news headlines from website
-  output_schema:
+output_schema:
+  additionalProperties: false
+  properties:
     headlines:
       items:
         type: string
       type: array
-  plan:
-  - action: goto
-    url: https://news.example.com
-  - action: wait_for
-    selector: .headline
-    timeout: 10
-  - action: extract_text
-    limit: 5
-    name: headlines
-    selector: .headline
-  - action: screenshot
-    name: homepage
+  required:
+    - headlines
+  type: object
+parent_version: null
+permissions:
+  browser: false
+  inputs: false
+  network:
+    - news.example.com
+  secrets: []
+requirements: []
 version: 1.0.0
+when_to_use: The task requests extracting headlines from a news website using browser automation.

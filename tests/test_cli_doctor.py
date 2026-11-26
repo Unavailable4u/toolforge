@@ -132,7 +132,7 @@ def by_name(results: list[tuple[Check, CheckResult]]) -> dict[str, CheckResult]:
 
 
 def test_everything_ready_exits_zero(pinned: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    client = FakeClient(images={"python:3.12-slim": image()})
+    client = FakeClient(images={load_settings().runtime_image: image()})
     assert run_doctor(env_for(client)) == 0
     out = capsys.readouterr().out
     assert "[ ok ] python" in out and "engine 27.3.1" in out and "sha256:" + "ab" * 6 in out
@@ -219,7 +219,7 @@ def test_a_missing_runtime_image_is_a_warning_with_the_pull_command(pinned: Path
     result = cli_doctor.check_runtime_image(env_for(FakeClient(images={})))
     assert (
         result.status == "warn"
-        and "docker pull python:3.12-slim" in (result.hint or "")
+        and f"docker pull {load_settings().runtime_image}" in (result.hint or "")
         and "internet" in result.message
     )
 
@@ -233,7 +233,7 @@ def test_the_runtime_image_setting_is_honoured(pinned: Path, monkeypatch: pytest
 
 def test_an_image_without_a_repo_digest_shows_its_id(pinned: Path) -> None:
     local = SimpleNamespace(attrs={"RepoDigests": []}, id="sha256:" + "ef" * 32)
-    result = cli_doctor.check_runtime_image(env_for(FakeClient(images={"python:3.12-slim": local})))
+    result = cli_doctor.check_runtime_image(env_for(FakeClient(images={load_settings().runtime_image: local})))
     assert result.status == "ok" and "sha256:" + "ef" * 6 in result.message
 
 

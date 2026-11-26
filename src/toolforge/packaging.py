@@ -26,13 +26,14 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+import yaml
 from toolforge.errors import ToolForgeError
 
-MANIFEST_NAME = "manifest.json"
+MANIFEST_NAMES = ("manifest.json", "manifest.yaml", "manifest.yml")
 MAX_FILES = 40
 MAX_FILE_BYTES = 64 * 1024
 MAX_PATH_CHARS = 200
-ALLOWED_EXTENSIONS = (".py", ".json", ".txt", ".md", ".csv")
+ALLOWED_EXTENSIONS = (".py", ".json", ".yaml", ".txt", ".md", ".csv")
 
 # Reading limits for a directory on disk. A package may hold at most MAX_FILES files, so these only bound the work done on
 # a hostile directory before it is rejected.
@@ -186,7 +187,7 @@ def read_package_dir(root: str | os.PathLike[str]) -> LoadedDir:
                     (rel, "file.path", "is not a regular file (a device, socket or pipe?)")
                 )
                 continue
-            is_manifest = rel == MANIFEST_NAME
+            is_manifest = rel in MANIFEST_NAMES
             text = _read_text(entry, rel, MAX_MANIFEST_READ_BYTES if is_manifest else MAX_FILE_BYTES, loaded)
             if text is None:
                 if is_manifest:
@@ -197,20 +198,27 @@ def read_package_dir(root: str | os.PathLike[str]) -> LoadedDir:
             else:
                 loaded.files[rel] = text
     if manifest_text is not None:
+        # Try parsing as JSON first, then YAML
         try:
             loaded.manifest = json.loads(manifest_text, parse_constant=_reject_constant)
-        except json.JSONDecodeError as exc:
-            loaded.problems.append(
-                (
-                    MANIFEST_NAME,
-                    "manifest.invalid_json",
-                    f"is not valid JSON: {exc.msg} at line {exc.lineno}, column {exc.colno}",
+        except json.JSONDecodeError:
+            # Try YAML if JSON fails
+            try:
+                loaded.manifest = yaml.safe_load(manifest_text)
+                if loaded.manifest is None:
+                    loaded.manifest = {}
+            except yaml.YAMLError as exc:
+                loaded.problems.append(
+                    (
+                        MANIFEST_NAMES[0],
+                        "manifest.invalid_json",
+                        f"is not valid JSON or YAML: {exc}",
+                    )
                 )
-            )
-            loaded.manifest_explained = True
+                loaded.manifest_explained = True
         except (ValueError, RecursionError) as exc:
             loaded.problems.append(
-                (MANIFEST_NAME, "manifest.invalid_json", f"is not valid JSON: {_first_line(exc)}")
+                (MANIFEST_NAMES[0], "manifest.invalid_json", f"is not valid JSON: {_first_line(exc)}")
             )
             loaded.manifest_explained = True
     return loaded
@@ -223,7 +231,7 @@ def _first_line(exc: BaseException) -> str:
 
 def _read_text(entry: os.DirEntry[str], rel: str, limit: int, loaded: LoadedDir) -> str | None:
     """Read one regular file as UTF-8 without translating line endings, or record why not and return None."""
-    is_manifest = rel == MANIFEST_NAME
+    is_manifest = rel in MANIFEST_NAMES
     too_large = (
         ("package.too_large", f"is larger than {limit // 1024} KB")
         if is_manifest

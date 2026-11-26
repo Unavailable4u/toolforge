@@ -43,7 +43,7 @@ from toolforge.errors import ValidationError as PackageInvalid
 from toolforge.models.results import Issue, ValidationReport
 from toolforge.packaging import (
     ALLOWED_EXTENSIONS,
-    MANIFEST_NAME,
+    MANIFEST_NAMES,
     MAX_FILE_BYTES,
     MAX_FILES,
     Problem,
@@ -527,16 +527,18 @@ def entrypoint_problem(value: str) -> str | None:
     return None
 
 
-def _check_entrypoint(value: str) -> str:
+def _check_entrypoint(value: str | None) -> str | None:
+    if value is None:
+        return None
     problem = entrypoint_problem(value)
     if problem:
-        raise _err("entrypoint.format", f"entrypoint {_clip(value)} {problem}")
+        raise _err("entrypoint.invalid", f"entrypoint {_clip(value)} {problem}")
     return value
 
 
 def _check_kind(value: str) -> str:
-    if value not in KINDS:
-        raise _err("kind.invalid", f"kind {_clip(value)} is not one of: {', '.join(KINDS)}")
+    if value not in ("stateless", "session", "sql", "file-format", "http-api", "game-state", "browser-plan"):
+        raise _err("kind.invalid", f"kind {repr(value)} is not one of: stateless, session, sql, file-format, http-api, game-state, browser-plan")
     return value
 
 
@@ -710,9 +712,9 @@ class Manifest(_Model):
     parent_version: Annotated[str | None, AfterValidator(_check_parent_version)] = None
     description: Annotated[str, AfterValidator(_check_description)]
     when_to_use: Annotated[str, AfterValidator(_check_when_to_use)] = ""
-    entrypoint: Annotated[str, AfterValidator(_check_entrypoint)]
+    entrypoint: Annotated[str | None, AfterValidator(_check_entrypoint)] = None
     kind: Annotated[str, AfterValidator(_check_kind)] = "stateless"
-    input_schema: dict[str, Any]
+    input_schema: dict[str, Any] | None = None
     output_schema: dict[str, Any] | None = None
     permissions: Permissions = Field(default_factory=Permissions)
     limits: Limits = Field(default_factory=Limits)
@@ -933,11 +935,11 @@ class ToolPackage:
         manifest = self.manifest
         if len(self.files) > MAX_FILES:
             raise PackageInvalid(f"the package has more than {MAX_FILES} files", code="package_invalid")
-        entries = {MANIFEST_NAME: canonical_manifest_bytes(manifest.model_dump(mode="json"))}
+        entries = {MANIFEST_NAMES[0]: canonical_manifest_bytes(manifest.model_dump(mode="json"))}
         for path, text in self.files.items():
             if (
                 check_rel_path(path)
-                or path == MANIFEST_NAME
+                or path in MANIFEST_NAMES
                 or not isinstance(text, str)
                 or text_problem(text)
             ):
@@ -983,6 +985,8 @@ class ToolPackage:
             out.add(code, path, message)
         limit = settings.max_package_kb * 1024
         manifest, manifest_bytes = self._check_manifest(out, limit)
+        if manifest and manifest.kind in ("stateless", "session") and manifest.entrypoint is None:
+            out.add("field.required", "entrypoint", "entrypoint is required for stateless or session kinds")
         trees = self._check_files(out, limit, manifest_bytes)
         self._check_entrypoint(out, trees)
         schema_ok = self._check_schemas(out)
@@ -995,7 +999,7 @@ class ToolPackage:
         raw = self._raw
         if raw is None:
             if not self._manifest_explained:
-                out.add("manifest.missing", MANIFEST_NAME, "the package has no manifest")
+                out.add("manifest.missing", "manifest.json/yaml/yml", "the package has no manifest")
             return None, 0
         if not isinstance(raw, dict):
             out.add(
@@ -1046,7 +1050,7 @@ class ToolPackage:
         for path, text in sorted(self.files.items(), key=lambda item: str(item[0])):
             label = _safe(str(path))
             problem = check_rel_path(path)
-            if problem is None and path == MANIFEST_NAME:
+            if problem is None and path in MANIFEST_NAMES:
                 problem = "is the manifest itself; send it as the manifest, not as a file"
             if problem:
                 out.add("file.path", label, f"the path {problem}")
