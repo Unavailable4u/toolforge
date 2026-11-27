@@ -1082,14 +1082,28 @@ def test_export_uses_the_clock_it_is_given(tmp_path: Path, origin) -> None:
 
 
 def test_the_signing_key_is_used_by_export_and_nothing_else_in_the_package() -> None:
-    """`load_private_key` is called from `export_bundle` only, so the private key has one way out of its file: into a signature."""
+    """`load_private_key` is called from `export_bundle` only, so the operator's private key has one way out of its file: into a signature.
+
+    The one other place is the attack lab's `Stranger` (P15), which is somebody else's ToolForge: it makes its own throwaway key in its own
+    temporary directory and signs with that, so the lab can hand the receiver bundles a hostile author would sign. It is named here, by class
+    and method, so that a call from anywhere else in the package, or from another method of `Stranger`, still fails this test.
+    `test_the_attack_labs_stranger_never_holds_the_operators_key` checks that its key is not the operator's.
+    """
     import ast
 
     root = Path(bundle.__file__).parent.parent
     callers = set()
     for source in root.rglob("*.py"):
         tree = ast.parse(source.read_text(encoding="utf-8"))
+        owner = {
+            method: cls.name
+            for cls in ast.walk(tree)
+            if isinstance(cls, ast.ClassDef)
+            for method in cls.body
+            if isinstance(method, ast.FunctionDef)
+        }
         for function in [n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)]:
+            name = f"{owner[function]}.{function.name}" if function in owner else function.name
             for node in ast.walk(function):
                 if isinstance(node, ast.Call):
                     callee = (
@@ -1098,12 +1112,43 @@ def test_the_signing_key_is_used_by_export_and_nothing_else_in_the_package() -> 
                         else getattr(node.func, "id", "")
                     )
                     if callee in ("load_private_key", "sign"):
-                        callers.add((source.relative_to(root).as_posix(), function.name, callee))
+                        callers.add((source.relative_to(root).as_posix(), name, callee))
     assert callers == {
         ("provenance/bundle.py", "export_bundle", "load_private_key"),
         ("provenance/bundle.py", "export_bundle", "sign"),
         ("provenance/attest.py", "sign", "sign"),  # `attest.sign` itself calls the key's own `.sign`
+        (
+            "attacks/runner.py",
+            "Stranger.__init__",
+            "load_private_key",
+        ),  # its own throwaway key, in its own directory
+        (
+            "attacks/runner.py",
+            "Stranger.resign",
+            "sign",
+        ),  # re-signing an edited bundle, as a hostile author can
+        ("attacks/runner.py", "Stranger.claim_to_be", "sign"),  # signing a claim to be somebody else
     }
+
+
+def test_the_attack_labs_stranger_never_holds_the_operators_key(tmp_path: Path) -> None:
+    from toolforge.attacks.runner import Stranger
+    from toolforge.provenance import keys
+
+    operator_home = tmp_path / "operator"
+    operator_home.mkdir()
+    operator = keys.init_keys(operator_home)
+    lab_root = tmp_path / "lab"
+    lab_root.mkdir()
+    stranger = Stranger(lab_root, "stranger", [])
+    try:
+        assert stranger.home.is_relative_to(lab_root) and not stranger.home.is_relative_to(operator_home)
+        assert stranger.fingerprint != operator.fingerprint
+        assert stranger.raw_public != keys.own_public_key(operator_home).raw
+        # It reads its private key from its own directory only: the operator's key file is not in its home.
+        assert not (stranger.home / "keys").samefile(operator_home / "keys")
+    finally:
+        stranger.close()
 
 
 def test_a_report_that_cannot_be_built_blocks_the_export_with_the_command_that_explains_why(
