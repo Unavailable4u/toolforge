@@ -2,6 +2,24 @@
 
 Where reality differed from the guide, newest first: what the guide said, what is true, what was done.
 
+* 2026-11-27 (P16): the guide says the agent is "a small, fixed tool-calling loop over any OpenAI-compatible endpoint". Native function calling is not offered by every such endpoint, and
+  P10's note asks the benchmark to use `toolforge.llm.client` rather than a second HTTP path. Tool calling is done in the prompt instead: the system prompt lists the tools and their schemas
+  and every reply is one JSON object (a call or the final answer), parsed with `parse_json_object`. The baseline and the forge configurations reach their tools the same way.
+* 2026-11-27 (P16): the guide does not say who promotes or approves during a forge run. ToolForge never activates an agent's tool by itself, so the harness plays a fixed scripted operator
+  after every tool call (promote a verified version that asks for no network or secrets; approve only requests whose every host is the task's fixture host; deny the rest), through
+  `operator_actions.promote` and `decide`, and records each action. `docs/BENCHMARK.md` and every report say the forge numbers are for this operator.
+* 2026-11-27 (P16): scope additions the guide does not list: `pyproject.toml` gains `pythonpath = ["."]` under pytest so the tests can import `bench` (run from a checkout, not installed);
+  `src/toolforge/dashboard/static/app.js` gains `benchView` and the dashboard's docstrings say `python -m bench` instead of `toolforge bench`, as the P17 note asked once P16's file was final.
+* 2026-11-27 (P16): the guide says the Attack Lab containment rate is "a separate line". It is read from P15's own result file, given with `--attacks` (copied into the run as
+  `attacks.json`), never by running the lab from the benchmark. The rate is contained / (contained + breached + inconclusive); skipped attacks are counted apart. Without the file it is `null`.
+* 2026-11-27 (P16): the synthetic registry for `python -m bench context` is written straight through the registry (`add_version`, `attach_blob`, scripted gate rows, `transition`) on a fixed
+  clock, not through the verification pipeline, so 1000 tools take seconds and the same seed gives byte-identical measurements. Runs in the `chain` measurement are answered by a stand-in
+  runner: only the size of the exchange is measured.
+* 2026-11-27 (P16): `http_mock_fetch` and `browser_fixture_headlines` need a host name that reaches the harness's fixture server from inside the sandbox. That depends on the machine, so it is
+  `--fixture-host` (with `--fixture-bind`, `--fixture-port`); without it these tasks are `not_measured`, never failures. The browser task is the same fixture page served over HTTP; whether a
+  browser plan or plain code reads it is up to the agent.
+* 2026-11-27 (P16): the game tasks need no game tool inside the harness. `blackjack_basic` and `frozenlake_path` are checked by pure-Python simulators, and `chess_mate_in_2` draws from a fixed
+  pool of fourteen puzzles whose solutions were computed with python-chess (re-checked in `tests/test_bench_tasks.py` when it is installed); python-chess is not a dependency.
 * 2026-11-27 (P17): the P09 notes in `PROGRESS.md` said the dashboard should read approvals and "never `decide`". The P17 patch file lists `POST /approvals/{id}`
   (approve or deny with a reason) and says the dashboard imports the approval functions. The patch file was followed: the dashboard calls `operator_actions.decide`.
   What keeps the P09 intent: it passes no tool runner, so approving a version with live examples is refused (`smoke_needs_sandbox`, nothing changes) and the page

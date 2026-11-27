@@ -5,7 +5,7 @@
 It binds `TOOLFORGE_DASHBOARD_HOST:PORT` (127.0.0.1:8787 by default). A host that is not a loopback address needs
 `TOOLFORGE_DASHBOARD_TOKEN`, or the command refuses to start; with a token, everything under `/api` must carry
 `Authorization: Bearer <token>`. `--host` and `--port` override the settings; the token is only ever read from the environment, never
-from the command line. `--runs-dir` is where `toolforge attacks` and `toolforge bench` wrote their results (default `runs`, in the
+from the command line. `--runs-dir` is where `toolforge attacks` and `python -m bench` wrote their results (default `runs`, in the
 directory this command is started from). It is a separate process from `toolforge serve`; both read the same registry.
 """
 
@@ -69,7 +69,7 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     dash.add_argument(
         "--runs-dir",
         default="runs",
-        help="where `toolforge attacks` and `toolforge bench` wrote their results (default: ./runs)",
+        help="where `toolforge attacks` and `python -m bench` wrote their results (default: ./runs)",
     )
     dash.set_defaults(handler=_cmd_dashboard)
 

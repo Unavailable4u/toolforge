@@ -50,6 +50,8 @@ select = ["E4", "E7", "E9", "F", "I"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# The repository root, so tests can import the `bench` package (P16), which is run from a checkout and is not installed.
+pythonpath = ["."]
 addopts = "-ra"
 markers = [
     "docker: needs a Docker daemon (skipped automatically when none answers)",

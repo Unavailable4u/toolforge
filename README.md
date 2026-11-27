@@ -89,6 +89,12 @@ The optional `forge_chain` tool (off unless `TOOLFORGE_CHAIN_ENABLED=true`, see 
 see the permission diff of an approval request, and approve, deny, promote, quarantine, release or roll back with the same refusals as the
 command line. It is a separate process from `toolforge serve`; an agent has no route to it. See [docs/dashboard.md](docs/dashboard.md).
 
+## The benchmark
+
+`python -m bench` (run from a checkout) measures whether an agent finishes tasks that need a tool it does not have, with and without
+ToolForge, and reports success rates with Wilson 95 percent intervals; `python -m bench context` measures what the server's answers cost
+and needs neither Docker nor a model. Method, hypotheses and status: [docs/BENCHMARK.md](docs/BENCHMARK.md).
+
 ## Working on this repository with an AI agent
 
 The build plan is split into patches. Give any coding agent the repository link and a prompt such as:

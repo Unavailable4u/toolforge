@@ -23,7 +23,7 @@ patch" in the same patch. Never tick a box for work that is not in the patch. Bo
 | [x] | P14a | Runtime image, recipes and reference packs (software use) | P13 |
 | [x] | P14b | Browser plans and the GUI kit | P14a |
 | [x] | P15 | Forge Attack Lab | P09, P10 |
-| [ ] | P16 | Benchmark harness | P11, P12, P14a, P14b |
+| [x] | P16 | Benchmark harness | P11, P12, P14a, P14b |
 | [x] | P17 | Dashboard | P09, P12, P13 |
 | [ ] | P18 | Demo, packaging, project docs | P15, P16, P17 |
 | [ ] | P19 | Landing site | P18 |
@@ -36,15 +36,40 @@ Milestones (M0 to M7) and what can be dropped: `docs/guide/05-milestones.md`.
 
 ## Notes for the next patch
 
-Done: P01 (skeleton), P02 (package spec), P03 (registry), P04 (sandbox seam), P05 (execution contract and `run`), P06 (gates G1 to G4), P07 (MCP server v1), P08 (gate G6 and Blast Radius), P09 (approvals, egress, brokered secrets), P10 (independent challenger, gate G5), P11 (server-side builder), P12 (reuse ranking, self-repair, rollback), P13 (stateful sessions), P14a (runtime image, recipes, reference packs), P14b (browser plans and the GUI kit), S01 (optional: portable bundles and signed provenance), S02 (optional: declarative tool chains), P15 (Forge Attack Lab), P17 (dashboard).
-Next: P16 (benchmark harness; needs P11, P12, P14a and P14b, all done). P18 needs P15, P16 and P17 (P15 and P17 are done). Decisions and interfaces that later patches must respect:
+Done: P01 (skeleton), P02 (package spec), P03 (registry), P04 (sandbox seam), P05 (execution contract and `run`), P06 (gates G1 to G4), P07 (MCP server v1), P08 (gate G6 and Blast Radius), P09 (approvals, egress, brokered secrets), P10 (independent challenger, gate G5), P11 (server-side builder), P12 (reuse ranking, self-repair, rollback), P13 (stateful sessions), P14a (runtime image, recipes, reference packs), P14b (browser plans and the GUI kit), S01 (optional: portable bundles and signed provenance), S02 (optional: declarative tool chains), P15 (Forge Attack Lab), P16 (benchmark harness), P17 (dashboard).
+Next: P18 (demo, packaging, project docs; needs P15, P16 and P17, all done). Decisions and interfaces that later patches must respect:
+
+* P16 interfaces. `bench/` is run from a checkout and is not installed (`pyproject.toml` adds `pythonpath = ["."]` for pytest only). `bench/tasks/` (twelve modules; `Task`, `Instance`,
+  `Check`, `TASKS`, `get`, `task_ids`, `prompt_for`, `tasks_markdown`; `docs/BENCHMARK.md` embeds the table between `tasks:begin/end`, drift-tested), `bench/agent.py` (`Agent`, `Budget`,
+  `AgentResult`, `ToolSpec`, `ToolReply`, `McpBackend`, `PythonBackend`, `run_python_package`, `SYSTEM_PROMPT`, `prompt_hash`), `bench/harness.py` (`Options`, `Lab`, `RealLab`, `ScriptedOperator`,
+  `OperatedBackend`, `FixtureServer`, `run_one`, `run`, `load_runs`, `forge_metrics`, `safety_counts`, `leaks_in`), `bench/stats.py` (`wilson`, `median`, `total`, `rate`, `overlaps`,
+  `success_block`), `bench/report.py` (`summarise`, `attack_lab`, `markdown`, `write`, `load_context`, `load_attacks`, `store_attacks`), `bench/context.py` (`measure`, `Counter`,
+  `EndpointCounter`), `bench/synthetic.py`. CLI: `python -m bench [--config] [--tasks] [--runs] [--seed] [--out] [--steps] [--max-tokens] [--max-seconds] [--fixture-host] [--fixture-bind]
+  [--fixture-port] [--keep-homes] [--with-context] [--attacks FILE]`, `python -m bench context`, `python -m bench report --out DIR [--attacks FILE]`, `python -m bench tasks`.
+* P16 files for P18 and P19. A run directory (`runs/bench/<UTC timestamp>/` by default) holds `runs/<config>/<task>/run-<n>.json`, `ledgers/...`, `summary.json`, `report.md`, and
+  `context.json` / `attacks.json` when given. `summary.json` (`schema` 1): `generated_at`, `date`, `model`, `prompt_hash`, `runs_total`, `options`, `operator`,
+  `configs.<config>.{overall,tiers.<tier>,tasks.<task>}` (each `runs`, `successes`, `success_rate`, `wilson_95`, `not_measured`, medians, `outcomes`, `stop_reasons`, `forge`, `safety`),
+  `comparisons[]` (`difference_supported` only when the intervals do not overlap), `attack_lab` (`containment_rate`, `wilson_95`, verdict counts, `docker`, `rule`, `note`) and `context`
+  (`null` when not run). Not measured is `null`, never 0. The website should read this file as is; the context figures may only be shown with their `method` label.
+* P16 and P17. The dashboard's Benchmark page now draws `summary.json` (`static/app.js` `benchView`, chosen when a file has `configs` and `attack_lab`); the paths in
+  `dashboard/results.py` were already right. `toolforge bench` in the dashboard's text was corrected to `python -m bench`. Checked once in Chromium with a generated summary.
+* P16 behaviour. Tool calling is in the prompt (one JSON object per reply) through `toolforge.llm.client`, with the same prompt, budgets and model in every configuration. The baseline is
+  `run_python` through the same `ToolRunner` and sandbox, no network. Forge runs get a fixed scripted operator (promote verified and network-free; approve only the fixture host),
+  recorded per run. The fixture tasks are `not_measured` without `--fixture-host`; warm runs of tasks without a sibling are `not_measured`. Builder tokens (`forge_build`, `forge_repair`
+  `usage`) are reported apart from agent tokens and are `null` when the provider gave none. The Attack Lab line is contained / (contained + breached + inconclusive) from P15's file.
+* P16 not run: no Docker and no model endpoint were available, so **no benchmark run has been made**: not the acceptance run (`python -m bench --config baseline --tasks log_stats
+  --runs 2`), not the fixture tasks through the egress proxy, and not the `RealLab` stdio path to `toolforge serve` with a real model. Run for real: the context measurement
+  (estimate; figures in `docs/BENCHMARK.md`), every checker and generator, the agent loop with a scripted model, `McpBackend` against the real server in memory, `PythonBackend` through the
+  real `ToolRunner` over the local stand-in runner, and the scripted operator against the real registry, `promote` and `decide`. What the first real run may show: whether the model keeps to
+  one JSON object per reply (two bad replies end a run as `bad_reply`), whether 20 tool calls are enough for a build plus a repair, and which host name reaches the fixture server from
+  the sandbox (`--fixture-bind` and `--fixture-host`).
 
 * P17 interfaces. `dashboard/app.py` (`build_dashboard(settings, *, registry=, runs_dir=, ledger_factory=, event_interval_s=, session_close_wait_s=) -> Dashboard` with `.app` (FastAPI), `.guarded` (the
   `NetGuard` to serve) and `.close()`; `serve`, `describe_listener`, `status_for`), `dashboard/views.py` (read-side JSON), `dashboard/events.py` (`EventFeed.cursor/poll`, `summarize_event`),
   `dashboard/results.py` (`stored_results(runs_dir, "attacks"|"bench", name=None)`), `static/{index.html,app.js,style.css}`; `cli_dashboard.py` behind `toolforge dashboard [--host] [--port] [--runs-dir]`;
   `Registry.recent_calls/calls_after/last_call_id` and `CallRow`; `cli_sessions.close_one`; `NetGuard(token_paths=, env_var=, what=)`; settings `dashboard_allowed_hosts/origins`. Page: `docs/dashboard.md`.
-* P17 for P15 and P16: the dashboard reads `<runs>/attacks/*.json` (what `toolforge attacks run --json` writes; drawn from its real fields) and `<runs>/bench/<run>/summary.json`, and runs nothing. P16's format is not
-  fixed yet: `static/app.js` `resultView` shows a table for `configs` and the raw JSON otherwise; adjust it, and the paths in `dashboard/results.py`, once P16's file is final.
+* P17 for P15 and P16: the dashboard reads `<runs>/attacks/*.json` (what `toolforge attacks run --json` writes; drawn from its real fields) and `<runs>/bench/<run>/summary.json`, and runs nothing. P16 has
+  fixed its format and drawn it (see the P16 bullets above).
 * P17 and P14b: the pages show `kind`, `permissions.browser` and the steps of a browser plan; the approval page shows the plan steps the request carries (the P14b note asked for this).
 * P17 for P18 and P19: `docs/dashboard.md` is the dashboard's page; the README has a short section. The dashboard page has not been exercised in a real browser (see its Limits); P19 and P20 own browser tests.
 * P17 not run: `toolforge dashboard` in a real browser, and the Docker-dependent paths (approving a version with live examples, closing an orphaned session's container). The decision to follow the

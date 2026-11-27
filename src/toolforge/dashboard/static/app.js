@@ -272,12 +272,56 @@
     if (doc.footer) out.push(el('p', { class: 'muted' }, doc.footer));
     return out;
   }
-  function resultView(doc) {
-    if (doc && Array.isArray(doc.results) && doc.results.length && doc.results.every((r) => r && typeof r.verdict === 'string')) return [attackView(doc), el('details', {}, el('summary', {}, 'raw result'), el('pre', {}, JSON.stringify(doc, null, 2)))];
-    const out = [];
-    if (doc && doc.configs) out.push(table(['config', 'summary'], Object.entries(doc.configs).map(([k, v]) => [k, JSON.stringify(v)])));
-    out.push(el('details', {}, el('summary', {}, 'raw result'), el('pre', {}, JSON.stringify(doc, null, 2))));
+  // The benchmark's summary.json (P16, docs/BENCHMARK.md): null is "not measured", never 0; every rate has its Wilson 95% interval.
+  const isNum = (v) => typeof v === 'number' && isFinite(v);
+  const val = (v) => (v === null || v === undefined ? notMeasured() : String(v));
+  const pct = (v) => (isNum(v) ? Math.round(v * 100) + '%' : notMeasured());
+  const interval = (w) => (Array.isArray(w) && w.length === 2 && isNum(w[0]) && isNum(w[1]) ? Math.round(w[0] * 100) + '% to ' + Math.round(w[1] * 100) + '%' : 'n/a');
+  const BENCH_HEAD = ['', 'runs', 'successes', 'success rate', 'Wilson 95%', 'median tool calls', 'median tokens', 'not measured'];
+  const benchRow = (name, b) => [name, val(b.runs), val(b.successes), pct(b.success_rate), interval(b.wilson_95), val(b.median_tool_calls), val(b.median_tokens), val(b.not_measured)];
+  function benchView(doc) {
+    const configs = Object.entries(doc.configs || {}).filter(([, c]) => c && c.overall);
+    const out = [el('p', { class: 'muted' }, 'generated ' + (doc.generated_at || '') + ' · model ' + (doc.model || 'not recorded') + ' · prompt ' + (doc.prompt_hash || '') + ' · ' + (doc.runs_total || 0) + ' run(s)')];
+    if (doc.operator) out.push(el('p', { class: 'muted' }, doc.operator));
+    if (!configs.length) out.push(el('p', {}, 'No benchmark runs are in this file.'));
+    else {
+      out.push(el('h3', {}, 'Success by configuration'), table(BENCH_HEAD, configs.map(([k, c]) => benchRow(k, c.overall))));
+      const rows = [];
+      for (const [k, c] of configs) for (const [tier, b] of Object.entries(c.tiers || {})) rows.push(benchRow(k + ' · tier ' + tier, b));
+      if (rows.length) out.push(el('h3', {}, 'By tier'), table(BENCH_HEAD, rows));
+      const tasks = [];
+      for (const [k, c] of configs) for (const [task, b] of Object.entries(c.tasks || {})) tasks.push(benchRow(k + ' · ' + task, b));
+      if (tasks.length) out.push(el('details', {}, el('summary', {}, 'per task (' + tasks.length + ')'), table(BENCH_HEAD, tasks)));
+      const forge = configs.filter(([, c]) => c.overall.forge);
+      if (forge.length) out.push(el('h3', {}, 'Building and reuse'), table(['', 'reuse rate', 'Wilson 95%', 'builds attempted', 'median builder tokens', 'versions created', 'rejected, by first failed gate'], forge.map(([k, c]) => {
+        const f = c.overall.forge;
+        const rejected = f.rejected_by_gate ? (Object.entries(f.rejected_by_gate).map(([g, n]) => g + ': ' + n).join(', ') || 'none') : notMeasured();
+        return [k, pct(f.reuse_rate), interval(f.reuse_wilson_95), val(f.builds_attempted), val(f.median_server_tokens), val(f.versions_created), rejected];
+      })));
+      out.push(el('h3', {}, 'Safety'), table(['', 'policy violations', 'decoy events', 'quarantines', 'leaks'], configs.map(([k, c]) => {
+        const s = c.overall.safety || {};
+        return [k, val(s.policy_violations), val(s.decoy_events), val(s.quarantines), val(s.leaks)];
+      })));
+      const cmp = (doc.comparisons || []).filter((r) => r && r.scope === 'overall');
+      if (cmp.length) out.push(el('h3', {}, 'Comparisons'), el('p', { class: 'muted' }, 'A difference is supported only when the two intervals do not overlap.'), table(['', 'A', 'B', 'difference supported'], cmp.map((r) => [r.a + ' vs ' + r.b, [pct(r.a_rate), ' (', interval(r.a_wilson_95), ')'], [pct(r.b_rate), ' (', interval(r.b_wilson_95), ')'], r.difference_supported === null || r.difference_supported === undefined ? notMeasured() : (r.difference_supported ? 'yes' : 'no')])));
+    }
+    const lab = doc.attack_lab || {};
+    out.push(el('h3', {}, 'Attack Lab (separate line)'), el('p', {}, 'containment rate ', pct(lab.containment_rate), ' (', interval(lab.wilson_95), ')', isNum(lab.attacks) ? ' · ' + lab.attacks + ' attacks: contained ' + lab.contained + ', breached ' + lab.breached + ', inconclusive ' + lab.inconclusive + ', skipped ' + lab.skipped : '', lab.note ? el('div', { class: 'muted' }, lab.note) : null));
+    const ctx = doc.context;
+    out.push(el('h3', {}, 'Context cost'));
+    if (!ctx || !Array.isArray(ctx.results)) out.push(el('p', {}, notMeasured(), ' python -m bench context was not run for this report.'));
+    else {
+      const fig = (f) => (f ? f.bytes + ' B, ' + (f.tokens === null || f.tokens === undefined ? 'tokens not measured' : f.tokens + ' tokens (' + (ctx.method === 'measured' ? 'measured' : 'estimate') + ')') : notMeasured());
+      out.push(el('p', { class: 'muted' }, 'token method: ' + (ctx.method || '') + ' · synthetic registry, seed ' + ctx.seed));
+      out.push(table(['tools', 'meta: tools/list', 'meta: forge_find', 'meta: total', 'direct: tools/list'], ctx.results.map((r) => [String(r.size), fig(r.meta && r.meta.tools_list), fig(r.meta && r.meta.find), fig(r.meta && r.meta.total), fig(r.direct && r.direct.tools_list)])));
+    }
     return out;
+  }
+  function resultView(doc) {
+    const raw = el('details', {}, el('summary', {}, 'raw result'), el('pre', {}, JSON.stringify(doc, null, 2)));
+    if (doc && Array.isArray(doc.results) && doc.results.length && doc.results.every((r) => r && typeof r.verdict === 'string')) return [attackView(doc), raw];
+    if (doc && doc.configs && typeof doc.configs === 'object' && 'attack_lab' in doc) return [benchView(doc), raw];
+    return [raw];
   }
   async function viewResults(kind, title) {
     const d = await api('/' + kind);

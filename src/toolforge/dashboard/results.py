@@ -1,7 +1,7 @@
 """Stored attack-lab and benchmark results, read from files (P17).
 
 The dashboard runs neither. Starting sandboxes or model calls from a web request is the wrong trust shape, so `toolforge attacks` and
-`toolforge bench` stay command-line tools and this module only reads what they wrote:
+`python -m bench` (P16) stay command-line tools and this module only reads what they wrote:
 
 * attack runs: `<runs>/attacks/attacks-<time>.json`, which `toolforge attacks run --json` writes (P15; the file is
   `{generated_at, toolforge, docker, summary, footer, results: [{id, title, verdict, evidence, seconds, checks}]}`), and one directory level below;
