@@ -4,10 +4,10 @@
   "context": null,
   "demo": {
     "agent": "scripted",
-    "isolated": false,
+    "isolated": true,
     "mode": "replay",
     "recorded_at": "2026-11-28",
-    "sandbox": "stand-in",
+    "sandbox": "docker",
     "toolforge_version": "0.0.1"
   },
   "generated_at": "2026-11-28",

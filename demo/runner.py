@@ -401,7 +401,7 @@ def run(options: Options) -> tuple[int, dict[str, Any]]:
     if options.isolated:
         _check_docker()  # before the banner and before any folder is made: the advice must not follow a claim that Docker is in use
     stamp = options.now().strftime("%Y%m%dT%H%M%SZ")
-    options.out = options.out / stamp
+    options.out = (options.out / stamp).resolve()
     home = options.out / "home"
     home.mkdir(parents=True)
     llm = None

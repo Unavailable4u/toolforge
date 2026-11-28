@@ -123,9 +123,9 @@ digits and underscores, starting with a letter, with an optional version), and t
   figures. Naming a directory that does not exist is an error, so a typing mistake cannot publish the sample.
 * A step without events says "No event recorded for this step." Skipped and failed gates are reported as such. Nothing is filled in.
 
-The committed `demo/recordings/main/` was made with the stand-in sandbox and a scripted agent. In it G5 and G6 are skipped, and the hostile
-tool is rejected at G1 before any decoy is read, so the `second_opinion`, `trap` and `caught` steps show less than the captions describe, and
-their notes say which part is missing.
+The committed `demo/recordings/main/` was made with a real Docker sandbox (`isolated: true`) and a scripted agent. G6 runs in it, and the
+hostile `expense_totals_quiet` is caught touching three planted decoys, so the `trap` and `caught` steps show the catch. G5 is skipped, because
+no challenger model was configured, so `second_opinion` says so.
 
 ### Editing captions
 
