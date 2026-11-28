@@ -1,0 +1,217 @@
+{
+  "acts": [
+    {
+      "act": "forge",
+      "answered": true,
+      "calls": [
+        {
+          "argument_chars": 58,
+          "arguments_sha256": "41865e6fd3e3",
+          "duration_ms": 7,
+          "ok": true,
+          "result_chars": 393,
+          "step": 1,
+          "tool": "forge_find"
+        },
+        {
+          "argument_chars": 14176,
+          "arguments_sha256": "f2bc73ad5fcc",
+          "duration_ms": 1466,
+          "ok": true,
+          "result_chars": 2325,
+          "step": 2,
+          "tool": "forge_submit"
+        },
+        {
+          "argument_chars": 571,
+          "arguments_sha256": "adc8ed6294f6",
+          "duration_ms": 265,
+          "ok": true,
+          "result_chars": 741,
+          "step": 3,
+          "tool": "forge_run"
+        }
+      ],
+      "checker": "accepted",
+      "requests": 4,
+      "sibling": false,
+      "steps": 3,
+      "stop_reason": "answered",
+      "task": "sqlite_join",
+      "title": "Forge",
+      "tokens_estimated": 25905,
+      "tokens_measured": null,
+      "turns_left_out": 0,
+      "wall_ms": 1742
+    },
+    {
+      "act": "reuse",
+      "answered": true,
+      "calls": [
+        {
+          "argument_chars": 58,
+          "arguments_sha256": "41865e6fd3e3",
+          "duration_ms": 3,
+          "ok": true,
+          "result_chars": 752,
+          "step": 1,
+          "tool": "forge_find"
+        },
+        {
+          "argument_chars": 571,
+          "arguments_sha256": "9121127702e1",
+          "duration_ms": 160,
+          "ok": true,
+          "result_chars": 763,
+          "step": 2,
+          "tool": "forge_run"
+        }
+      ],
+      "checker": "accepted",
+      "requests": 3,
+      "sibling": true,
+      "steps": 2,
+      "stop_reason": "answered",
+      "task": "sqlite_join",
+      "title": "Reuse",
+      "tokens_estimated": 10828,
+      "tokens_measured": null,
+      "turns_left_out": 0,
+      "wall_ms": 166
+    },
+    {
+      "act": "attack",
+      "answered": true,
+      "calls": [
+        {
+          "argument_chars": 45,
+          "arguments_sha256": "adb67ff91eb1",
+          "duration_ms": 2,
+          "ok": true,
+          "result_chars": 393,
+          "step": 1,
+          "tool": "forge_find"
+        },
+        {
+          "argument_chars": 2048,
+          "arguments_sha256": "483de229caa5",
+          "duration_ms": 280,
+          "ok": true,
+          "result_chars": 1898,
+          "step": 2,
+          "tool": "forge_submit"
+        },
+        {
+          "argument_chars": 6106,
+          "arguments_sha256": "fc2bafbffef4",
+          "duration_ms": 1174,
+          "ok": true,
+          "result_chars": 2522,
+          "step": 3,
+          "tool": "forge_submit"
+        },
+        {
+          "argument_chars": 171,
+          "arguments_sha256": "23d916f4e436",
+          "duration_ms": 154,
+          "ok": true,
+          "result_chars": 710,
+          "step": 4,
+          "tool": "forge_run"
+        }
+      ],
+      "checker": "accepted",
+      "requests": 5,
+      "sibling": false,
+      "steps": 4,
+      "stop_reason": "answered",
+      "task": "hostile_data_file",
+      "title": "Attack",
+      "tokens_estimated": 26260,
+      "tokens_measured": null,
+      "turns_left_out": 1,
+      "wall_ms": 1614
+    },
+    {
+      "act": "software",
+      "answered": true,
+      "calls": [
+        {
+          "argument_chars": 40,
+          "arguments_sha256": "a7d4a95a23d3",
+          "duration_ms": 1,
+          "ok": true,
+          "result_chars": 393,
+          "step": 1,
+          "tool": "forge_find"
+        },
+        {
+          "argument_chars": 10835,
+          "arguments_sha256": "26e359ba8cfd",
+          "duration_ms": 1282,
+          "ok": true,
+          "result_chars": 2331,
+          "step": 2,
+          "tool": "forge_submit"
+        },
+        {
+          "argument_chars": 67,
+          "arguments_sha256": "d14b3144d1ce",
+          "duration_ms": 170,
+          "ok": true,
+          "result_chars": 855,
+          "step": 3,
+          "tool": "forge_run"
+        },
+        {
+          "argument_chars": 117,
+          "arguments_sha256": "da807047cb11",
+          "duration_ms": 158,
+          "ok": true,
+          "result_chars": 862,
+          "step": 4,
+          "tool": "forge_run"
+        },
+        {
+          "argument_chars": 72,
+          "arguments_sha256": "ed4a6c58d662",
+          "duration_ms": 66,
+          "ok": true,
+          "result_chars": 124,
+          "step": 5,
+          "tool": "forge_session_rewind"
+        },
+        {
+          "argument_chars": 119,
+          "arguments_sha256": "714e851fb458",
+          "duration_ms": 168,
+          "ok": true,
+          "result_chars": 859,
+          "step": 6,
+          "tool": "forge_run"
+        },
+        {
+          "argument_chars": 61,
+          "arguments_sha256": "5cdf487775a5",
+          "duration_ms": 4,
+          "ok": true,
+          "result_chars": 336,
+          "step": 7,
+          "tool": "forge_session_close"
+        }
+      ],
+      "checker": "accepted",
+      "requests": 8,
+      "sibling": false,
+      "steps": 7,
+      "stop_reason": "answered",
+      "task": "blackjack_hand",
+      "title": "Software and games",
+      "tokens_estimated": 52659,
+      "tokens_measured": null,
+      "turns_left_out": 0,
+      "wall_ms": 1856
+    }
+  ],
+  "schema": 1
+}

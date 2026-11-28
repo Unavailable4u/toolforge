@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="t d">
+  <title id="t">ToolForge</title>
+  <desc id="d">An agent's new tool passes six gates and an operator's approval before it reaches the registry shelf.</desc>
+  <rect width="1200" height="630" fill="#0f1720"/>
+  <rect x="0" y="0" width="1200" height="8" fill="#f5a524"/>
+  <g font-family="DejaVu Sans, Helvetica Neue, Helvetica, Arial, sans-serif">
+    <text x="72" y="190" font-size="104" font-weight="700" fill="#f8fafc">ToolForge</text>
+    <text x="76" y="252" font-size="34" fill="#cbd5e1">Agents that build their own tools.</text>
+    <text x="76" y="298" font-size="34" fill="#cbd5e1">Verified, contained, and on the record.</text>
+
+    <g transform="translate(72 400)">
+      <rect x="0" y="0" width="150" height="96" rx="12" fill="#1e293b" stroke="#475569" stroke-width="2"/>
+      <text x="75" y="42" font-size="22" text-anchor="middle" fill="#f8fafc">new tool</text>
+      <text x="75" y="70" font-size="16" text-anchor="middle" fill="#94a3b8">from an agent</text>
+      <path d="M158 48 H190" stroke="#94a3b8" stroke-width="3" fill="none"/>
+      <path d="M190 48 l-10 -8 v16 z" transform="translate(10 0)" fill="#94a3b8"/>
+      <g font-size="22" font-weight="700" text-anchor="middle" fill="#0f1720">
+        <rect x="208" y="18" width="84" height="60" rx="10" fill="#2dd4bf"/><text x="250" y="57">G1</text>
+        <rect x="302" y="18" width="84" height="60" rx="10" fill="#2dd4bf"/><text x="344" y="57">G2</text>
+        <rect x="396" y="18" width="84" height="60" rx="10" fill="#2dd4bf"/><text x="438" y="57">G3</text>
+        <rect x="490" y="18" width="84" height="60" rx="10" fill="#2dd4bf"/><text x="532" y="57">G4</text>
+        <rect x="584" y="18" width="84" height="60" rx="10" fill="#2dd4bf"/><text x="626" y="57">G5</text>
+        <rect x="678" y="18" width="84" height="60" rx="10" fill="#2dd4bf"/><text x="720" y="57">G6</text>
+      </g>
+      <rect x="772" y="18" width="84" height="60" rx="10" fill="none" stroke="#f5a524" stroke-width="3" stroke-dasharray="7 5"/>
+      <text x="814" y="57" font-size="22" font-weight="700" text-anchor="middle" fill="#f5a524">G7</text>
+      <text x="814" y="104" font-size="15" text-anchor="middle" fill="#f5a524">a person decides</text>
+      <path d="M864 48 H896" stroke="#94a3b8" stroke-width="3" fill="none"/>
+      <path d="M896 48 l-10 -8 v16 z" transform="translate(10 0)" fill="#94a3b8"/>
+      <rect x="916" y="0" width="150" height="96" rx="12" fill="#1e293b" stroke="#f5a524" stroke-width="2"/>
+      <text x="991" y="42" font-size="22" text-anchor="middle" fill="#f8fafc">registry</text>
+      <text x="991" y="70" font-size="16" text-anchor="middle" fill="#94a3b8">for reuse</text>
+    </g>
+    <text x="72" y="590" font-size="20" fill="#64748b">An MCP server. Sandboxed by MiniLocker. Every step in a hash-chained ledger.</text>
+  </g>
+</svg>

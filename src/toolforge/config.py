@@ -30,6 +30,10 @@ class Settings(BaseSettings):
     # Storage and sandbox
     home: Path = Path("~/.toolforge")
     minilocker_path: Path | None = None
+    # Run the egress proxy from this image instead of bind-mounting MiniLocker's file (docs/clients.md, "docker compose"). Needed when
+    # ToolForge itself runs in a container, where a bind mount would name a path that does not exist on the Docker host. The image must
+    # hold the `minilocker` package (the compose file's image does). Empty means the default: python:3.12-slim and a bind mount.
+    egress_proxy_image: str = ""
     runtime_image: str = RUNTIME_IMAGE
     build_allow: Annotated[list[str], NoDecode] = Field(
         default_factory=lambda: ["pypi.org", "files.pythonhosted.org"]

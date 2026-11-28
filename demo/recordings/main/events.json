@@ -1,0 +1,1018 @@
+{
+  "events": [
+    {
+      "act": "forge",
+      "facts": {
+        "code_sha": "0c198510bab6",
+        "permissions": {
+          "browser": false,
+          "inputs": true,
+          "network_hosts": 0,
+          "secrets": 0
+        },
+        "resumed": false,
+        "submitted_by": "agent"
+      },
+      "ledger": "verify",
+      "t": 0.0,
+      "tool": "sqlite_query@1.0.0",
+      "type": "forge.submitted"
+    },
+    {
+      "act": "forge",
+      "facts": {
+        "code_sha": "0c198510bab6",
+        "from": "submitted",
+        "to": "verifying"
+      },
+      "ledger": "verify",
+      "t": 0.001,
+      "tool": "sqlite_query@1.0.0",
+      "type": "forge.verifying"
+    },
+    {
+      "act": "forge",
+      "facts": {
+        "gate": "G1"
+      },
+      "ledger": "verify",
+      "t": 0.001,
+      "tool": "sqlite_query@1.0.0",
+      "type": "forge.gate.started"
+    },
+    {
+      "act": "forge",
+      "facts": {
+        "duration_ms": 97,
+        "gate": "G1",
+        "hints": 0,
+        "metrics": {
+          "failures": 0,
+          "files": 2,
+          "injection_scan": "measured",
+          "python_files": 2,
+          "secret_findings": 0,
+          "validation_errors": 0,
+          "warnings": 0
+        }
+      },
+      "ledger": "verify",
+      "t": 0.1,
+      "tool": "sqlite_query@1.0.0",
+      "type": "forge.gate.passed"
+    },
+    {
+      "act": "forge",
+      "facts": {
+        "gate": "G2"
+      },
+      "ledger": "verify",
+      "t": 0.101,
+      "tool": "sqlite_query@1.0.0",
+      "type": "forge.gate.started"
+    },
+    {
+      "act": "forge",
+      "facts": {
+        "duration_ms": 2,
+        "gate": "G2",
+        "hints": 0,
+        "metrics": {
+          "blob_bytes": 20480,
+          "installed_files": 0,
+          "package_files": 3,
+          "requirements": 0
+        }
+      },
+      "ledger": "verify",
+      "t": 0.104,
+      "tool": "sqlite_query@1.0.0",
+      "type": "forge.gate.passed"
+    },
+    {
+      "act": "forge",
+      "facts": {
+        "gate": "G3"
+      },
+      "ledger": "verify",
+      "t": 0.104,
+      "tool": "sqlite_query@1.0.0",
+      "type": "forge.gate.started"
+    },
+    {
+      "act": "forge",
+      "facts": {
+        "duration_ms": 594,
+        "gate": "G3",
+        "hints": 0,
+        "metrics": {
+          "examples_checked": 2,
+          "examples_failed": 0,
+          "examples_live_skipped": 0,
+          "tests_errors": 0,
+          "tests_failed": 0,
+          "tests_failing_with_stub": 10,
+          "tests_passed": 10,
+          "tests_ran": 10,
+          "tests_skipped": 0
+        }
+      },
+      "ledger": "verify",
+      "t": 0.7,
+      "tool": "sqlite_query@1.0.0",
+      "type": "forge.gate.passed"
+    },
+    {
+      "act": "forge",
+      "facts": {
+        "gate": "G4"
+      },
+      "ledger": "verify",
+      "t": 0.701,
+      "tool": "sqlite_query@1.0.0",
+      "type": "forge.gate.started"
+    },
+    {
+      "act": "forge",
+      "facts": {
+        "duration_ms": 331,
+        "gate": "G4",
+        "hints": 0,
+        "metrics": {
+          "failures": 0,
+          "handled_errors": 25,
+          "inputs_planned": 30,
+          "inputs_run": 30,
+          "p95_ms": 5,
+          "total_ms": 150
+        }
+      },
+      "ledger": "verify",
+      "t": 1.033,
+      "tool": "sqlite_query@1.0.0",
+      "type": "forge.gate.passed"
+    },
+    {
+      "act": "forge",
+      "facts": {
+        "gate": "G5"
+      },
+      "ledger": "verify",
+      "t": 1.034,
+      "tool": "sqlite_query@1.0.0",
+      "type": "forge.gate.started"
+    },
+    {
+      "act": "forge",
+      "facts": {
+        "duration_ms": 0,
+        "gate": "G5",
+        "hints": 1,
+        "metrics": {
+          "cases_executed": 0
+        }
+      },
+      "ledger": "verify",
+      "t": 1.035,
+      "tool": "sqlite_query@1.0.0",
+      "type": "forge.gate.skipped"
+    },
+    {
+      "act": "forge",
+      "facts": {
+        "gate": "G6"
+      },
+      "ledger": "verify",
+      "t": 1.035,
+      "tool": "sqlite_query@1.0.0",
+      "type": "forge.gate.started"
+    },
+    {
+      "act": "forge",
+      "facts": {
+        "duration_ms": 221,
+        "gate": "G6",
+        "hints": 1,
+        "metrics": {
+          "crashes": 0,
+          "decoy_events": 0,
+          "decoys_planted": 0,
+          "egress": "not applicable (no network)",
+          "hardening_confirmed": false,
+          "inputs_planned": 12,
+          "inputs_run": 12,
+          "timeouts": 0
+        }
+      },
+      "ledger": "verify",
+      "t": 1.257,
+      "tool": "sqlite_query@1.0.0",
+      "type": "forge.gate.skipped"
+    },
+    {
+      "act": "forge",
+      "facts": {
+        "code_sha": "0c198510bab6",
+        "from": "verifying",
+        "to": "verified_basic"
+      },
+      "ledger": "verify",
+      "t": 1.258,
+      "tool": "sqlite_query@1.0.0",
+      "type": "forge.verified"
+    },
+    {
+      "act": "forge",
+      "facts": {
+        "code_sha": "0c198510bab6",
+        "from": "verified_basic",
+        "to": "active"
+      },
+      "ledger": "operator",
+      "t": 1.266,
+      "tool": "sqlite_query@1.0.0",
+      "type": "forge.promoted"
+    },
+    {
+      "act": "forge",
+      "facts": {
+        "args_bytes": 493,
+        "args_sha256": "64e6af2fbe06",
+        "code_sha": "0c198510bab6",
+        "file_bytes": 16384,
+        "secrets": 0
+      },
+      "ledger": "box",
+      "t": 1.461,
+      "tool": "sqlite_query@1.0.0",
+      "type": "forge.call.started"
+    },
+    {
+      "act": "forge",
+      "facts": {
+        "cleanup_ok": true,
+        "decoy_events": 0,
+        "duration_ms": 67,
+        "egress_attempts": 0,
+        "ok": true,
+        "real_secret_audit": "not_measured",
+        "result_bytes": 142,
+        "sandbox_timed_out": false,
+        "truncated": false
+      },
+      "ledger": "box",
+      "t": 1.53,
+      "tool": "sqlite_query@1.0.0",
+      "type": "forge.call.finished"
+    },
+    {
+      "act": "reuse",
+      "facts": {
+        "args_bytes": 493,
+        "args_sha256": "5ca91d2c036f",
+        "code_sha": "0c198510bab6",
+        "file_bytes": 16384,
+        "secrets": 0
+      },
+      "ledger": "box",
+      "t": 1.632,
+      "tool": "sqlite_query@1.0.0",
+      "type": "forge.call.started"
+    },
+    {
+      "act": "reuse",
+      "facts": {
+        "cleanup_ok": true,
+        "decoy_events": 0,
+        "duration_ms": 65,
+        "egress_attempts": 0,
+        "ok": true,
+        "real_secret_audit": "not_measured",
+        "result_bytes": 162,
+        "sandbox_timed_out": false,
+        "truncated": false
+      },
+      "ledger": "box",
+      "t": 1.699,
+      "tool": "sqlite_query@1.0.0",
+      "type": "forge.call.finished"
+    },
+    {
+      "act": "attack",
+      "facts": {
+        "code_sha": "0c33e1bef0d6",
+        "permissions": {
+          "browser": false,
+          "inputs": false,
+          "network_hosts": 0,
+          "secrets": 0
+        },
+        "resumed": false,
+        "submitted_by": "agent"
+      },
+      "ledger": "verify",
+      "t": 1.889,
+      "tool": "expense_totals@0.1.0",
+      "type": "forge.submitted"
+    },
+    {
+      "act": "attack",
+      "facts": {
+        "code_sha": "0c33e1bef0d6",
+        "from": "submitted",
+        "to": "verifying"
+      },
+      "ledger": "verify",
+      "t": 1.89,
+      "tool": "expense_totals@0.1.0",
+      "type": "forge.verifying"
+    },
+    {
+      "act": "attack",
+      "facts": {
+        "gate": "G1"
+      },
+      "ledger": "verify",
+      "t": 1.891,
+      "tool": "expense_totals@0.1.0",
+      "type": "forge.gate.started"
+    },
+    {
+      "act": "attack",
+      "facts": {
+        "duration_ms": 91,
+        "gate": "G1",
+        "hints": 1,
+        "metrics": {
+          "failures": 1,
+          "files": 2,
+          "injection_scan": "measured",
+          "python_files": 2,
+          "secret_findings": 0,
+          "validation_errors": 0,
+          "warnings": 2
+        }
+      },
+      "ledger": "verify",
+      "t": 1.983,
+      "tool": "expense_totals@0.1.0",
+      "type": "forge.gate.failed"
+    },
+    {
+      "act": "attack",
+      "facts": {
+        "code_sha": "0c33e1bef0d6",
+        "from": "verifying",
+        "to": "rejected"
+      },
+      "ledger": "verify",
+      "t": 1.984,
+      "tool": "expense_totals@0.1.0",
+      "type": "forge.rejected"
+    },
+    {
+      "act": "attack",
+      "facts": {
+        "code_sha": "e3bb15df64bf",
+        "permissions": {
+          "browser": false,
+          "inputs": true,
+          "network_hosts": 0,
+          "secrets": 0
+        },
+        "resumed": false,
+        "submitted_by": "agent"
+      },
+      "ledger": "verify",
+      "t": 2.169,
+      "tool": "csv_totals@1.0.0",
+      "type": "forge.submitted"
+    },
+    {
+      "act": "attack",
+      "facts": {
+        "code_sha": "e3bb15df64bf",
+        "from": "submitted",
+        "to": "verifying"
+      },
+      "ledger": "verify",
+      "t": 2.17,
+      "tool": "csv_totals@1.0.0",
+      "type": "forge.verifying"
+    },
+    {
+      "act": "attack",
+      "facts": {
+        "gate": "G1"
+      },
+      "ledger": "verify",
+      "t": 2.171,
+      "tool": "csv_totals@1.0.0",
+      "type": "forge.gate.started"
+    },
+    {
+      "act": "attack",
+      "facts": {
+        "duration_ms": 82,
+        "gate": "G1",
+        "hints": 0,
+        "metrics": {
+          "failures": 0,
+          "files": 2,
+          "injection_scan": "measured",
+          "python_files": 2,
+          "secret_findings": 0,
+          "validation_errors": 0,
+          "warnings": 0
+        }
+      },
+      "ledger": "verify",
+      "t": 2.253,
+      "tool": "csv_totals@1.0.0",
+      "type": "forge.gate.passed"
+    },
+    {
+      "act": "attack",
+      "facts": {
+        "gate": "G2"
+      },
+      "ledger": "verify",
+      "t": 2.254,
+      "tool": "csv_totals@1.0.0",
+      "type": "forge.gate.started"
+    },
+    {
+      "act": "attack",
+      "facts": {
+        "duration_ms": 1,
+        "gate": "G2",
+        "hints": 0,
+        "metrics": {
+          "blob_bytes": 10240,
+          "installed_files": 0,
+          "package_files": 3,
+          "requirements": 0
+        }
+      },
+      "ledger": "verify",
+      "t": 2.256,
+      "tool": "csv_totals@1.0.0",
+      "type": "forge.gate.passed"
+    },
+    {
+      "act": "attack",
+      "facts": {
+        "gate": "G3"
+      },
+      "ledger": "verify",
+      "t": 2.257,
+      "tool": "csv_totals@1.0.0",
+      "type": "forge.gate.started"
+    },
+    {
+      "act": "attack",
+      "facts": {
+        "duration_ms": 418,
+        "gate": "G3",
+        "hints": 0,
+        "metrics": {
+          "examples_checked": 2,
+          "examples_failed": 0,
+          "examples_live_skipped": 0,
+          "tests_errors": 0,
+          "tests_failed": 0,
+          "tests_failing_with_stub": 8,
+          "tests_passed": 8,
+          "tests_ran": 8,
+          "tests_skipped": 0
+        }
+      },
+      "ledger": "verify",
+      "t": 2.677,
+      "tool": "csv_totals@1.0.0",
+      "type": "forge.gate.passed"
+    },
+    {
+      "act": "attack",
+      "facts": {
+        "gate": "G4"
+      },
+      "ledger": "verify",
+      "t": 2.677,
+      "tool": "csv_totals@1.0.0",
+      "type": "forge.gate.started"
+    },
+    {
+      "act": "attack",
+      "facts": {
+        "duration_ms": 278,
+        "gate": "G4",
+        "hints": 0,
+        "metrics": {
+          "failures": 0,
+          "handled_errors": 30,
+          "inputs_planned": 30,
+          "inputs_run": 30,
+          "p95_ms": 4,
+          "total_ms": 100
+        }
+      },
+      "ledger": "verify",
+      "t": 2.957,
+      "tool": "csv_totals@1.0.0",
+      "type": "forge.gate.passed"
+    },
+    {
+      "act": "attack",
+      "facts": {
+        "gate": "G5"
+      },
+      "ledger": "verify",
+      "t": 2.957,
+      "tool": "csv_totals@1.0.0",
+      "type": "forge.gate.started"
+    },
+    {
+      "act": "attack",
+      "facts": {
+        "duration_ms": 0,
+        "gate": "G5",
+        "hints": 1,
+        "metrics": {
+          "cases_executed": 0
+        }
+      },
+      "ledger": "verify",
+      "t": 2.958,
+      "tool": "csv_totals@1.0.0",
+      "type": "forge.gate.skipped"
+    },
+    {
+      "act": "attack",
+      "facts": {
+        "gate": "G6"
+      },
+      "ledger": "verify",
+      "t": 2.959,
+      "tool": "csv_totals@1.0.0",
+      "type": "forge.gate.started"
+    },
+    {
+      "act": "attack",
+      "facts": {
+        "duration_ms": 196,
+        "gate": "G6",
+        "hints": 1,
+        "metrics": {
+          "crashes": 0,
+          "decoy_events": 0,
+          "decoys_planted": 0,
+          "egress": "not applicable (no network)",
+          "hardening_confirmed": false,
+          "inputs_planned": 12,
+          "inputs_run": 12,
+          "timeouts": 0
+        }
+      },
+      "ledger": "verify",
+      "t": 3.157,
+      "tool": "csv_totals@1.0.0",
+      "type": "forge.gate.skipped"
+    },
+    {
+      "act": "attack",
+      "facts": {
+        "code_sha": "e3bb15df64bf",
+        "from": "verifying",
+        "to": "verified_basic"
+      },
+      "ledger": "verify",
+      "t": 3.157,
+      "tool": "csv_totals@1.0.0",
+      "type": "forge.verified"
+    },
+    {
+      "act": "attack",
+      "facts": {
+        "code_sha": "e3bb15df64bf",
+        "from": "verified_basic",
+        "to": "active"
+      },
+      "ledger": "operator",
+      "t": 3.161,
+      "tool": "csv_totals@1.0.0",
+      "type": "forge.promoted"
+    },
+    {
+      "act": "attack",
+      "facts": {
+        "args_bytes": 85,
+        "args_sha256": "fed99296638e",
+        "code_sha": "e3bb15df64bf",
+        "file_bytes": 1946,
+        "secrets": 0
+      },
+      "ledger": "box",
+      "t": 3.251,
+      "tool": "csv_totals@1.0.0",
+      "type": "forge.call.started"
+    },
+    {
+      "act": "attack",
+      "facts": {
+        "cleanup_ok": true,
+        "decoy_events": 0,
+        "duration_ms": 62,
+        "egress_attempts": 0,
+        "ok": true,
+        "real_secret_audit": "not_measured",
+        "result_bytes": 119,
+        "sandbox_timed_out": false,
+        "truncated": false
+      },
+      "ledger": "box",
+      "t": 3.314,
+      "tool": "csv_totals@1.0.0",
+      "type": "forge.call.finished"
+    },
+    {
+      "act": "software",
+      "facts": {
+        "code_sha": "4876cf915220",
+        "permissions": {
+          "browser": false,
+          "inputs": false,
+          "network_hosts": 0,
+          "secrets": 0
+        },
+        "resumed": false,
+        "submitted_by": "agent"
+      },
+      "ledger": "verify",
+      "t": 3.514,
+      "tool": "blackjack_session@1.0.0",
+      "type": "forge.submitted"
+    },
+    {
+      "act": "software",
+      "facts": {
+        "code_sha": "4876cf915220",
+        "from": "submitted",
+        "to": "verifying"
+      },
+      "ledger": "verify",
+      "t": 3.515,
+      "tool": "blackjack_session@1.0.0",
+      "type": "forge.verifying"
+    },
+    {
+      "act": "software",
+      "facts": {
+        "gate": "G1"
+      },
+      "ledger": "verify",
+      "t": 3.515,
+      "tool": "blackjack_session@1.0.0",
+      "type": "forge.gate.started"
+    },
+    {
+      "act": "software",
+      "facts": {
+        "duration_ms": 98,
+        "gate": "G1",
+        "hints": 0,
+        "metrics": {
+          "failures": 0,
+          "files": 2,
+          "injection_scan": "measured",
+          "python_files": 2,
+          "secret_findings": 0,
+          "validation_errors": 0,
+          "warnings": 0
+        }
+      },
+      "ledger": "verify",
+      "t": 3.615,
+      "tool": "blackjack_session@1.0.0",
+      "type": "forge.gate.passed"
+    },
+    {
+      "act": "software",
+      "facts": {
+        "gate": "G2"
+      },
+      "ledger": "verify",
+      "t": 3.616,
+      "tool": "blackjack_session@1.0.0",
+      "type": "forge.gate.started"
+    },
+    {
+      "act": "software",
+      "facts": {
+        "duration_ms": 2,
+        "gate": "G2",
+        "hints": 0,
+        "metrics": {
+          "blob_bytes": 20480,
+          "installed_files": 0,
+          "package_files": 3,
+          "requirements": 0
+        }
+      },
+      "ledger": "verify",
+      "t": 3.619,
+      "tool": "blackjack_session@1.0.0",
+      "type": "forge.gate.passed"
+    },
+    {
+      "act": "software",
+      "facts": {
+        "gate": "G3"
+      },
+      "ledger": "verify",
+      "t": 3.62,
+      "tool": "blackjack_session@1.0.0",
+      "type": "forge.gate.started"
+    },
+    {
+      "act": "software",
+      "facts": {
+        "duration_ms": 501,
+        "gate": "G3",
+        "hints": 0,
+        "metrics": {
+          "examples_checked": 4,
+          "examples_failed": 0,
+          "examples_live_skipped": 0,
+          "tests_errors": 0,
+          "tests_failed": 0,
+          "tests_failing_with_stub": 5,
+          "tests_passed": 7,
+          "tests_ran": 7,
+          "tests_skipped": 0
+        }
+      },
+      "ledger": "verify",
+      "t": 4.123,
+      "tool": "blackjack_session@1.0.0",
+      "type": "forge.gate.passed"
+    },
+    {
+      "act": "software",
+      "facts": {
+        "gate": "G4"
+      },
+      "ledger": "verify",
+      "t": 4.124,
+      "tool": "blackjack_session@1.0.0",
+      "type": "forge.gate.started"
+    },
+    {
+      "act": "software",
+      "facts": {
+        "duration_ms": 256,
+        "gate": "G4",
+        "hints": 0,
+        "metrics": {
+          "failures": 0,
+          "handled_errors": 6,
+          "inputs_planned": 25,
+          "inputs_run": 25,
+          "p95_ms": 4,
+          "total_ms": 88
+        }
+      },
+      "ledger": "verify",
+      "t": 4.382,
+      "tool": "blackjack_session@1.0.0",
+      "type": "forge.gate.passed"
+    },
+    {
+      "act": "software",
+      "facts": {
+        "gate": "G5"
+      },
+      "ledger": "verify",
+      "t": 4.382,
+      "tool": "blackjack_session@1.0.0",
+      "type": "forge.gate.started"
+    },
+    {
+      "act": "software",
+      "facts": {
+        "duration_ms": 0,
+        "gate": "G5",
+        "hints": 1,
+        "metrics": {
+          "cases_executed": 0
+        }
+      },
+      "ledger": "verify",
+      "t": 4.383,
+      "tool": "blackjack_session@1.0.0",
+      "type": "forge.gate.skipped"
+    },
+    {
+      "act": "software",
+      "facts": {
+        "gate": "G6"
+      },
+      "ledger": "verify",
+      "t": 4.384,
+      "tool": "blackjack_session@1.0.0",
+      "type": "forge.gate.started"
+    },
+    {
+      "act": "software",
+      "facts": {
+        "duration_ms": 215,
+        "gate": "G6",
+        "hints": 1,
+        "metrics": {
+          "crashes": 0,
+          "decoy_events": 0,
+          "decoys_planted": 0,
+          "egress": "not applicable (no network)",
+          "hardening_confirmed": false,
+          "inputs_planned": 14,
+          "inputs_run": 14,
+          "timeouts": 0
+        }
+      },
+      "ledger": "verify",
+      "t": 4.6,
+      "tool": "blackjack_session@1.0.0",
+      "type": "forge.gate.skipped"
+    },
+    {
+      "act": "software",
+      "facts": {
+        "code_sha": "4876cf915220",
+        "from": "verifying",
+        "to": "verified_basic"
+      },
+      "ledger": "verify",
+      "t": 4.601,
+      "tool": "blackjack_session@1.0.0",
+      "type": "forge.verified"
+    },
+    {
+      "act": "software",
+      "facts": {
+        "code_sha": "4876cf915220",
+        "from": "verified_basic",
+        "to": "active"
+      },
+      "ledger": "operator",
+      "t": 4.605,
+      "tool": "blackjack_session@1.0.0",
+      "type": "forge.promoted"
+    },
+    {
+      "act": "software",
+      "facts": {
+        "code_sha": "4876cf915220",
+        "secrets": 0
+      },
+      "ledger": "box",
+      "t": 4.698,
+      "tool": "blackjack_session@1.0.0",
+      "type": "forge.call.started"
+    },
+    {
+      "act": "software",
+      "facts": {
+        "code_sha": "4876cf915220",
+        "secrets": 0
+      },
+      "ledger": "session",
+      "t": 4.705,
+      "tool": "blackjack_session@1.0.0",
+      "type": "forge.session.opened"
+    },
+    {
+      "act": "software",
+      "facts": {
+        "args_bytes": 28,
+        "args_sha256": "925b5ff1a733",
+        "duration_ms": 64,
+        "ok": true,
+        "result_bytes": 133,
+        "sandbox_timed_out": false,
+        "snapshot_bytes": 15837,
+        "state_bytes": 26,
+        "state_sha256": "821f6885ddfe",
+        "step": 1,
+        "truncated": false
+      },
+      "ledger": "session",
+      "t": 4.774,
+      "tool": "blackjack_session@1.0.0",
+      "type": "forge.session.step"
+    },
+    {
+      "act": "software",
+      "facts": {
+        "args_bytes": 17,
+        "args_sha256": "ea66b22f594d",
+        "duration_ms": 63,
+        "ok": true,
+        "result_bytes": 138,
+        "sandbox_timed_out": false,
+        "snapshot_bytes": 15836,
+        "state_bytes": 31,
+        "state_sha256": "cdd15c127fb6",
+        "step": 2,
+        "truncated": false
+      },
+      "ledger": "session",
+      "t": 4.933,
+      "tool": "blackjack_session@1.0.0",
+      "type": "forge.session.step"
+    },
+    {
+      "act": "software",
+      "facts": {
+        "code_sha": "4876cf915220",
+        "secrets": 0
+      },
+      "ledger": "box",
+      "t": 4.936,
+      "tool": "blackjack_session@1.0.0",
+      "type": "forge.call.started"
+    },
+    {
+      "act": "software",
+      "facts": {
+        "cleanup_ok": true,
+        "decoy_events": 0,
+        "egress_attempts": 0,
+        "ok": true,
+        "real_secret_audit": "not_measured"
+      },
+      "ledger": "box",
+      "t": 4.999,
+      "tool": "blackjack_session@1.0.0",
+      "type": "forge.call.finished"
+    },
+    {
+      "act": "software",
+      "facts": {
+        "from_step": 2,
+        "to_step": 1
+      },
+      "ledger": "session",
+      "t": 5.0,
+      "tool": "blackjack_session@1.0.0",
+      "type": "forge.session.rewound"
+    },
+    {
+      "act": "software",
+      "facts": {
+        "args_bytes": 19,
+        "args_sha256": "fb636394c349",
+        "duration_ms": 71,
+        "ok": true,
+        "result_bytes": 135,
+        "sandbox_timed_out": false,
+        "snapshot_bytes": 15837,
+        "state_bytes": 33,
+        "state_sha256": "01a6eb31828e",
+        "step": 2,
+        "truncated": false
+      },
+      "ledger": "session",
+      "t": 5.168,
+      "tool": "blackjack_session@1.0.0",
+      "type": "forge.session.step"
+    },
+    {
+      "act": "software",
+      "facts": {
+        "cleanup_ok": true,
+        "decoy_events": 0,
+        "egress_attempts": 0,
+        "ok": true,
+        "real_secret_audit": "not_measured"
+      },
+      "ledger": "box",
+      "t": 5.171,
+      "tool": "blackjack_session@1.0.0",
+      "type": "forge.call.finished"
+    },
+    {
+      "act": "software",
+      "facts": {
+        "cleanup_ok": true,
+        "quarantined": false,
+        "real_secret_audit": "not_measured",
+        "steps": 2
+      },
+      "ledger": "session",
+      "t": 5.173,
+      "tool": "blackjack_session@1.0.0",
+      "type": "forge.session.closed"
+    }
+  ],
+  "schema": 1
+}

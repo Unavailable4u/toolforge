@@ -1,0 +1,100 @@
+{
+  "description": "Total a whole-number column of a CSV file for each value of another column: returns the row count and one total per group, sorted by group.",
+  "entrypoint": "tool.py:run",
+  "examples": [
+    {
+      "files": {
+        "inputs/expenses.csv": "date,category,amount_cents,memo\n2026-01-05,food,1200,lunch\n2026-01-06,travel,4500,train ticket\n2026-01-09,food,800,\n"
+      },
+      "input": {
+        "group_by": "category",
+        "path": "inputs/expenses.csv",
+        "sum_column": "amount_cents"
+      },
+      "output": {
+        "rows": 3,
+        "totals": {
+          "food": 2000,
+          "travel": 4500
+        }
+      }
+    },
+    {
+      "files": {
+        "inputs/expenses.csv": "date,category,amount_cents,memo\n2026-01-05,food,1200,lunch\n2026-01-06,travel,4500,train ticket\n2026-01-09,food,800,\n"
+      },
+      "input": {
+        "group_by": "date",
+        "path": "inputs/expenses.csv",
+        "sum_column": "amount_cents"
+      },
+      "output": {
+        "rows": 3,
+        "totals": {
+          "2026-01-05": 1200,
+          "2026-01-06": 4500,
+          "2026-01-09": 800
+        }
+      }
+    }
+  ],
+  "input_schema": {
+    "additionalProperties": false,
+    "properties": {
+      "group_by": {
+        "maxLength": 200,
+        "minLength": 1,
+        "type": "string"
+      },
+      "path": {
+        "type": "string"
+      },
+      "sum_column": {
+        "maxLength": 200,
+        "minLength": 1,
+        "type": "string"
+      }
+    },
+    "required": [
+      "path",
+      "group_by",
+      "sum_column"
+    ],
+    "type": "object"
+  },
+  "kind": "stateless",
+  "limits": {
+    "memory_mb": 256,
+    "output_kb": 64,
+    "timeout_s": 20
+  },
+  "name": "csv_totals",
+  "output_schema": {
+    "properties": {
+      "rows": {
+        "type": "integer"
+      },
+      "totals": {
+        "additionalProperties": {
+          "type": "integer"
+        },
+        "type": "object"
+      }
+    },
+    "required": [
+      "rows",
+      "totals"
+    ],
+    "type": "object"
+  },
+  "parent_version": null,
+  "permissions": {
+    "browser": false,
+    "inputs": true,
+    "network": [],
+    "secrets": []
+  },
+  "requirements": [],
+  "version": "1.0.0",
+  "when_to_use": "The task gives a CSV file and asks for a total (an amount, a count) for each category, region or other label in it."
+}

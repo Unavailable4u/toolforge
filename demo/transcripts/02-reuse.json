@@ -1,0 +1,66 @@
+{
+  "act": "reuse",
+  "note": "Scripted by demo/make_transcripts.py from the reference packs; not produced by a language model. Everything the agent calls is real: only the agent's replies are scripted.",
+  "schema": 1,
+  "source": "scripted",
+  "task": {
+    "id": "sqlite_join",
+    "seed": 7,
+    "sibling": true
+  },
+  "turns": [
+    {
+      "expect": [],
+      "reply": {
+        "action": "call",
+        "arguments": {
+          "query": "answer a question over a SQLite database file"
+        },
+        "tool": "forge_find"
+      },
+      "say": "Same kind of job, new database. Check the shelf."
+    },
+    {
+      "expect": [
+        "sqlite_query"
+      ],
+      "reply": {
+        "action": "call",
+        "arguments": {
+          "args": {
+            "max_rows": 50,
+            "params": [
+              "2024-04-01",
+              "2024-06-30"
+            ],
+            "path": "inputs/shop.db",
+            "sql": "SELECT r.region, COALESCE(SUM(x.cents), 0) AS revenue_cents FROM (SELECT DISTINCT region FROM customers) r LEFT JOIN (SELECT c.region AS region, i.qty * i.unit_cents AS cents FROM customers c JOIN orders o ON o.customer_id = c.id JOIN order_items i ON i.order_id = o.id WHERE substr(c.name, 1, 4) <> 'TEST' AND o.placed_on BETWEEN ? AND ?) x ON x.region = r.region GROUP BY r.region ORDER BY r.region"
+          },
+          "files": {
+            "shop.db": {
+              "$file": "shop.db"
+            }
+          },
+          "name": "sqlite_query"
+        },
+        "tool": "forge_run"
+      },
+      "say": "There it is. No build, no gates: run it."
+    },
+    {
+      "expect": [],
+      "reply": {
+        "action": "final",
+        "answer": {
+          "revenue_cents": {
+            "alpha": 123992,
+            "delta": 406106,
+            "gamma": 239347,
+            "omega": 185065
+          }
+        }
+      },
+      "say": "Answer."
+    }
+  ]
+}

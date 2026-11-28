@@ -1,0 +1,225 @@
+{
+  "act": "forge",
+  "note": "Scripted by demo/make_transcripts.py from the reference packs; not produced by a language model. Everything the agent calls is real: only the agent's replies are scripted.",
+  "schema": 1,
+  "source": "scripted",
+  "task": {
+    "id": "sqlite_join",
+    "seed": 7,
+    "sibling": false
+  },
+  "turns": [
+    {
+      "expect": [],
+      "reply": {
+        "action": "call",
+        "arguments": {
+          "query": "answer a question over a SQLite database file"
+        },
+        "tool": "forge_find"
+      },
+      "say": "Check the shelf first: is there already a tool for this?"
+    },
+    {
+      "expect": [
+        "\"count\": 0"
+      ],
+      "reply": {
+        "action": "call",
+        "arguments": {
+          "package": {
+            "files": {
+              "tests/test_sqlite_query.py": "import os\nimport sqlite3\nimport tempfile\n\nfrom tool import ToolError, run\n\nSCRIPT = \"\"\"\nCREATE TABLE items (id INTEGER PRIMARY KEY, name TEXT, price REAL);\nINSERT INTO items VALUES (1, 'pen', 1.5), (2, 'book', 12.0), (3, 'lamp', 30.25);\n\"\"\"\n\n\ndef _folder():\n    return tempfile.TemporaryDirectory()\n\n\ndef _db(folder, kind=\"sql\"):\n    if kind == \"sql\":\n        path = os.path.join(folder, \"shop.sql\")\n        with open(path, \"w\", encoding=\"utf-8\") as handle:\n            handle.write(SCRIPT)\n        return path\n    path = os.path.join(folder, \"shop.db\")\n    connection = sqlite3.connect(path)\n    connection.executescript(SCRIPT)\n    connection.commit()\n    connection.close()\n    return path\n\n\ndef _refused(args, needle):\n    try:\n        run(args)\n    except ToolError as error:\n        assert needle in str(error), str(error)\n    else:\n        raise AssertionError(\"expected ToolError\")\n\n\ndef test_select_from_a_sql_dump_returns_columns_and_rows():\n    with _folder() as folder:\n        result = run(\n            {\n                \"path\": _db(folder),\n                \"sql\": \"SELECT name, price FROM items WHERE price > ? ORDER BY price\",\n                \"params\": [5],\n            }\n        )\n    assert result == {\n        \"columns\": [\"name\", \"price\"],\n        \"rows\": [[\"book\", 12.0], [\"lamp\", 30.25]],\n        \"row_count\": 2,\n        \"truncated\": False,\n    }\n\n\ndef test_select_from_a_real_database_file():\n    with _folder() as folder:\n        result = run({\"path\": _db(folder, \"db\"), \"sql\": \"SELECT count(*) AS n FROM items;\"})\n    assert result[\"columns\"] == [\"n\"] and result[\"rows\"] == [[3]]\n\n\ndef test_rows_are_capped_and_the_cap_is_reported():\n    with _folder() as folder:\n        result = run({\"path\": _db(folder), \"sql\": \"SELECT id FROM items ORDER BY id\", \"max_rows\": 2})\n    assert result[\"rows\"] == [[1], [2]] and result[\"row_count\"] == 2 and result[\"truncated\"] is True\n\n\ndef test_writes_are_refused_and_nothing_changes():\n    with _folder() as folder:\n        path = _db(folder, \"db\")\n        for sql in (\n            \"DELETE FROM items\",\n            \"INSERT INTO items VALUES (9, 'x', 1)\",\n            \"DROP TABLE items\",\n            \"UPDATE items SET price = 0\",\n        ):\n            _refused({\"path\": path, \"sql\": sql}, \"only a SELECT\")\n        assert run({\"path\": path, \"sql\": \"SELECT count(*) FROM items\"})[\"rows\"] == [[3]]\n\n\ndef test_attach_pragma_and_second_statements_are_refused():\n    with _folder() as folder:\n        path = _db(folder)\n        outside = os.path.join(folder, \"other.db\")\n        _refused({\"path\": path, \"sql\": f\"ATTACH DATABASE '{outside}' AS other\"}, \"only a SELECT\")\n        _refused({\"path\": path, \"sql\": \"PRAGMA table_info(items)\"}, \"only a SELECT\")\n        _refused({\"path\": path, \"sql\": \"SELECT 1; DELETE FROM items\"}, \"exactly one SELECT\")\n        assert not os.path.exists(outside)\n\n\ndef test_a_dump_that_attaches_a_file_does_not_load():\n    with _folder() as folder:\n        outside = os.path.join(folder, \"out.db\")\n        path = os.path.join(folder, \"evil.sql\")\n        with open(path, \"w\", encoding=\"utf-8\") as handle:\n            handle.write(f\"ATTACH DATABASE '{outside}' AS x; CREATE TABLE x.t (a);\")\n        _refused({\"path\": path, \"sql\": \"SELECT 1\"}, \"could not be loaded\")\n        assert not os.path.exists(outside)\n\n\ndef test_an_unknown_file_kind_and_a_missing_file_are_handled_errors():\n    _refused({\"path\": \"inputs/notes.txt\", \"sql\": \"SELECT 1\"}, \"must end in\")\n    _refused({\"path\": \"no/such/file.db\", \"sql\": \"SELECT 1\"}, \"cannot read\")\n\n\ndef test_a_runaway_query_is_stopped():\n    with _folder() as folder:\n        sql = \"WITH RECURSIVE c(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM c) SELECT count(*) FROM c\"\n        _refused({\"path\": _db(folder), \"sql\": sql}, \"ran too long\")\n\n\ndef test_values_that_json_cannot_carry_become_text():\n    with _folder() as folder:\n        result = run({\"path\": _db(folder), \"sql\": \"SELECT x'ff00', 1e999, NULL\"})\n    assert result[\"rows\"] == [[\"0xff00\", \"inf\", None]]\n\n\ndef test_a_dump_in_the_style_of_sqlite3_dot_dump_loads():\n    with _folder() as folder:\n        path = os.path.join(folder, \"dump.sql\")\n        with open(path, \"w\", encoding=\"utf-8\") as handle:\n            handle.write(\n                \"PRAGMA foreign_keys=OFF;\\nBEGIN TRANSACTION;\\nCREATE TABLE t (a INTEGER);\\nINSERT INTO t VALUES (7);\\nCOMMIT;\\n\"\n            )\n        assert run({\"path\": path, \"sql\": \"SELECT a FROM t\"})[\"rows\"] == [[7]]\n        with open(path, \"w\", encoding=\"utf-8\") as handle:\n            handle.write(\"PRAGMA writable_schema=ON;\\nCREATE TABLE t (a);\")\n        _refused({\"path\": path, \"sql\": \"SELECT 1\"}, \"could not be loaded\")\n",
+              "tool.py": "\"\"\"Run one read-only SELECT against a database the caller provided, and return the column names and rows.\n\nThe database is either a SQLite file (`.db`, `.sqlite`, `.sqlite3`), opened read-only, or a text SQL dump (`.sql`) that is loaded into an\nin-memory database first (a manifest example can only carry text, so the dump is how a small database is shown and tested).\n\nSafety rules, all enforced by SQLite's own authorizer rather than by looking at the text of the query:\nonly SELECT may run (no INSERT, UPDATE, DELETE, DDL, PRAGMA, ATTACH, DETACH or VACUUM), the connection is read-only, values go through\n`?` placeholders, a query that runs too long is stopped, and the rows returned are capped.\n\"\"\"\n\nfrom __future__ import annotations\n\nimport math\nimport sqlite3\n\ntry:  # inside the sandbox the SDK provides ToolError; the fallback lets the tests run anywhere\n    from toolforge_sdk import ToolError\nexcept ImportError:\n\n    class ToolError(Exception):\n        \"\"\"Stand-in for toolforge_sdk.ToolError: an expected, handled failure.\"\"\"\n\n\nMAX_DUMP_BYTES = 200_000\nMAX_CELL_CHARS = 300\nMAX_STEPS = 5_000_000  # SQLite virtual-machine steps; a runaway query is stopped here\n_FILE_SUFFIXES = (\".db\", \".sqlite\", \".sqlite3\")\n\n# While a dump loads, anything that reaches outside the database is refused; building tables and rows is allowed.\n_LOAD_DENIED = {sqlite3.SQLITE_ATTACH, sqlite3.SQLITE_DETACH}\n_LOAD_PRAGMAS = {\"foreign_keys\"}  # the one a `sqlite3 .dump` file starts with; every other PRAGMA is refused\n# While a query runs, only reading is allowed.\n_QUERY_ALLOWED = {\n    sqlite3.SQLITE_SELECT,\n    sqlite3.SQLITE_READ,\n    sqlite3.SQLITE_FUNCTION,\n    sqlite3.SQLITE_RECURSIVE,\n}\n_BLOCKED_FUNCTIONS = {\"load_extension\", \"readfile\", \"writefile\"}\n\n\ndef _load_authorizer(action, arg1, arg2, db_name, source):\n    if action in _LOAD_DENIED:\n        return sqlite3.SQLITE_DENY\n    if action == sqlite3.SQLITE_PRAGMA and str(arg1 or \"\").lower() not in _LOAD_PRAGMAS:\n        return sqlite3.SQLITE_DENY\n    return sqlite3.SQLITE_OK\n\n\ndef _query_authorizer(action, arg1, arg2, db_name, source):\n    if action not in _QUERY_ALLOWED:\n        return sqlite3.SQLITE_DENY\n    if action == sqlite3.SQLITE_FUNCTION and str(arg2 or \"\").lower() in _BLOCKED_FUNCTIONS:\n        return sqlite3.SQLITE_DENY\n    return sqlite3.SQLITE_OK\n\n\ndef _open(path: str) -> sqlite3.Connection:\n    lowered = path.lower()\n    if lowered.endswith(\".sql\"):\n        try:\n            with open(path, \"rb\") as handle:\n                raw = handle.read(MAX_DUMP_BYTES + 1)\n        except OSError:\n            raise ToolError(f\"cannot read {path!r}; pass the name of a file the caller provided\") from None\n        if len(raw) > MAX_DUMP_BYTES:\n            raise ToolError(\n                f\"the SQL dump is larger than {MAX_DUMP_BYTES // 1000} KB; provide a database file instead\"\n            )\n        try:\n            script = raw.decode(\"utf-8\")\n        except UnicodeDecodeError:\n            raise ToolError(\"the SQL dump is not UTF-8 text\") from None\n        connection = sqlite3.connect(\":memory:\")\n        connection.set_authorizer(_load_authorizer)\n        try:\n            connection.executescript(script)\n        except sqlite3.Error as error:\n            connection.close()\n            raise ToolError(f\"the SQL dump could not be loaded: {str(error)[:120]}\") from None\n        return connection\n    if not lowered.endswith(_FILE_SUFFIXES):\n        raise ToolError(\"the file must end in .db, .sqlite, .sqlite3 (a database) or .sql (a text dump)\")\n    try:\n        with open(path, \"rb\"):\n            pass\n    except OSError:\n        raise ToolError(f\"cannot read {path!r}; pass the name of a file the caller provided\") from None\n    # `mode=ro` and `immutable=1`: the file is never written, not even a journal. The path is quoted for the URI by hand.\n    quoted = path.replace(\"%\", \"%25\").replace(\"?\", \"%3f\").replace(\"#\", \"%23\")\n    try:\n        return sqlite3.connect(f\"file:{quoted}?mode=ro&immutable=1\", uri=True)\n    except sqlite3.Error:\n        raise ToolError(\"the file could not be opened as a SQLite database\") from None\n\n\ndef _cell(value):\n    \"\"\"A value as JSON: text and numbers as they are, bytes as hex, a number JSON cannot carry as text.\"\"\"\n    if value is None or isinstance(value, bool | int):\n        return value\n    if isinstance(value, float):\n        return value if math.isfinite(value) else str(value)\n    if isinstance(value, bytes):\n        return \"0x\" + value[: MAX_CELL_CHARS // 2].hex() + (\"...\" if len(value) > MAX_CELL_CHARS // 2 else \"\")\n    text = str(value)\n    return text if len(text) <= MAX_CELL_CHARS else text[:MAX_CELL_CHARS] + \"...\"\n\n\ndef run(args: dict) -> dict:\n    sql = args[\"sql\"].strip().rstrip(\";\").strip()\n    if not sql:\n        raise ToolError(\"sql is empty; give one SELECT statement\")\n    params = list(args.get(\"params\", []))\n    max_rows = args.get(\"max_rows\", 100)\n    connection = _open(args[\"path\"])\n    try:\n        steps = [0]\n\n        def watchdog() -> int:\n            steps[0] += 1000\n            return 1 if steps[0] > MAX_STEPS else 0\n\n        connection.set_authorizer(_query_authorizer)\n        connection.set_progress_handler(watchdog, 1000)\n        try:\n            cursor = connection.execute(sql, params)\n            columns = [d[0] for d in cursor.description or []]\n            rows = cursor.fetchmany(max_rows + 1)\n        except (sqlite3.Warning, sqlite3.ProgrammingError) as error:\n            if isinstance(error, sqlite3.Warning) or \"one statement\" in str(error):\n                raise ToolError(\"give exactly one SELECT statement\") from None\n            raise ToolError(f\"the query or its parameters were refused: {str(error)[:120]}\") from None\n        except sqlite3.DatabaseError as error:\n            message = str(error)\n            if \"not authorized\" in message:\n                raise ToolError(\n                    \"only a SELECT that reads tables is allowed (no writes, PRAGMA, ATTACH or DDL)\"\n                ) from None\n            if \"interrupted\" in message:\n                raise ToolError(\n                    \"the query ran too long and was stopped; narrow it with WHERE or LIMIT\"\n                ) from None\n            raise ToolError(f\"the query failed: {message[:120]}\") from None\n        except (sqlite3.InterfaceError, OverflowError) as error:\n            raise ToolError(f\"the query or its parameters were refused: {str(error)[:120]}\") from None\n    finally:\n        connection.close()\n    truncated = len(rows) > max_rows\n    shown = rows[:max_rows]\n    return {\n        \"columns\": columns,\n        \"rows\": [[_cell(value) for value in row] for row in shown],\n        \"row_count\": len(shown),\n        \"truncated\": truncated,\n    }\n"
+            },
+            "manifest": {
+              "description": "Run one read-only SELECT on a SQLite database file or a text SQL dump the caller provided; returns the column names and up to max_rows rows.",
+              "entrypoint": "tool.py:run",
+              "examples": [
+                {
+                  "files": {
+                    "inputs/shop.sql": "CREATE TABLE items (id INTEGER PRIMARY KEY, name TEXT, price REAL);\nINSERT INTO items VALUES (1, 'pen', 1.5), (2, 'book', 12.0), (3, 'lamp', 30.25);\n"
+                  },
+                  "input": {
+                    "params": [
+                      5
+                    ],
+                    "path": "inputs/shop.sql",
+                    "sql": "SELECT name, price FROM items WHERE price > ? ORDER BY price"
+                  },
+                  "live": false,
+                  "output": {
+                    "columns": [
+                      "name",
+                      "price"
+                    ],
+                    "row_count": 2,
+                    "rows": [
+                      [
+                        "book",
+                        12.0
+                      ],
+                      [
+                        "lamp",
+                        30.25
+                      ]
+                    ],
+                    "truncated": false
+                  }
+                },
+                {
+                  "files": {
+                    "inputs/shop.sql": "CREATE TABLE items (id INTEGER PRIMARY KEY, name TEXT, price REAL);\nINSERT INTO items VALUES (1, 'pen', 1.5), (2, 'book', 12.0), (3, 'lamp', 30.25);\n"
+                  },
+                  "input": {
+                    "path": "inputs/shop.sql",
+                    "sql": "SELECT count(*) AS items, max(price) AS dearest FROM items"
+                  },
+                  "live": false,
+                  "output": {
+                    "columns": [
+                      "items",
+                      "dearest"
+                    ],
+                    "row_count": 1,
+                    "rows": [
+                      [
+                        3,
+                        30.25
+                      ]
+                    ],
+                    "truncated": false
+                  }
+                }
+              ],
+              "input_schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "max_rows": {
+                    "maximum": 500,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "params": {
+                    "items": {
+                      "type": [
+                        "string",
+                        "number",
+                        "null"
+                      ]
+                    },
+                    "maxItems": 20,
+                    "type": "array"
+                  },
+                  "path": {
+                    "type": "string"
+                  },
+                  "sql": {
+                    "maxLength": 2000,
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "path",
+                  "sql"
+                ],
+                "type": "object"
+              },
+              "kind": "stateless",
+              "limits": {
+                "memory_mb": 256,
+                "output_kb": 64,
+                "timeout_s": 20
+              },
+              "name": "sqlite_query",
+              "output_schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "columns": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "row_count": {
+                    "type": "integer"
+                  },
+                  "rows": {
+                    "items": {
+                      "type": "array"
+                    },
+                    "type": "array"
+                  },
+                  "truncated": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "columns",
+                  "rows",
+                  "row_count",
+                  "truncated"
+                ],
+                "type": "object"
+              },
+              "parent_version": null,
+              "permissions": {
+                "browser": false,
+                "inputs": true,
+                "network": [],
+                "secrets": []
+              },
+              "requirements": [],
+              "version": "1.0.0",
+              "when_to_use": "The task gives a database (a .db or .sqlite file, or a .sql dump) and asks a question that one SELECT can answer."
+            }
+          }
+        },
+        "tool": "forge_submit"
+      },
+      "say": "Nothing fits. Write one: a read-only SELECT over a database file, with tests, and submit it."
+    },
+    {
+      "expect": [
+        "verified"
+      ],
+      "reply": {
+        "action": "call",
+        "arguments": {
+          "args": {
+            "max_rows": 50,
+            "params": [
+              "2025-01-01",
+              "2025-03-31"
+            ],
+            "path": "inputs/shop.db",
+            "sql": "SELECT r.region, COALESCE(SUM(x.cents), 0) AS revenue_cents FROM (SELECT DISTINCT region FROM customers) r LEFT JOIN (SELECT c.region AS region, i.qty * i.unit_cents AS cents FROM customers c JOIN orders o ON o.customer_id = c.id JOIN order_items i ON i.order_id = o.id WHERE substr(c.name, 1, 4) <> 'TEST' AND o.placed_on BETWEEN ? AND ?) x ON x.region = r.region GROUP BY r.region ORDER BY r.region"
+          },
+          "files": {
+            "shop.db": {
+              "$file": "shop.db"
+            }
+          },
+          "name": "sqlite_query"
+        },
+        "tool": "forge_run"
+      },
+      "say": "Verified, and an operator promoted it (the agent cannot). Use it on the database."
+    },
+    {
+      "expect": [],
+      "reply": {
+        "action": "final",
+        "answer": {
+          "revenue_cents": {
+            "north": 111659,
+            "south": 279588,
+            "west": 536903
+          }
+        }
+      },
+      "say": "The query returned one row per region. Answer."
+    }
+  ]
+}

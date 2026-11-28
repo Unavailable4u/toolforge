@@ -28,6 +28,7 @@ import threading
 import time
 import uuid
 from collections.abc import Callable, Iterable, Mapping
+from functools import partial
 from pathlib import Path
 from typing import Any
 
@@ -85,11 +86,18 @@ def broker_service_hosts(
     return {name: str(entry["host"]) for name, entry in configured_broker_services(settings, environ).items()}
 
 
-def _start_proxy(hosts: list[str], broker: Mapping[str, dict[str, Any]] | None = None) -> Any:
-    """Start MiniLocker's egress proxy for `hosts` and `broker`. The default factory of `EgressPool`."""
+def _start_proxy(
+    hosts: list[str], broker: Mapping[str, dict[str, Any]] | None = None, *, image: str = ""
+) -> Any:
+    """Start MiniLocker's egress proxy for `hosts` and `broker`. The default factory of `EgressPool`.
+
+    With `image` (`TOOLFORGE_EGRESS_PROXY_IMAGE`) the proxy runs MiniLocker's packaged module from that image instead of bind-mounting a
+    file from this process's filesystem, which is what a ToolForge that runs inside a container needs.
+    """
     module = _ml_path.load("minilocker.egress.manager")
     try:
-        manager = module.EgressManager(hosts, broker=dict(broker or {}))
+        extra: dict[str, Any] = {"image": image, "packaged": True} if image else {}
+        manager = module.EgressManager(hosts, broker=dict(broker or {}), **extra)
         return manager.start()
     except SandboxUnavailable:
         raise
@@ -411,7 +419,8 @@ class MiniLockerRunner:
         sandbox_factory: Callable[..., Any] | None = None,
     ) -> None:
         self._settings = settings
-        self.pool = pool or EgressPool()
+        image = settings.egress_proxy_image if settings is not None else ""
+        self.pool = pool or EgressPool(partial(_start_proxy, image=image) if image else None)
         self._sandbox_factory = sandbox_factory  # tests pass a stand-in; production uses minilocker's Sandbox
 
     def shutdown(self) -> bool:

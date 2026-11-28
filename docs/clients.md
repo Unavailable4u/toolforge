@@ -48,6 +48,46 @@ HTTP rules, enforced by `toolforge.netguard` (the same code the dashboard uses):
 * There is no encryption. Beyond a trusted network, put a TLS-terminating proxy in front, and remember that a loopback address protects
   against other machines, not against other users or programs on this one.
 
+## 2b. Start it with Docker Compose
+
+`docker-compose.yml` runs the MCP server and the operator dashboard from one image (`deploy/Dockerfile`), next to a socket proxy that stands between
+them and Docker.
+
+```
+git submodule update --init third_party/minilocker
+cp .env.example .env     # set TOOLFORGE_SERVER_TOKEN and TOOLFORGE_DASHBOARD_TOKEN (long random values); both are required
+make demo-up             # = docker compose up -d --build; make demo-down stops it, make demo-logs follows the logs
+```
+
+| Service | What it is | Reachable at |
+| --- | --- | --- |
+| `server` | `toolforge serve --transport http` | `http://127.0.0.1:8765/mcp`, bearer token `TOOLFORGE_SERVER_TOKEN` |
+| `dashboard` | `toolforge dashboard` | `http://127.0.0.1:8787/`, its API wants `TOOLFORGE_DASHBOARD_TOKEN` |
+| `docker-proxy` | a socket proxy (`tecnativa/docker-socket-proxy`) | inside the compose network only |
+| `runtime-image`, `control-image` | one-shot builds of the sandbox image and of the control-plane image | exit when done |
+
+Rules the file keeps (a test, `tests/test_compose.py`, reads the file for each of them):
+
+* **Both published ports are on `127.0.0.1`.** Inside the container the server binds `0.0.0.0`, which is why a token is required: compose stops
+  with a message when either token is missing from `.env`.
+* **No container mounts the raw Docker socket.** Only the proxy does, read-only. It allows the Docker API families MiniLocker calls (containers,
+  networks, images, exec, `POST`, version, info, ping) and denies the rest, including the build API, volumes, `commit` and the swarm families. The
+  sandbox image is built by compose on the host, not through the proxy.
+* **Sandboxes are siblings, not children.** The server creates them through the proxy; they are not services in this file, and they are
+  hardened containers with no route out exactly as when ToolForge runs on the host.
+* **The egress proxy runs from the control-plane image** (`TOOLFORGE_EGRESS_PROXY_IMAGE=toolforge-control:local`). Run from the host, ToolForge
+  bind-mounts MiniLocker's proxy file; from inside a container that path would not exist on the Docker host, so the packaged module in the image is
+  used instead. Leave this setting empty when you run `toolforge serve` on the host.
+* The control-plane containers are read-only, run as an unprivileged user, drop all capabilities and keep their state in the `data` volume
+  (`/data`, which holds the registry, the blobs and the ledgers) and the `runs` volume (`/runs`).
+
+`.env` is read by both containers, so any broker token or model key in it reaches both; keep only what you need there. Port variables
+(`TOOLFORGE_SERVER_PORT`, `TOOLFORGE_DASHBOARD_PORT`) change the container port and the published port together, because the `Host` check includes the port.
+
+**Not yet proven:** this file was written where there was no Docker daemon. `tests/test_compose.py` checks its text, and `docker compose config` validates it
+when Docker is present; a full `make demo-up` followed by a call that opens a sandbox and one that needs the egress proxy has not been run. Do that first and
+report what breaks (`PROGRESS.md`).
+
 ## 3. Point a client at it
 
 Claude Code:
@@ -70,6 +110,24 @@ A client with a JSON configuration file (Claude Desktop, Cursor and others use t
   }
 }
 ```
+
+A client that takes a remote (HTTP) server in its JSON file usually wants a URL and headers. The key names differ between clients (`url`, `serverUrl`,
+`httpUrl`, a `type` of `http` or `streamable-http`), so check yours; the values are the same:
+
+```json
+{
+  "mcpServers": {
+    "toolforge": {
+      "type": "http",
+      "url": "http://127.0.0.1:8765/mcp",
+      "headers": { "Authorization": "Bearer <your TOOLFORGE_SERVER_TOKEN>" }
+    }
+  }
+}
+```
+
+The same endpoint and header work for the Compose setup above. Of these shapes only the Claude Code commands are what the authors use; treat the JSON ones as the
+usual convention, not as tested against each client.
 
 If `toolforge` is not on the client's `PATH` (a virtual environment), use the full path to the executable as `command`. A client that
 supports remote servers takes the URL `http://127.0.0.1:8765/mcp` and the header `Authorization: Bearer <token>`.
@@ -145,6 +203,7 @@ change the next time they list tools.
 | `TOOLFORGE_LLM_BASE_URL`, `TOOLFORGE_LLM_MODEL`, `TOOLFORGE_LLM_API_KEY` | the builder model that `forge_build` asks; without them `forge_build` can only reuse an existing tool |
 | `TOOLFORGE_BUILDER_MAX_ROUNDS`, `TOOLFORGE_BUILDER_TOKEN_BUDGET` | how many times, and with how many model tokens in all, one build (or one repair) may ask for a package (4 and 60000) |
 | `TOOLFORGE_REPAIR_MAX_PER_HOUR` | how many `forge_repair` attempts may start on one tool in an hour (3) |
+| `TOOLFORGE_EGRESS_PROXY_IMAGE` | run the egress proxy from this image instead of bind-mounting MiniLocker's file; only for a ToolForge that itself runs in a container (the compose file sets it); empty by default |
 | `TOOLFORGE_STORE_FAILED_INPUTS` | keep the raw arguments of failed calls as regression cases (false); see `docs/repair.md` before turning it on |
 
 Docker must be running for `forge_run`, `forge_submit`, `forge_build` and `forge_repair`. Without it the server still starts and answers `forge_find`, `forge_describe`,

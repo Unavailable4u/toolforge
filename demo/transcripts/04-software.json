@@ -1,0 +1,315 @@
+{
+  "act": "software",
+  "note": "Scripted by demo/make_transcripts.py from the reference packs; not produced by a language model. Everything the agent calls is real: only the agent's replies are scripted.",
+  "schema": 1,
+  "source": "scripted",
+  "task": {
+    "id": "blackjack_hand",
+    "seed": 7,
+    "sibling": false
+  },
+  "turns": [
+    {
+      "expect": [],
+      "reply": {
+        "action": "call",
+        "arguments": {
+          "query": "blackjack card game session"
+        },
+        "tool": "forge_find"
+      },
+      "say": "Check the shelf first."
+    },
+    {
+      "expect": [
+        "\"count\": 0"
+      ],
+      "reply": {
+        "action": "call",
+        "arguments": {
+          "package": {
+            "files": {
+              "tests/test_blackjack_session.py": "from tool import ToolError, _deck, run, total\n\n\ndef refused(args, state, needle):\n    try:\n        run(args, state)\n    except ToolError as error:\n        assert needle in str(error), str(error)\n    else:\n        raise AssertionError(\"expected ToolError\")\n\n\ndef finish(seed, *actions):\n    state = {}\n    out = run({\"action\": \"new\", \"seed\": seed}, state)\n    for action in actions:\n        out = run({\"action\": action}, state)\n    return out, state\n\n\ndef test_totals_count_aces_as_eleven_until_that_busts():\n    assert total([\"A\", \"K\"]) == 21 and total([\"A\", \"A\", \"9\"]) == 21 and total([\"A\", \"K\", \"5\"]) == 16\n    assert total([\"10\", \"6\", \"7\"]) == 23\n\n\ndef test_the_same_seed_deals_the_same_game_and_other_seeds_differ():\n    assert _deck(7) == _deck(7)\n    assert sorted(_deck(7)) == sorted(_deck(8)) and _deck(7) != _deck(8)\n    assert run({\"action\": \"new\", \"seed\": 7}, {}) == run({\"action\": \"new\", \"seed\": 7}, {})\n\n\ndef test_the_dealers_second_card_is_hidden_until_the_hand_ends():\n    for seed in range(40):\n        out, _ = finish(seed)\n        if out[\"status\"] == \"playing\":\n            assert (\n                len(out[\"dealer\"]) == 1\n                and out[\"dealer_total\"] is None\n                and out[\"available\"] == [\"hit\", \"stand\"]\n            )\n            return\n    raise AssertionError(\"no seed in range gave a hand in progress\")\n\n\ndef test_standing_ends_the_hand_and_the_dealer_draws_to_seventeen():\n    for seed in range(40):\n        out, _ = finish(seed)\n        if out[\"status\"] != \"playing\":\n            continue\n        done, _ = finish(seed, \"stand\")\n        assert done[\"status\"] in (\"player_win\", \"dealer_win\", \"dealer_bust\", \"push\")\n        assert done[\"available\"] == [] and len(done[\"dealer\"]) >= 2\n        assert done[\"dealer_total\"] >= 17 or done[\"dealer_total\"] > done[\"player_total\"]\n        return\n    raise AssertionError(\"no playable seed\")\n\n\ndef test_hitting_until_bust_loses():\n    for seed in range(40):\n        out, state = finish(seed)\n        if out[\"status\"] != \"playing\":\n            continue\n        while out[\"status\"] == \"playing\":\n            out = run({\"action\": \"hit\"}, state)\n        if out[\"status\"] == \"player_bust\":\n            assert out[\"player_total\"] > 21 and out[\"dealer_total\"] is not None\n            return\n    raise AssertionError(\"no seed busted\")\n\n\ndef test_every_outcome_is_reachable_and_rewinds_replay_identically():\n    seen = set()\n    for seed in range(300):\n        out, state = finish(seed)\n        seen.add(out[\"status\"])\n        if out[\"status\"] == \"playing\":\n            seen.add(finish(seed, \"stand\")[0][\"status\"])\n        again = run({\"action\": \"show\"}, {\"seed\": state[\"seed\"], \"actions\": list(state[\"actions\"])})\n        assert again == out\n    assert {\"player_blackjack\", \"dealer_win\", \"player_win\", \"dealer_bust\", \"push\"} <= seen\n\n\ndef test_acting_after_the_hand_or_without_a_game_is_refused():\n    refused({\"action\": \"hit\"}, {}, \"start one\")\n    out, state = finish(next(s for s in range(40) if finish(s)[0][\"status\"] == \"playing\"), \"stand\")\n    refused({\"action\": \"hit\"}, state, \"hand is over\")\n    refused({\"action\": \"show\"}, {\"seed\": \"x\", \"actions\": []}, \"damaged\")\n    refused({\"action\": \"show\"}, {\"seed\": 1, \"actions\": [\"fold\"]}, \"damaged\")\n",
+              "tool.py": "\"\"\"A game of blackjack that lasts across calls, with a seeded shuffle so the same seed always deals the same game.\n\n`action` is `new` (shuffle with `seed` and deal), `hit`, `stand` or `show`. The player sees both own cards and the dealer's first card;\nthe dealer's other card stays hidden until the hand is over. The dealer draws to 17 and stands on every 17. A two-card 21 pays out at\nonce (a push if the dealer has one too). The state is only the seed and the actions taken; the hands are rebuilt from them each\ncall, so a rewind gives the same cards. The shuffle is a small generator written here, not the `random` module, so the deal does\nnot depend on the Python version.\n\"\"\"\n\nfrom __future__ import annotations\n\ntry:  # inside the sandbox the SDK provides ToolError; the fallback lets the tests run anywhere\n    from toolforge_sdk import ToolError\nexcept ImportError:\n\n    class ToolError(Exception):\n        \"\"\"Stand-in for toolforge_sdk.ToolError: an expected, handled failure.\"\"\"\n\n\nMASK = (1 << 64) - 1\nRANKS = [\"A\", \"2\", \"3\", \"4\", \"5\", \"6\", \"7\", \"8\", \"9\", \"10\", \"J\", \"Q\", \"K\"]\nMAX_ACTIONS = 40\n\n\ndef _numbers(seed: int):\n    \"\"\"An endless stream of 64-bit numbers (xorshift64*), the same on every Python.\"\"\"\n    x = (seed * 6364136223846793005 + 1442695040888963407) & MASK or 0x9E3779B97F4A7C15\n    while True:\n        x ^= x >> 12\n        x ^= (x << 25) & MASK\n        x ^= x >> 27\n        yield (x * 2685821657736338717) & MASK\n\n\ndef _deck(seed: int) -> list[str]:\n    cards = [rank for rank in RANKS for _ in range(4)]\n    numbers = _numbers(seed)\n    for i in range(len(cards) - 1, 0, -1):\n        j = next(numbers) % (i + 1)\n        cards[i], cards[j] = cards[j], cards[i]\n    return cards\n\n\ndef _value(rank: str) -> int:\n    return 11 if rank == \"A\" else 10 if rank in (\"10\", \"J\", \"Q\", \"K\") else int(rank)\n\n\ndef total(hand: list[str]) -> int:\n    \"\"\"The best total not over 21 (an ace counts 11 until that would bust, then 1).\"\"\"\n    points = sum(_value(card) for card in hand)\n    aces = hand.count(\"A\")\n    while points > 21 and aces:\n        points -= 10\n        aces -= 1\n    return points\n\n\ndef _play(seed: int, actions: list[str]) -> dict:\n    deck = _deck(seed)\n    player, dealer = [deck[0], deck[2]], [deck[1], deck[3]]\n    drawn = 4\n    status = \"playing\"\n    if total(player) == 21:\n        status = \"push\" if total(dealer) == 21 else \"player_blackjack\"\n    elif total(dealer) == 21:\n        status = \"dealer_win\"\n    for action in actions:\n        if status != \"playing\":\n            raise ToolError(\"the game state is damaged; start again with action new\")\n        if action == \"hit\":\n            player.append(deck[drawn])\n            drawn += 1\n            if total(player) > 21:\n                status = \"player_bust\"\n        else:\n            while total(dealer) < 17:\n                dealer.append(deck[drawn])\n                drawn += 1\n            mine, theirs = total(player), total(dealer)\n            status = (\n                \"dealer_bust\"\n                if theirs > 21\n                else \"player_win\"\n                if mine > theirs\n                else \"dealer_win\"\n                if theirs > mine\n                else \"push\"\n            )\n    return {\"player\": player, \"dealer\": dealer, \"status\": status}\n\n\ndef _observe(game: dict) -> dict:\n    over = game[\"status\"] != \"playing\"\n    dealer = game[\"dealer\"]\n    return {\n        \"player\": game[\"player\"],\n        \"player_total\": total(game[\"player\"]),\n        \"dealer\": dealer if over else dealer[:1],\n        \"dealer_total\": total(dealer) if over else None,\n        \"status\": game[\"status\"],\n        \"available\": [] if over else [\"hit\", \"stand\"],\n    }\n\n\ndef _state_ok(state: dict) -> bool:\n    actions = state.get(\"actions\")\n    return (\n        isinstance(state.get(\"seed\"), int)\n        and not isinstance(state.get(\"seed\"), bool)\n        and isinstance(actions, list)\n        and all(a in (\"hit\", \"stand\") for a in actions)\n    )\n\n\ndef run(args: dict, state: dict) -> dict:\n    action = args[\"action\"]\n    if action == \"new\":\n        state.clear()\n        state.update({\"seed\": args.get(\"seed\", 0), \"actions\": []})\n        return _observe(_play(state[\"seed\"], []))\n    if not state:\n        raise ToolError(\"no game yet; start one with action new\")\n    if not _state_ok(state):\n        raise ToolError(\"the game state is damaged; start again with action new\")\n    game = _play(state[\"seed\"], state[\"actions\"])\n    if action == \"show\":\n        return _observe(game)\n    if game[\"status\"] != \"playing\":\n        raise ToolError(f\"the hand is over ({game['status']}); start again with action new\")\n    if len(state[\"actions\"]) >= MAX_ACTIONS:\n        raise ToolError(\"too many actions in one hand; start again with action new\")\n    state[\"actions\"].append(action)\n    return _observe(_play(state[\"seed\"], state[\"actions\"]))\n"
+            },
+            "manifest": {
+              "description": "Play a hand of blackjack across calls with a seeded shuffle (same seed, same deal): new, hit, stand or show; the dealer draws to 17.",
+              "entrypoint": "tool.py:run",
+              "examples": [
+                {
+                  "files": {},
+                  "input": {
+                    "action": "new",
+                    "seed": 2
+                  },
+                  "live": false,
+                  "output": {
+                    "available": [
+                      "hit",
+                      "stand"
+                    ],
+                    "dealer": [
+                      "3"
+                    ],
+                    "dealer_total": null,
+                    "player": [
+                      "6",
+                      "A"
+                    ],
+                    "player_total": 17,
+                    "status": "playing"
+                  }
+                },
+                {
+                  "files": {},
+                  "input": {
+                    "action": "hit"
+                  },
+                  "live": false,
+                  "output": {
+                    "available": [
+                      "hit",
+                      "stand"
+                    ],
+                    "dealer": [
+                      "3"
+                    ],
+                    "dealer_total": null,
+                    "player": [
+                      "6",
+                      "A",
+                      "3"
+                    ],
+                    "player_total": 20,
+                    "status": "playing"
+                  }
+                },
+                {
+                  "files": {},
+                  "input": {
+                    "action": "show"
+                  },
+                  "live": false,
+                  "output": {
+                    "available": [
+                      "hit",
+                      "stand"
+                    ],
+                    "dealer": [
+                      "3"
+                    ],
+                    "dealer_total": null,
+                    "player": [
+                      "6",
+                      "A",
+                      "3"
+                    ],
+                    "player_total": 20,
+                    "status": "playing"
+                  }
+                },
+                {
+                  "files": {},
+                  "input": {
+                    "action": "stand"
+                  },
+                  "live": false,
+                  "output": {
+                    "available": [],
+                    "dealer": [
+                      "3",
+                      "7",
+                      "6",
+                      "A"
+                    ],
+                    "dealer_total": 17,
+                    "player": [
+                      "6",
+                      "A",
+                      "3"
+                    ],
+                    "player_total": 20,
+                    "status": "player_win"
+                  }
+                }
+              ],
+              "input_schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "action": {
+                    "enum": [
+                      "new",
+                      "hit",
+                      "stand",
+                      "show"
+                    ],
+                    "type": "string"
+                  },
+                  "seed": {
+                    "maximum": 2147483647,
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "action"
+                ],
+                "type": "object"
+              },
+              "kind": "session",
+              "limits": {
+                "memory_mb": 256,
+                "output_kb": 64,
+                "timeout_s": 20
+              },
+              "name": "blackjack_session",
+              "output_schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "available": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "dealer": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "dealer_total": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "player": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "player_total": {
+                    "type": "integer"
+                  },
+                  "status": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "player",
+                  "player_total",
+                  "dealer",
+                  "status",
+                  "available"
+                ],
+                "type": "object"
+              },
+              "parent_version": null,
+              "permissions": {
+                "browser": false,
+                "inputs": false,
+                "network": [],
+                "secrets": []
+              },
+              "requirements": [],
+              "version": "1.0.0",
+              "when_to_use": "The task is to play blackjack, test a strategy or replay a hand, and the hand must be remembered between calls."
+            }
+          }
+        },
+        "tool": "forge_submit"
+      },
+      "say": "A game that lasts across calls needs a session tool. Write one and submit it."
+    },
+    {
+      "expect": [
+        "verified"
+      ],
+      "reply": {
+        "action": "call",
+        "arguments": {
+          "args": {
+            "action": "new",
+            "seed": 2
+          },
+          "name": "blackjack_session"
+        },
+        "tool": "forge_run"
+      },
+      "say": "Verified and promoted. Open a session: deal a new hand."
+    },
+    {
+      "expect": [
+        "\"step\": 1"
+      ],
+      "reply": {
+        "action": "call",
+        "arguments": {
+          "args": {
+            "action": "hit"
+          },
+          "name": "blackjack_session",
+          "session_id": "$session_id"
+        },
+        "tool": "forge_run"
+      },
+      "say": "Step 1 is the deal. Hit once (step 2)."
+    },
+    {
+      "expect": [
+        "\"step\": 2"
+      ],
+      "reply": {
+        "action": "call",
+        "arguments": {
+          "session_id": "$session_id",
+          "step": 1
+        },
+        "tool": "forge_session_rewind"
+      },
+      "say": "Change of mind: rewind to step 1, the state right after the deal."
+    },
+    {
+      "expect": [
+        "\"step\": 1"
+      ],
+      "reply": {
+        "action": "call",
+        "arguments": {
+          "args": {
+            "action": "stand"
+          },
+          "name": "blackjack_session",
+          "session_id": "$session_id"
+        },
+        "tool": "forge_run"
+      },
+      "say": "Stand instead."
+    },
+    {
+      "expect": [],
+      "reply": {
+        "action": "call",
+        "arguments": {
+          "session_id": "$session_id"
+        },
+        "tool": "forge_session_close"
+      },
+      "say": "The hand is over. Close the session: that ends the sandbox and audits it."
+    },
+    {
+      "expect": [],
+      "reply": {
+        "action": "final",
+        "answer": {
+          "dealer_total": 19,
+          "player_total": 17,
+          "status": "dealer_win"
+        }
+      },
+      "say": "Answer."
+    }
+  ]
+}

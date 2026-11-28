@@ -1,0 +1,131 @@
+# ToolForge, one command:   make demo-up      (or: docker compose up -d --build)
+#
+#   MCP client / browser -> server, dashboard (127.0.0.1 only, bearer token) -> docker-proxy -> host Docker
+#
+# The control plane never touches the raw Docker socket. It talks to a proxy that allows only the Docker API families MiniLocker
+# calls (create, start, exec, copy files in and out, remove, networks for the egress proxy, image lookup). Sandboxes and the egress proxy
+# are created by the server as siblings of these containers; they are not part of this file.
+#
+# Settings come from .env (git-ignored; copy .env.example). Two are required and compose stops with a message when they are missing:
+#   TOOLFORGE_SERVER_TOKEN      the bearer token MCP clients send
+#   TOOLFORGE_DASHBOARD_TOKEN   the bearer token the dashboard's API wants
+name: toolforge
+
+x-control: &control
+  image: toolforge-control:local
+  restart: unless-stopped
+  env_file:
+    - path: .env
+      required: false
+  environment: &control-env
+    DOCKER_HOST: tcp://docker-proxy:2375
+    TOOLFORGE_HOME: /data
+    TOOLFORGE_RUNTIME_IMAGE: toolforge-runtime:py312
+    TOOLFORGE_EGRESS_PROXY_IMAGE: toolforge-control:local
+  volumes:
+    - data:/data
+    - runs:/runs
+  read_only: true
+  tmpfs: [/tmp]
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  mem_limit: 1g
+  pids_limit: 256
+  networks: [control]
+
+services:
+  docker-proxy:
+    image: ${SOCKET_PROXY_IMAGE:-tecnativa/docker-socket-proxy:latest}
+    restart: unless-stopped
+    environment:
+      # allowed: what MiniLocker's sandbox and egress code call
+      CONTAINERS: "1"
+      NETWORKS: "1"
+      IMAGES: "1"
+      EXEC: "1"
+      POST: "1"
+      VERSION: "1"
+      INFO: "1"
+      PING: "1"
+      # denied (the proxy's default, spelled out so a reader does not have to look it up)
+      BUILD: "0"
+      VOLUMES: "0"
+      SYSTEM: "0"
+      EVENTS: "0"
+      SECRETS: "0"
+      SERVICES: "0"
+      SWARM: "0"
+      NODES: "0"
+      TASKS: "0"
+      CONFIGS: "0"
+      PLUGINS: "0"
+      AUTH: "0"
+      COMMIT: "0"
+      DISTRIBUTION: "0"
+      SESSION: "0"
+      GRPC: "0"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks: [control]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 128m
+
+  # One-shot: builds the image tool sandboxes run in. Compose builds it with the host's Docker, so no container needs the build API.
+  runtime-image:
+    build:
+      context: ./images/runtime
+    image: toolforge-runtime:py312
+    restart: "no"
+    command: ["python", "-c", "print('toolforge-runtime:py312 is built')"]
+
+  # One-shot: builds the control-plane image once, for both services below and for the egress proxy.
+  control-image:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+    image: toolforge-control:local
+    restart: "no"
+    command: ["python", "-c", "print('toolforge-control:local is built')"]
+
+  server:
+    <<: *control
+    depends_on:
+      docker-proxy:
+        condition: service_started
+      runtime-image:
+        condition: service_completed_successfully
+      control-image:
+        condition: service_completed_successfully
+    environment:
+      <<: *control-env
+      TOOLFORGE_SERVER_HOST: 0.0.0.0
+      TOOLFORGE_SERVER_PORT: ${TOOLFORGE_SERVER_PORT:-8765}
+      TOOLFORGE_SERVER_TOKEN: ${TOOLFORGE_SERVER_TOKEN:?set TOOLFORGE_SERVER_TOKEN in .env (a long random value; MCP clients send it as a bearer token)}
+    command: ["toolforge", "serve", "--transport", "http"]
+    ports:
+      - "127.0.0.1:${TOOLFORGE_SERVER_PORT:-8765}:${TOOLFORGE_SERVER_PORT:-8765}"
+
+  dashboard:
+    <<: *control
+    depends_on:
+      docker-proxy:
+        condition: service_started
+      runtime-image:
+        condition: service_completed_successfully
+      control-image:
+        condition: service_completed_successfully
+    environment:
+      <<: *control-env
+      TOOLFORGE_DASHBOARD_HOST: 0.0.0.0
+      TOOLFORGE_DASHBOARD_PORT: ${TOOLFORGE_DASHBOARD_PORT:-8787}
+      TOOLFORGE_DASHBOARD_TOKEN: ${TOOLFORGE_DASHBOARD_TOKEN:?set TOOLFORGE_DASHBOARD_TOKEN in .env (a long random value; the dashboard's API wants it as a bearer token)}
+    command: ["toolforge", "dashboard", "--runs-dir", "/runs"]
+    ports:
+      - "127.0.0.1:${TOOLFORGE_DASHBOARD_PORT:-8787}:${TOOLFORGE_DASHBOARD_PORT:-8787}"
+
+volumes:
+  data:
+  runs:
+
+networks:
+  control:

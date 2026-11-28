@@ -1,0 +1,34 @@
+{
+  "acts": [
+    {
+      "checker": "accepted",
+      "id": "forge"
+    },
+    {
+      "checker": "accepted",
+      "id": "reuse"
+    },
+    {
+      "checker": "accepted",
+      "id": "attack"
+    },
+    {
+      "checker": "accepted",
+      "id": "software"
+    }
+  ],
+  "agent": "scripted",
+  "events": 69,
+  "events_dropped": 0,
+  "g5": "skipped",
+  "isolated": false,
+  "ledger_files": 13,
+  "ledger_files_verified": 13,
+  "mode": "replay",
+  "note": "Replayed with a scripted agent. The stand-in sandbox gives no isolation, so this recording has no G6 decoy run and no Docker facts.",
+  "recorded_at": "2026-11-28",
+  "sandbox": "stand-in",
+  "schema": 1,
+  "seed": 7,
+  "toolforge_version": "0.0.1"
+}
