@@ -1,0 +1,375 @@
+/* ToolForge guided tour (P20). Colours come from the tokens in styles.css, so both themes follow; no url(), no web font.
+   Without the script the written list shows and the interactive part does not. tour.js adds `tour-live` once its data has loaded. */
+
+.tour-app {
+  display: none;
+  margin-top: 2rem;
+}
+
+.tour-live .tour-app {
+  display: block;
+}
+
+.tour-live .tour-static {
+  display: none;
+}
+
+/* A class that sets `display` would otherwise beat the `hidden` attribute. */
+.tour-app [hidden],
+.tour-failed[hidden] {
+  display: none;
+}
+
+.tour-badge {
+  display: inline-block;
+  padding: 0.35rem 0.8rem;
+  border: 2px solid var(--fg);
+  border-radius: 8px;
+  font-family: var(--mono);
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.tour-badge-illustrative {
+  border-style: dashed;
+  background: var(--warn-bg);
+  border-color: var(--warn);
+  color: var(--warn);
+}
+
+.tour-caveats {
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.tour-failed {
+  padding: 0.8rem 1rem;
+  background: var(--warn-bg);
+  color: var(--warn);
+  border-radius: 10px;
+}
+
+.tour-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1.5rem;
+}
+
+.tour-controls {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.tour-controls .btn[aria-disabled="true"] {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.tour-modes {
+  display: inline-flex;
+  border: 2px solid var(--fg);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.tour-modes button {
+  min-height: 2.5rem;
+  padding: 0.4rem 0.9rem;
+  border: 0;
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.tour-modes button[aria-pressed="true"] {
+  background: var(--fg);
+  color: var(--bg);
+}
+
+.tour-modes button:focus-visible {
+  outline-offset: -4px;
+}
+
+.tour-progress {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 1.2rem 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tour-progress li + li {
+  margin-top: 0;
+}
+
+.tour-progress button {
+  width: 2.5rem;
+  height: 2.5rem;
+  border: 2px solid var(--line);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--fg);
+  font: 700 0.95rem var(--sans);
+  cursor: pointer;
+}
+
+.tour-progress button.is-done {
+  border-color: var(--muted);
+  background: var(--neutral-bg);
+}
+
+.tour-progress button[aria-current="step"] {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.tour-grid {
+  display: grid;
+  gap: 1.5rem 2.5rem;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: start;
+}
+
+@media (width <= 860px) {
+  .tour-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.tour-picture {
+  margin: 0;
+}
+
+.tour-text {
+  min-height: 17rem;
+}
+
+.tour-text h3 {
+  font-size: 1.5rem;
+}
+
+.tour-text .eyebrow {
+  margin-bottom: 0.5rem;
+}
+
+#tour-caption {
+  font-size: 1.1rem;
+}
+
+.tour-note {
+  padding-left: 0.8rem;
+  border-left: 4px solid var(--line);
+  color: var(--muted);
+}
+
+.tour-term-btn {
+  padding: 0;
+  border: 0;
+  border-bottom: 2px dotted currentcolor;
+  background: transparent;
+  color: var(--link);
+  font: inherit;
+  cursor: pointer;
+}
+
+.tour-term {
+  padding: 0.2rem 1rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+/* The stage */
+
+.tour-stage {
+  display: block;
+  width: 100%;
+  max-width: 34rem;
+  height: auto;
+  margin-inline: auto;
+}
+
+.tour-stage rect {
+  fill: var(--surface);
+  stroke: var(--line);
+  stroke-width: 2;
+  transition: fill 0.3s, stroke 0.3s;
+}
+
+.tour-stage .ts-server rect {
+  fill: var(--zone-trust);
+}
+
+.tour-stage .ts-room rect {
+  fill: var(--zone-wall);
+}
+
+.tour-stage text {
+  fill: var(--fg);
+  font: 700 16px var(--sans);
+  text-anchor: middle;
+}
+
+.tour-stage .ts-sub {
+  fill: var(--muted);
+  font: 13px var(--sans);
+}
+
+.tour-stage .is-active rect {
+  stroke: var(--accent);
+  stroke-width: 5;
+}
+
+.tour-stage .ts-gate[data-state="passed"] rect {
+  fill: var(--pass-bg);
+}
+
+.tour-stage .ts-gate[data-state="failed"] rect {
+  fill: var(--fail-bg);
+}
+
+/* Skipped is never drawn like a pass: it keeps a plain fill and a broken outline. */
+.tour-stage .ts-gate[data-state="skipped"] rect {
+  fill: var(--neutral-bg);
+  stroke-dasharray: 5 4;
+}
+
+.ts-token {
+  fill: var(--accent);
+  stroke: var(--fg);
+  stroke-width: 2;
+  transform: translate(70px, 85px);
+  transition: transform 0.6s ease-in-out;
+}
+
+.ts-token.is-fail {
+  fill: var(--fail);
+}
+
+.tour-stage[data-step="find"] .ts-token,
+.tour-stage[data-step="reuse"] .ts-token {
+  transform: translate(350px, 85px);
+}
+
+.tour-stage[data-step="forge"] .ts-token {
+  transform: translate(43px, 85px);
+}
+
+.tour-stage[data-step="read_build"] .ts-token {
+  transform: translate(71px, 211px);
+}
+
+.tour-stage[data-step="test"] .ts-token {
+  transform: translate(183px, 211px);
+}
+
+.tour-stage[data-step="second_opinion"] .ts-token {
+  transform: translate(267px, 211px);
+}
+
+.tour-stage[data-step="trap"] .ts-token {
+  transform: translate(323px, 211px);
+}
+
+.tour-stage[data-step="sign_off"] .ts-token {
+  transform: translate(379px, 211px);
+}
+
+.tour-stage[data-step="use"] .ts-token {
+  transform: translate(350px, 245px);
+}
+
+.tour-stage[data-step="caught"] .ts-token {
+  transform: translate(43px, 211px);
+}
+
+.tour-stage .is-active rect {
+  animation: tour-pulse 1.6s ease-in-out 2;
+}
+
+@keyframes tour-pulse {
+  50% {
+    stroke-width: 8;
+  }
+}
+
+/* The ledger panel */
+
+.tour-ledger {
+  margin-top: 1.5rem;
+}
+
+.tour-ledger-title {
+  margin: 0 0 0.4rem;
+  font-weight: 700;
+}
+
+.tour-lines {
+  max-height: 18rem;
+  overflow: auto;
+  padding: 0.8rem 1rem;
+  background: var(--fg);
+  color: var(--bg);
+  border-radius: 12px;
+  font-family: var(--mono);
+  font-size: 0.82rem;
+  line-height: 1.55;
+}
+
+.tl-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 0.9rem;
+  padding-block: 0.3rem;
+  overflow-wrap: anywhere;
+}
+
+.tl-type {
+  font-weight: 700;
+}
+
+.tl-facts {
+  flex-basis: 100%;
+  padding-left: 1.2rem;
+}
+
+.tl-empty {
+  margin: 0;
+}
+
+.tour-start {
+  margin-top: 1rem;
+}
+
+.tour-words dl {
+  max-width: 44rem;
+}
+
+.tour-words dt {
+  margin-top: 0.8rem;
+  font-weight: 700;
+}
+
+.tour-words dd {
+  margin: 0;
+}
+
+.tour-words {
+  margin-top: 2rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ts-token,
+  .tour-stage rect {
+    transition: none;
+  }
+
+  .tour-stage .is-active rect {
+    animation: none;
+  }
+}

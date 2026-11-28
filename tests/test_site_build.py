@@ -120,7 +120,18 @@ def test_the_repository_address_reaches_the_button_and_the_footer(tmp_path: Path
 def test_the_build_writes_the_expected_files_and_leaves_no_placeholder(tmp_path: Path) -> None:
     dist = build_dist(tmp_path)
     names = sorted(p.relative_to(dist).as_posix() for p in dist.rglob("*") if p.is_file())
-    assert names == ["app.js", "assets/favicon.svg", "data/results.json", "index.html", "styles.css"]
+    assert names == [
+        "app.js",
+        "assets/favicon.svg",
+        "data/glossary.json",
+        "data/results.json",
+        "data/tour.json",
+        "data/tour_captions.json",
+        "index.html",
+        "styles.css",
+        "tour.css",
+        "tour.js",
+    ]
     for path in dist.rglob("*"):
         if path.is_file():
             assert "{{" not in path.read_text(encoding="utf-8"), path
@@ -243,7 +254,6 @@ def test_desktop_guis_are_never_claimed() -> None:
     config = json.loads((SITE / "site.json").read_text(encoding="utf-8"))
     desktop = next(row for row in config["capabilities"] if "Desktop" in row["name"])
     assert desktop["chip"] == "planned"
-    assert next(row for row in config["features"] if "tour" in row["name"].lower())["chip"] == "planned"
 
 
 def test_every_quick_start_command_is_in_the_document_it_cites() -> None:

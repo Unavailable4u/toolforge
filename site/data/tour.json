@@ -1,0 +1,574 @@
+{
+  "badge": "Recorded from a real run on 2026-11-28, ToolForge 0.0.1",
+  "caveats": [
+    "The sandbox in this recording is a stand-in that gives no isolation. It shows the flow of a run, not the security of the real sandbox.",
+    "The agent's replies were scripted. No language model chose what to do."
+  ],
+  "recorded_at": "2026-11-28",
+  "recording": {
+    "agent": "scripted",
+    "isolated": false,
+    "mode": "replay",
+    "sandbox": "stand-in"
+  },
+  "schema": 1,
+  "source": "recording",
+  "steps": [
+    {
+      "events": [],
+      "gates": [],
+      "id": "meet",
+      "note": "No event recorded for this step.",
+      "outcome": "none"
+    },
+    {
+      "events": [
+        {
+          "act": "forge",
+          "facts": {
+            "argument_chars": 58,
+            "arguments_sha256": "41865e6fd3e3",
+            "duration_ms": 7,
+            "ok": true,
+            "result_chars": 393,
+            "step": 1
+          },
+          "label": "Agent called forge_find",
+          "source": "agent",
+          "t": null,
+          "tool": "forge_find",
+          "type": "agent.call"
+        }
+      ],
+      "gates": [],
+      "id": "find",
+      "note": "The recording keeps the size of the search reply, not its words.",
+      "outcome": "recorded"
+    },
+    {
+      "events": [
+        {
+          "act": "forge",
+          "facts": {
+            "argument_chars": 14176,
+            "arguments_sha256": "f2bc73ad5fcc",
+            "duration_ms": 1466,
+            "ok": true,
+            "result_chars": 2325,
+            "step": 2
+          },
+          "label": "Agent called forge_submit",
+          "source": "agent",
+          "t": null,
+          "tool": "forge_submit",
+          "type": "agent.call"
+        },
+        {
+          "act": "forge",
+          "facts": {
+            "browser": false,
+            "code_sha": "0c198510bab6",
+            "inputs": true,
+            "network_hosts": 0,
+            "resumed": false,
+            "secrets": 0,
+            "submitted_by": "agent"
+          },
+          "label": "Tool submitted for inspection",
+          "source": "ledger",
+          "t": 0.0,
+          "tool": "sqlite_query@1.0.0",
+          "type": "forge.submitted"
+        }
+      ],
+      "gates": [],
+      "id": "forge",
+      "note": "The events below come from the recording.",
+      "outcome": "recorded"
+    },
+    {
+      "events": [
+        {
+          "act": "forge",
+          "facts": {
+            "gate": "G1"
+          },
+          "label": "G1 started",
+          "source": "ledger",
+          "t": 0.001,
+          "tool": "sqlite_query@1.0.0",
+          "type": "forge.gate.started"
+        },
+        {
+          "act": "forge",
+          "facts": {
+            "duration_ms": 97,
+            "failures": 0,
+            "files": 2,
+            "gate": "G1",
+            "hints": 0,
+            "injection_scan": "measured",
+            "python_files": 2,
+            "secret_findings": 0,
+            "validation_errors": 0,
+            "warnings": 0
+          },
+          "label": "G1 passed",
+          "source": "ledger",
+          "t": 0.1,
+          "tool": "sqlite_query@1.0.0",
+          "type": "forge.gate.passed"
+        },
+        {
+          "act": "forge",
+          "facts": {
+            "gate": "G2"
+          },
+          "label": "G2 started",
+          "source": "ledger",
+          "t": 0.101,
+          "tool": "sqlite_query@1.0.0",
+          "type": "forge.gate.started"
+        },
+        {
+          "act": "forge",
+          "facts": {
+            "blob_bytes": 20480,
+            "duration_ms": 2,
+            "gate": "G2",
+            "hints": 0,
+            "installed_files": 0,
+            "package_files": 3,
+            "requirements": 0
+          },
+          "label": "G2 passed",
+          "source": "ledger",
+          "t": 0.104,
+          "tool": "sqlite_query@1.0.0",
+          "type": "forge.gate.passed"
+        }
+      ],
+      "gates": [
+        "G1",
+        "G2"
+      ],
+      "id": "read_build",
+      "note": "The events below come from the recording.",
+      "outcome": "recorded"
+    },
+    {
+      "events": [
+        {
+          "act": "forge",
+          "facts": {
+            "gate": "G3"
+          },
+          "label": "G3 started",
+          "source": "ledger",
+          "t": 0.104,
+          "tool": "sqlite_query@1.0.0",
+          "type": "forge.gate.started"
+        },
+        {
+          "act": "forge",
+          "facts": {
+            "duration_ms": 594,
+            "examples_checked": 2,
+            "examples_failed": 0,
+            "gate": "G3",
+            "hints": 0,
+            "tests_errors": 0,
+            "tests_failed": 0,
+            "tests_failing_with_stub": 10,
+            "tests_passed": 10,
+            "tests_ran": 10,
+            "tests_skipped": 0
+          },
+          "label": "G3 passed",
+          "source": "ledger",
+          "t": 0.7,
+          "tool": "sqlite_query@1.0.0",
+          "type": "forge.gate.passed"
+        },
+        {
+          "act": "forge",
+          "facts": {
+            "gate": "G4"
+          },
+          "label": "G4 started",
+          "source": "ledger",
+          "t": 0.701,
+          "tool": "sqlite_query@1.0.0",
+          "type": "forge.gate.started"
+        },
+        {
+          "act": "forge",
+          "facts": {
+            "duration_ms": 331,
+            "failures": 0,
+            "gate": "G4",
+            "handled_errors": 25,
+            "hints": 0,
+            "inputs_planned": 30,
+            "inputs_run": 30,
+            "p95_ms": 5,
+            "total_ms": 150
+          },
+          "label": "G4 passed",
+          "source": "ledger",
+          "t": 1.033,
+          "tool": "sqlite_query@1.0.0",
+          "type": "forge.gate.passed"
+        }
+      ],
+      "gates": [
+        "G3",
+        "G4"
+      ],
+      "id": "test",
+      "note": "The events below come from the recording.",
+      "outcome": "recorded"
+    },
+    {
+      "events": [
+        {
+          "act": "forge",
+          "facts": {
+            "gate": "G5"
+          },
+          "label": "G5 started",
+          "source": "ledger",
+          "t": 1.034,
+          "tool": "sqlite_query@1.0.0",
+          "type": "forge.gate.started"
+        },
+        {
+          "act": "forge",
+          "facts": {
+            "cases_executed": 0,
+            "duration_ms": 0,
+            "gate": "G5",
+            "hints": 1
+          },
+          "label": "G5 skipped",
+          "source": "ledger",
+          "t": 1.035,
+          "tool": "sqlite_query@1.0.0",
+          "type": "forge.gate.skipped"
+        }
+      ],
+      "gates": [
+        "G5"
+      ],
+      "id": "second_opinion",
+      "note": "This gate was skipped in the recording, so it checked nothing here.",
+      "outcome": "skipped"
+    },
+    {
+      "events": [
+        {
+          "act": "forge",
+          "facts": {
+            "gate": "G6"
+          },
+          "label": "G6 started",
+          "source": "ledger",
+          "t": 1.035,
+          "tool": "sqlite_query@1.0.0",
+          "type": "forge.gate.started"
+        },
+        {
+          "act": "forge",
+          "facts": {
+            "crashes": 0,
+            "decoy_events": 0,
+            "decoys_planted": 0,
+            "duration_ms": 221,
+            "gate": "G6",
+            "hardening_confirmed": false,
+            "hints": 1,
+            "inputs_planned": 12,
+            "inputs_run": 12,
+            "timeouts": 0
+          },
+          "label": "G6 skipped",
+          "source": "ledger",
+          "t": 1.257,
+          "tool": "sqlite_query@1.0.0",
+          "type": "forge.gate.skipped"
+        }
+      ],
+      "gates": [
+        "G6"
+      ],
+      "id": "trap",
+      "note": "This gate was skipped in the recording, so it checked nothing here. The sandbox in this recording is a stand-in that gives no isolation.",
+      "outcome": "skipped"
+    },
+    {
+      "events": [
+        {
+          "act": "forge",
+          "facts": {
+            "code_sha": "0c198510bab6",
+            "from": "verifying",
+            "to": "verified_basic"
+          },
+          "label": "Inspection finished",
+          "source": "ledger",
+          "t": 1.258,
+          "tool": "sqlite_query@1.0.0",
+          "type": "forge.verified"
+        },
+        {
+          "act": "forge",
+          "facts": {
+            "code_sha": "0c198510bab6",
+            "from": "verified_basic",
+            "to": "active"
+          },
+          "label": "Operator moved the tool onto the shelf",
+          "source": "ledger",
+          "t": 1.266,
+          "tool": "sqlite_query@1.0.0",
+          "type": "forge.promoted"
+        }
+      ],
+      "gates": [
+        "G7"
+      ],
+      "id": "sign_off",
+      "note": "The recording holds the operator's promotion. This tool asked for no network and no secrets, so no approval request was needed.",
+      "outcome": "recorded"
+    },
+    {
+      "events": [
+        {
+          "act": "forge",
+          "facts": {
+            "argument_chars": 571,
+            "arguments_sha256": "adc8ed6294f6",
+            "duration_ms": 265,
+            "ok": true,
+            "result_chars": 741,
+            "step": 3
+          },
+          "label": "Agent called forge_run",
+          "source": "agent",
+          "t": null,
+          "tool": "forge_run",
+          "type": "agent.call"
+        },
+        {
+          "act": "forge",
+          "facts": {
+            "args_bytes": 493,
+            "args_sha256": "64e6af2fbe06",
+            "code_sha": "0c198510bab6",
+            "file_bytes": 16384,
+            "secrets": 0
+          },
+          "label": "Call started",
+          "source": "ledger",
+          "t": 1.461,
+          "tool": "sqlite_query@1.0.0",
+          "type": "forge.call.started"
+        },
+        {
+          "act": "forge",
+          "facts": {
+            "cleanup_ok": true,
+            "decoy_events": 0,
+            "duration_ms": 67,
+            "egress_attempts": 0,
+            "ok": true,
+            "real_secret_audit": "not_measured",
+            "result_bytes": 142,
+            "sandbox_timed_out": false,
+            "truncated": false
+          },
+          "label": "Call finished",
+          "source": "ledger",
+          "t": 1.53,
+          "tool": "sqlite_query@1.0.0",
+          "type": "forge.call.finished"
+        }
+      ],
+      "gates": [],
+      "id": "use",
+      "note": "These events show one call: the request, its start and how it ended. The sandbox here is a stand-in that gives no isolation.",
+      "outcome": "recorded"
+    },
+    {
+      "events": [
+        {
+          "act": "reuse",
+          "facts": {
+            "argument_chars": 58,
+            "arguments_sha256": "41865e6fd3e3",
+            "duration_ms": 3,
+            "ok": true,
+            "result_chars": 752,
+            "step": 1
+          },
+          "label": "Agent called forge_find",
+          "source": "agent",
+          "t": null,
+          "tool": "forge_find",
+          "type": "agent.call"
+        },
+        {
+          "act": "reuse",
+          "facts": {
+            "argument_chars": 571,
+            "arguments_sha256": "9121127702e1",
+            "duration_ms": 160,
+            "ok": true,
+            "result_chars": 763,
+            "step": 2
+          },
+          "label": "Agent called forge_run",
+          "source": "agent",
+          "t": null,
+          "tool": "forge_run",
+          "type": "agent.call"
+        },
+        {
+          "act": "reuse",
+          "facts": {
+            "args_bytes": 493,
+            "args_sha256": "5ca91d2c036f",
+            "code_sha": "0c198510bab6",
+            "file_bytes": 16384,
+            "secrets": 0
+          },
+          "label": "Call started",
+          "source": "ledger",
+          "t": 1.632,
+          "tool": "sqlite_query@1.0.0",
+          "type": "forge.call.started"
+        },
+        {
+          "act": "reuse",
+          "facts": {
+            "cleanup_ok": true,
+            "decoy_events": 0,
+            "duration_ms": 65,
+            "egress_attempts": 0,
+            "ok": true,
+            "real_secret_audit": "not_measured",
+            "result_bytes": 162,
+            "sandbox_timed_out": false,
+            "truncated": false
+          },
+          "label": "Call finished",
+          "source": "ledger",
+          "t": 1.699,
+          "tool": "sqlite_query@1.0.0",
+          "type": "forge.call.finished"
+        }
+      ],
+      "gates": [],
+      "id": "reuse",
+      "note": "This act holds no submission and no gate run: nothing was rebuilt.",
+      "outcome": "recorded"
+    },
+    {
+      "events": [
+        {
+          "act": "attack",
+          "facts": {
+            "browser": false,
+            "code_sha": "0c33e1bef0d6",
+            "inputs": false,
+            "network_hosts": 0,
+            "resumed": false,
+            "secrets": 0,
+            "submitted_by": "agent"
+          },
+          "label": "Tool submitted for inspection",
+          "source": "ledger",
+          "t": 1.889,
+          "tool": "expense_totals@0.1.0",
+          "type": "forge.submitted"
+        },
+        {
+          "act": "attack",
+          "facts": {
+            "code_sha": "0c33e1bef0d6",
+            "from": "submitted",
+            "to": "verifying"
+          },
+          "label": "Inspection started",
+          "source": "ledger",
+          "t": 1.89,
+          "tool": "expense_totals@0.1.0",
+          "type": "forge.verifying"
+        },
+        {
+          "act": "attack",
+          "facts": {
+            "gate": "G1"
+          },
+          "label": "G1 started",
+          "source": "ledger",
+          "t": 1.891,
+          "tool": "expense_totals@0.1.0",
+          "type": "forge.gate.started"
+        },
+        {
+          "act": "attack",
+          "facts": {
+            "duration_ms": 91,
+            "failures": 1,
+            "files": 2,
+            "gate": "G1",
+            "hints": 1,
+            "injection_scan": "measured",
+            "python_files": 2,
+            "secret_findings": 0,
+            "validation_errors": 0,
+            "warnings": 2
+          },
+          "label": "G1 failed",
+          "source": "ledger",
+          "t": 1.983,
+          "tool": "expense_totals@0.1.0",
+          "type": "forge.gate.failed"
+        },
+        {
+          "act": "attack",
+          "facts": {
+            "code_sha": "0c33e1bef0d6",
+            "from": "verifying",
+            "to": "rejected"
+          },
+          "label": "Tool rejected",
+          "source": "ledger",
+          "t": 1.984,
+          "tool": "expense_totals@0.1.0",
+          "type": "forge.rejected"
+        }
+      ],
+      "gates": [
+        "G1",
+        "G6"
+      ],
+      "id": "caught",
+      "note": "In this recording a tool was rejected at G1, before its own tests or calls ran. No decoy event was recorded, so the decoy catch is not shown here.",
+      "outcome": "recorded"
+    },
+    {
+      "events": [],
+      "gates": [],
+      "id": "your_turn",
+      "note": "No event recorded for this step.",
+      "outcome": "none"
+    }
+  ],
+  "story": {
+    "task": "Answer a question that needs a join over a SQLite database",
+    "tool": "sqlite_query@1.0.0"
+  },
+  "toolforge_version": "0.0.1"
+}

@@ -12,6 +12,7 @@ on:
       - "docs/**"
       - "src/**"
       - "scripts/build_site*.py"
+      - "scripts/build_tour_data.py"
       - "scripts/render_cover.py"
       - "README.md"
       - "PROGRESS.md"

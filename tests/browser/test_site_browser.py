@@ -188,7 +188,7 @@ def test_each_menu_link_lands_with_the_section_below_the_sticky_header(new_page:
 
 def test_the_copy_button_copies_the_commands(new_page: Any) -> None:
     page = new_page(permissions=["clipboard-read", "clipboard-write"])
-    button = page.locator("button.copy").first
+    button = page.locator("#quickstart button.copy").first
     button.scroll_into_view_if_needed()
     button.click()
     expect(button).to_have_text("Copied")

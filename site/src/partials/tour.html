@@ -2,26 +2,62 @@
   <div class="wrap">
     <div class="prose">
       <h2 id="tour-title">The tour: one tool, start to finish</h2>
-      <p class="summary">Follow one request from an agent that has no tool for the job to a second agent reusing what the first one made.</p>
-      <p>The interactive version of this tour is <span class="chip chip-planned">planned</span> and not built yet. This is the written version, and it takes about two minutes to read.</p>
+      <p class="summary">Follow one request from an agent that has no tool for the job to a later request that reuses the new tool, and see how a bad tool is stopped.</p>
+      {{tour_intro}}
     </div>
-    <ol class="grid three steps-grid">
-      <li class="card">
-        <h3><span class="step-n">1</span> The agent asks, finds nothing, forges</h3>
-        <p>An agent needs to query a SQLite file. It searches the shelf and finds no match, so it writes a small tool with tests and a label saying it will read one file and use no network. It submits the tool.</p>
-      </li>
-      <li class="card">
-        <h3><span class="step-n">2</span> The gates inspect and a person decides</h3>
-        <p>The gates read, build and test the tool and try to break it. A report says what the tool was seen doing. This tool asked for no network and no secrets, so nothing waits for approval and it can go on the shelf. A tool that did ask would wait for a person.</p>
-      </li>
-      <li class="card">
-        <h3><span class="step-n">3</span> It runs in the locked room and gets reused</h3>
-        <p>Each call runs inside a sandbox, never on the host. Later a second agent searches the shelf, finds the same tool and calls it on a different database. Every step is in the ledger.</p>
-      </li>
-    </ol>
+    <p id="tour-failed" class="tour-failed" role="status" hidden>The interactive tour could not load its data, so here are the twelve steps in writing.</p>
+
+    <div id="tour-app" class="tour-app" data-tour="data/tour.json" data-captions="data/tour_captions.json" data-glossary="data/glossary.json" data-blob="{{repo_url}}/blob/main/" data-interval="5000">
+      <div class="tour-bar">
+        <div class="tour-controls" role="group" aria-label="Move through the tour">
+          <button type="button" class="btn" id="tour-back" aria-disabled="true">Back</button>
+          <button type="button" class="btn" id="tour-play" aria-pressed="false">Play</button>
+          <button type="button" class="btn btn-primary" id="tour-next">Next</button>
+        </div>
+        <div class="tour-modes" role="group" aria-label="How the text is written">
+          <button type="button" data-mode="simple" aria-pressed="true">Simple</button>
+          <button type="button" data-mode="technical" aria-pressed="false">Technical</button>
+        </div>
+        <span id="tour-held" class="meta" hidden>Paused while you read</span>
+      </div>
+      <ol id="tour-progress" class="tour-progress" aria-label="Steps of the tour">{{tour_progress}}</ol>
+      <div class="tour-grid">
+        <figure class="tour-picture">
+          {{svg:tour-stage}}
+          <figcaption id="tour-gate-state" class="meta" hidden></figcaption>
+        </figure>
+        <div class="tour-text" id="tour-text" tabindex="-1">
+          <div aria-live="polite" aria-atomic="true">
+            <p id="tour-count" class="eyebrow">Step 1 of 12</p>
+            <h3 id="tour-step-title">{{tour_first_title}}</h3>
+            <p id="tour-caption">{{tour_first_caption}}</p>
+            <p id="tour-note" class="tour-note">{{tour_first_note}}</p>
+          </div>
+          <div id="tour-term" class="tour-term" hidden>
+            <p><strong id="tour-term-name"></strong>: <span id="tour-term-plain"></span></p>
+            <p id="tour-term-analogy" class="meta"></p>
+          </div>
+          <p class="meta">Defined in <a id="tour-doc" href="{{repo_url}}/blob/main/{{tour_first_doc}}">{{tour_first_doc}}</a></p>
+        </div>
+      </div>
+      <div class="tour-ledger">
+        <p class="tour-ledger-title">Live ledger: the events of this step</p>
+        <div id="tour-ledger" class="tour-lines" tabindex="0" role="region" aria-label="Events of this step"></div>
+      </div>
+      <div id="tour-start" class="tour-start" hidden>
+        {{tour_quickstart}}
+        <p><a class="gh" href="{{repo_url}}" target="_blank" rel="noopener noreferrer">Open the repository on GitHub</a></p>
+      </div>
+      <p class="meta">With the keyboard inside the tour: the left and right arrow keys move one step, Home and End jump to the first and the last.</p>
+    </div>
+
+    <div class="tour-static">
+      {{tour_steps}}
+      {{tour_glossary}}
+    </div>
+
     <div class="prose">
-      <p class="demo-note">{{demo_meta}}</p>
-      <p>The script behind the recorded demo is <code>docs/DEMO_SCRIPT.md</code> in <a href="{{repo_url}}/blob/main/docs/DEMO_SCRIPT.md">the repository</a>.</p>
+      <p class="demo-note">The script behind the recorded demo is <code>docs/DEMO_SCRIPT.md</code> in <a href="{{repo_url}}/blob/main/docs/DEMO_SCRIPT.md">the repository</a>.</p>
     </div>
   </div>
 </section>

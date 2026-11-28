@@ -1,0 +1,86 @@
+{
+  "meet": {
+    "title": "A task with no tool",
+    "simple": "An AI assistant is asked to do a job, and it has no tool for it. In a shop, this is a customer asking for something the shelves do not hold.",
+    "technical": "The agent reaches ToolForge over [[mcp]]: `forge_find`, `forge_submit` and `forge_run` are MCP tools. In the demo the task comes from `demo/acts.py`, and a checker holds an answer the agent never sees.",
+    "terms": ["mcp"],
+    "doc": "docs/DEMO_SCRIPT.md"
+  },
+  "find": {
+    "title": "First, check the shelf",
+    "simple": "The assistant looks on the shelf of approved tools first. When nothing fits the job, it decides to make a new tool.",
+    "technical": "`forge_find` runs a ranked search of active tools (`registry/search.py`). Each match carries a confidence, a use count and a success rate. No useful match is the signal to call `forge_submit`.",
+    "terms": [],
+    "doc": "docs/registry.md"
+  },
+  "forge": {
+    "title": "The assistant writes a tool",
+    "simple": "It writes the tool, some tests and a [[manifest|label]]. The label says what the tool may touch, such as the internet or secrets. All of it goes to the inspector.",
+    "technical": "`forge_submit` takes a [[manifest]], the code and the tests. `models/package.py` validates the package before anything runs. The `forge.submitted` event holds a permission summary and a hash of the code.",
+    "terms": ["manifest"],
+    "doc": "docs/guide/package-format.md"
+  },
+  "read_build": {
+    "title": "Read it, then build it",
+    "simple": "The first station reads the code for warning signs without running it. The second puts the tool together with its parts and seals it in one box.",
+    "technical": "G1 (`verify/g1_static.py`) parses the files without running them: undeclared network imports, secret-shaped text, instructions aimed at an AI. It is advisory. G2 (`verify/g2_build.py`) installs requirements from wheels only and freezes one blob.",
+    "terms": [],
+    "doc": "docs/verification.md"
+  },
+  "test": {
+    "title": "Run the tests, then test the tests",
+    "simple": "The tool's own tests run. The inspector then swaps the tool for an empty fake, to see that the tests notice. Last, it throws odd inputs at the tool.",
+    "technical": "G3 (`verify/g3_selftest.py`) runs tests and examples in a [[sandbox]] with no network, then against a stub: if every test still passes, it fails. G4 (`verify/g4_fuzz.py`) does [[schema_fuzzing]] and fails crashes, timeouts and non-JSON results.",
+    "terms": ["sandbox", "schema_fuzzing"],
+    "doc": "docs/verification.md"
+  },
+  "second_opinion": {
+    "title": "A second opinion",
+    "simple": "A second AI, separate from the one that wrote the tool, tries to break it. It looks for mistakes the author did not think of.",
+    "technical": "G5 (`verify/g5_challenger.py`) asks a challenger model for cases and adds its own. Nothing the model returns runs as code. With no model the gate is skipped and the tool stays `verified_basic`.",
+    "terms": [],
+    "doc": "docs/verification.md"
+  },
+  "trap": {
+    "title": "A trap with fake keys",
+    "simple": "The tool runs in a locked room with the door to the outside shut. [[decoy_credentials|Fake keys]] are left lying around. The inspector watches whether the tool reaches for them.",
+    "technical": "G6 (`verify/g6_containment.py`) runs with the network closed and [[decoy_credentials]] planted, then audits decoy reads, file changes and limits. [[egress|Egress]] is not measured here. It needs Docker, and a pass is evidence, not proof.",
+    "terms": ["decoy_credentials", "egress"],
+    "doc": "docs/verification.md"
+  },
+  "sign_off": {
+    "title": "A person decides",
+    "simple": "A person, the [[operator]], decides what goes on the shelf. A tool that wants the internet or a secret needs a closer look first. The assistant cannot say yes for itself.",
+    "technical": "G7 (`verify/g7_approval.py`) turns a request for network hosts or secrets into an approval with a permission diff. Promotion and approval are [[operator]] commands; no MCP tool does either. Each move goes to the [[ledger]].",
+    "terms": ["operator", "ledger"],
+    "doc": "docs/approvals.md"
+  },
+  "use": {
+    "title": "It runs in a locked room",
+    "simple": "When the tool is used, it runs in a fresh locked room that allows only what its label asks and a person agreed to. Then the room is thrown away.",
+    "technical": "`forge_run` (`services/runner.py`) opens a new [[sandbox]], copies in the frozen blob and the inputs, then removes it. Session tools keep theirs between calls. The [[ledger]] records sizes and hashes, which feed the [[blast_radius]] report.",
+    "terms": ["sandbox", "ledger", "blast_radius"],
+    "doc": "docs/guide/03-minilocker-integration.md"
+  },
+  "reuse": {
+    "title": "Next time, it is on the shelf",
+    "simple": "A second job needs the same kind of tool. The assistant finds it on the shelf and uses it at once. Nothing is built or inspected again.",
+    "technical": "`forge_find` returns the active version and `forge_run` calls it, with no new submission and no gate run. `registry/search.py` ranks a tool whose recent calls mostly fail lower.",
+    "terms": [],
+    "doc": "docs/repair.md"
+  },
+  "caught": {
+    "title": "Bad tools are caught",
+    "simple": "A bad tool can be stopped at the door. One that behaves in testing and misbehaves later can be taken off the shelf and [[quarantine|put aside]].",
+    "technical": "A failed gate ends in `forge.rejected`. A decoy touched in a real call fails it with `PolicyViolation` and puts the version in [[quarantine]] (`services/runner.py`). The [[hash_chain]] of the [[ledger]] shows later edits.",
+    "terms": ["quarantine", "hash_chain", "ledger"],
+    "doc": "docs/repair.md"
+  },
+  "your_turn": {
+    "title": "Try it yourself",
+    "simple": "You can run this on your own computer with the commands below. You need Python, and Docker, a program that provides the locked rooms.",
+    "technical": "These are the quick start commands of this site. `toolforge doctor` checks Python, Docker, the runtime image and the MiniLocker checkout before anything starts.",
+    "terms": [],
+    "doc": "docs/clients.md"
+  }
+}

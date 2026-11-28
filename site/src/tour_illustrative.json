@@ -1,0 +1,56 @@
+{
+  "note": "Invented sample events for the tour when no recording exists. Never numbers: only labels, words from closed lists and true or false.",
+  "steps": [
+    {"id": "meet", "events": []},
+    {"id": "find", "events": [
+      {"type": "agent.call", "tool": "forge_find", "facts": {"ok": true}}
+    ]},
+    {"id": "forge", "events": [
+      {"type": "agent.call", "tool": "forge_submit", "facts": {"ok": true}},
+      {"type": "forge.submitted", "facts": {"submitted_by": "agent", "permissions": {"inputs": true, "browser": false}}}
+    ]},
+    {"id": "read_build", "events": [
+      {"type": "forge.gate.started", "facts": {"gate": "G1"}},
+      {"type": "forge.gate.passed", "facts": {"gate": "G1"}},
+      {"type": "forge.gate.started", "facts": {"gate": "G2"}},
+      {"type": "forge.gate.passed", "facts": {"gate": "G2"}}
+    ]},
+    {"id": "test", "events": [
+      {"type": "forge.gate.started", "facts": {"gate": "G3"}},
+      {"type": "forge.gate.passed", "facts": {"gate": "G3"}},
+      {"type": "forge.gate.started", "facts": {"gate": "G4"}},
+      {"type": "forge.gate.passed", "facts": {"gate": "G4"}}
+    ]},
+    {"id": "second_opinion", "events": [
+      {"type": "forge.gate.started", "facts": {"gate": "G5"}},
+      {"type": "forge.gate.passed", "facts": {"gate": "G5"}}
+    ]},
+    {"id": "trap", "events": [
+      {"type": "forge.gate.started", "facts": {"gate": "G6"}},
+      {"type": "canary.seeded", "facts": {}},
+      {"type": "forge.gate.passed", "facts": {"gate": "G6", "metrics": {"hardening_confirmed": true}}}
+    ]},
+    {"id": "sign_off", "events": [
+      {"type": "forge.verified", "facts": {"from": "verifying", "to": "verified"}},
+      {"type": "forge.promoted", "facts": {"from": "verified", "to": "active"}}
+    ]},
+    {"id": "use", "events": [
+      {"type": "agent.call", "tool": "forge_run", "facts": {"ok": true}},
+      {"type": "forge.call.started", "facts": {}},
+      {"type": "forge.call.finished", "facts": {"ok": true, "cleanup_ok": true}}
+    ]},
+    {"id": "reuse", "events": [
+      {"type": "agent.call", "tool": "forge_find", "facts": {"ok": true}},
+      {"type": "agent.call", "tool": "forge_run", "facts": {"ok": true}},
+      {"type": "forge.call.started", "facts": {}},
+      {"type": "forge.call.finished", "facts": {"ok": true}}
+    ]},
+    {"id": "caught", "events": [
+      {"type": "forge.call.started", "facts": {}},
+      {"type": "canary.read", "facts": {}},
+      {"type": "forge.call.finished", "facts": {"ok": false, "error_type": "PolicyViolation", "quarantined": true}},
+      {"type": "forge.quarantined", "facts": {"from": "active", "to": "quarantined"}}
+    ]},
+    {"id": "your_turn", "events": []}
+  ]
+}

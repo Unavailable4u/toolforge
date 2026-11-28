@@ -1,0 +1,57 @@
+{
+  "mcp": {
+    "term": "MCP",
+    "plain": "The Model Context Protocol, a standard way for an AI assistant to call tools that another program offers.",
+    "analogy": "the standard plug that lets any assistant use the shop."
+  },
+  "sandbox": {
+    "term": "sandbox",
+    "plain": "A closed-off container where a tool runs, with limits on what it can reach.",
+    "analogy": "a locked, windowless test room."
+  },
+  "manifest": {
+    "term": "manifest",
+    "plain": "The file in a tool package that names its inputs, network hosts and secrets.",
+    "analogy": "the label stating what the tool may touch."
+  },
+  "schema_fuzzing": {
+    "term": "schema fuzzing",
+    "plain": "Trying many unusual inputs that the tool says it accepts, to find crashes and hangs.",
+    "analogy": "the inspector pulling every lever in odd ways to see what breaks."
+  },
+  "egress": {
+    "term": "egress",
+    "plain": "Network traffic that leaves the room where a tool runs.",
+    "analogy": "anything that goes out through the door of the test room."
+  },
+  "decoy_credentials": {
+    "term": "decoy credentials",
+    "plain": "Fake passwords and keys, planted so that any attempt to take them shows.",
+    "analogy": "fake keys left lying around to see who reaches for them."
+  },
+  "ledger": {
+    "term": "ledger",
+    "plain": "A record of events that is only added to, never rewritten.",
+    "analogy": "the notebook where every inspection and every call is written down."
+  },
+  "hash_chain": {
+    "term": "hash chain",
+    "plain": "Each entry carries a fingerprint of the one before, so changing an old entry breaks the check.",
+    "analogy": "numbered pages stitched together, where a swapped page shows."
+  },
+  "quarantine": {
+    "term": "quarantine",
+    "plain": "A state that stops a tool version from running until a person releases it.",
+    "analogy": "taking a tool off the shelf and locking it in the back room."
+  },
+  "operator": {
+    "term": "operator",
+    "plain": "The person who runs ToolForge and is the only one who can promote, approve or release a tool.",
+    "analogy": "the person who holds the keys and signs off."
+  },
+  "blast_radius": {
+    "term": "Blast Radius",
+    "plain": "A report of what a tool was seen doing and what it could have reached, with unmeasured parts marked.",
+    "analogy": "the inspector's report on the damage a tool could do."
+  }
+}

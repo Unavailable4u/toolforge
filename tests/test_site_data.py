@@ -35,6 +35,10 @@ def test_with_nothing_measured_every_source_is_null(tmp_path: Path) -> None:
     }
 
 
+def _recording_meta() -> dict:
+    return json.loads((ROOT / "demo" / "recordings" / "main" / "recording.json").read_text(encoding="utf-8"))
+
+
 def test_the_committed_snapshot_is_valid_and_honest() -> None:
     snapshot = json.loads((ROOT / "site" / "data" / "results.json").read_text(encoding="utf-8"))
     assert snapshot["schema"] == 1
@@ -42,7 +46,9 @@ def test_the_committed_snapshot_is_valid_and_honest() -> None:
     assert set(snapshot) == {"schema", "generated_at", "attacks", "bench", "context", "demo"}
     # No benchmark or attack result is committed to the repository (README, docs/KNOWN_LIMITATIONS.md).
     assert snapshot["attacks"] is None and snapshot["bench"] is None and snapshot["context"] is None
-    assert snapshot["demo"]["isolated"] is False, "the committed recording was made with the stand-in sandbox"
+    assert snapshot["demo"]["isolated"] is _recording_meta()["isolated"], (
+        "run python scripts/build_site_data.py"
+    )
 
 
 def test_sample_runs_are_read_into_the_documented_shape(tmp_path: Path) -> None:
@@ -68,7 +74,7 @@ def test_sample_runs_are_read_into_the_documented_shape(tmp_path: Path) -> None:
     assert context["method"] == "estimate"
     assert sorted(context["sizes"], key=int) == ["10", "100"]
     assert context["sizes"]["10"]["meta"]["tokens"] > 0
-    assert doc["demo"]["sandbox"] == "stand-in"
+    assert doc["demo"]["sandbox"] == _recording_meta()["sandbox"]
 
 
 def test_the_newest_run_wins_and_the_clock_is_not_used(tmp_path: Path) -> None:

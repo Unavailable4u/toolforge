@@ -11,7 +11,9 @@ knows the answer, so the site never hand-copies a list that the code owns:
     {{gates_cards}}        `GATE_INFO`    (toolforge/verify/pipeline.py)
     {{settings_table}}     the `Settings` fields, described by the comments in `.env.example`
     {{attacks_table}}      `ATTACKS`      (toolforge/attacks/catalog.py) joined with the newest Attack Lab result in results.json
-    {{bench_table}}, {{bench_meta}}, {{context_table}}, {{demo_meta}}   `site/data/results.json`; absent results draw the hatched "Not measured yet"
+    {{bench_table}}, {{bench_meta}}, {{context_table}}   `site/data/results.json`; absent results draw the hatched "Not measured yet"
+    {{tour_intro}}, {{tour_progress}}, {{tour_first_*}}, {{tour_quickstart}}, {{tour_steps}}, {{tour_glossary}}   the guided tour (P20):
+                            `site/data/tour.json` (made by `build_tour_data.py`), `src/tour_captions.json` and `src/glossary.json`
     {{limitations}}        the bullets of `docs/KNOWN_LIMITATIONS.md`
     {{quickstart}}, {{capabilities_table}}, {{features_list}}   `site/site.json` (checked against README, PROGRESS.md and the docs by tests)
     {{repo_url}} {{title}} {{tagline}} {{description}} {{version}} {{generated_on}} {{site_url}} {{social_meta}}
@@ -438,25 +440,6 @@ def context_table(results: dict[str, Any]) -> str:
     )
 
 
-def demo_meta(results: dict[str, Any]) -> str:
-    """One honest sentence about the recorded demo; it says plainly when the recording had no isolation."""
-    demo = results.get("demo")
-    if not demo:
-        return f"{NOT_MEASURED} No recorded demo is attached to this build."
-    sandbox = demo.get("sandbox")
-    text = (
-        f"A recording of the scripted demo was made on {esc(str(demo['recorded_at'])[:10])} with ToolForge "
-        f"{esc(demo['toolforge_version'])}"
-        f"{', sandbox: ' + esc(sandbox) if sandbox else ''}."
-    )
-    if demo.get("isolated") is False:
-        text += (
-            " That sandbox is a stand-in that gives no isolation, so the recording shows the flow of a run, "
-            "not the security of the real sandbox."
-        )
-    return text
-
-
 def limitations(path: Path = ROOT / "docs" / "KNOWN_LIMITATIONS.md") -> str:
     items = []
     for raw in path.read_text(encoding="utf-8").splitlines():
@@ -468,13 +451,13 @@ def limitations(path: Path = ROOT / "docs" / "KNOWN_LIMITATIONS.md") -> str:
     return '<ul class="limits-list">' + "".join(items) + "</ul>"
 
 
-def quickstart(config: dict[str, Any], repo_url: str) -> str:
+def quickstart(config: dict[str, Any], repo_url: str, prefix: str = "qs") -> str:
     blocks = []
     counter = 0
     for group in config["quickstart"]:
         lines = [command.replace("{{repo_url}}", repo_url) for command in group["commands"]]
         counter += 1
-        code_id = f"qs-{counter}"
+        code_id = f"{prefix}-{counter}"
         blocks.append(
             f'<div class="qs"><h3>{esc(group["title"])}</h3><p>{inline_code(group["text"])}</p>'
             f'<div class="code-wrap"><pre class="code" id="{code_id}" tabindex="0"><code>{esc(chr(10).join(lines))}</code></pre>'
@@ -509,6 +492,135 @@ def features_list(config: dict[str, Any], repo_url: str) -> str:
             f'<li class="card feature"><h3>{esc(row["name"])} {chip(row["chip"])}</h3><p>{inline_code(row["text"])}{link}</p></li>'
         )
     return '<ul class="grid features">' + "".join(cards) + "</ul>"
+
+
+# --- The guided tour (P20) ----------------------------------------------------------------------------------------------------
+
+TOUR_MARKUP = re.compile(r"\[\[([a-z_]+)(?:\|([^\]]+))?\]\]|`([^`]+)`")
+
+
+def _tour_builder() -> Any:
+    """`scripts/build_tour_data.py`, which owns the step list, the allowlist and the check of a tour data file."""
+    scripts = str(ROOT / "scripts")
+    sys.path.insert(0, scripts)
+    try:
+        import build_tour_data  # noqa: PLC0415
+    finally:
+        sys.path.remove(scripts)
+    return build_tour_data
+
+
+def _authored(path: Path) -> dict[str, Any]:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise SiteError(f"{path} cannot be read as JSON: {exc}") from exc
+    if not isinstance(data, dict):
+        raise SiteError(f"{path} must hold one JSON object")
+    return data
+
+
+@dataclass
+class Tour:
+    data: dict[str, Any]
+    captions: dict[str, Any]
+    glossary: dict[str, Any]
+
+
+def read_tour(site: Path, warnings: list[str]) -> Tour:
+    """The tour's three files, checked. Without `data/tour.json` the invented sample story is used, which says what it is."""
+    builder = _tour_builder()
+    captions = _authored(site / "src" / "tour_captions.json")
+    glossary = _authored(site / "src" / "glossary.json")
+    path = site / "data" / "tour.json"
+    if path.is_file():
+        data = _authored(path)
+    else:
+        warnings.append("no site/data/tour.json: the tour shows the illustrated example, not a recording")
+        try:
+            data = builder.illustrative(site / "src" / "tour_illustrative.json")
+        except builder.TourDataError as exc:
+            raise SiteError(str(exc)) from exc
+    if problems := builder.validate(data):
+        raise SiteError(f"the tour data is not valid: {problems[0]}. Run python scripts/build_tour_data.py")
+    for step in builder.STEP_IDS:
+        entry = captions.get(step)
+        if not isinstance(entry, dict) or not all(
+            entry.get(k) for k in ("title", "simple", "technical", "doc")
+        ):
+            raise SiteError(
+                f"tour_captions.json: step {step} needs a title, a simple text, a technical text and a doc"
+            )
+        for text in (entry["simple"], entry["technical"]):
+            for match in TOUR_MARKUP.finditer(text):
+                if match[1] and match[1] not in glossary:
+                    raise SiteError(
+                        f"tour_captions.json: step {step} names the unknown glossary term {match[1]!r}"
+                    )
+    return Tour(data, captions, glossary)
+
+
+def caption_html(text: str, glossary: Mapping[str, Any]) -> str:
+    """A caption as the written list shows it: escaped, `code` as <code>, a [[term]] as its plain word."""
+    out, last = [], 0
+    for match in TOUR_MARKUP.finditer(text):
+        out.append(html.escape(text[last : match.start()], quote=False))
+        if match[3] is not None:
+            out.append(f"<code>{html.escape(match[3], quote=False)}</code>")
+        else:
+            out.append(html.escape(match[2] or glossary[match[1]]["term"], quote=False))
+        last = match.end()
+    out.append(html.escape(text[last:], quote=False))
+    return "".join(out)
+
+
+def tour_values(tour: Tour, config: dict[str, Any], repo_url: str) -> dict[str, str]:
+    """Everything the tour partial needs. The written list works without JavaScript and uses the Simple captions."""
+    data, captions = tour.data, tour.captions
+    story, source = data["story"], data["source"]
+    caveats = "".join(f"<li>{esc(sentence)}</li>" for sentence in data["caveats"])
+    intro = (
+        f'<p class="tour-badge tour-badge-{esc(source)}">{esc(data["badge"])}</p>'
+        + (f'<ul class="tour-caveats">{caveats}</ul>' if caveats else "")
+        + f"<p>The task: {esc(story['task'])}. The tool in this story: <code>{esc(story['tool'])}</code>.</p>"
+    )
+    progress, items = [], []
+    for number, step in enumerate(data["steps"], start=1):
+        caption = captions[step["id"]]
+        current = ' aria-current="step"' if number == 1 else ""
+        progress.append(
+            f'<li><button type="button" data-step="{number - 1}" aria-label="Step {number}: {esc(caption["title"])}"'
+            f"{current}>{number}</button></li>"
+        )
+        more = ' <a href="#quickstart">Go to the quick start</a>.' if step["id"] == "your_turn" else ""
+        items.append(
+            f'<li class="card" data-tour-step="{esc(step["id"])}">'
+            f'<h3><span class="step-n">{number}</span> {esc(caption["title"])}</h3>'
+            f"<p>{caption_html(caption['simple'], tour.glossary)}{more}</p>"
+            f'<p class="meta">{esc(step["note"])}</p></li>'
+        )
+    used = [
+        term
+        for term in tour.glossary
+        if any(f"[[{term}" in captions[step["id"]]["simple"] for step in data["steps"])
+    ]
+    words = "".join(
+        f"<dt>{esc(tour.glossary[t]['term'])}</dt>"
+        f"<dd>{esc(tour.glossary[t]['plain'])} In the shop: {esc(tour.glossary[t]['analogy'])}</dd>"
+        for t in used
+    )
+    first = data["steps"][0]
+    return {
+        "tour_intro": intro,
+        "tour_progress": "".join(progress),
+        "tour_first_title": esc(captions[first["id"]]["title"]),
+        "tour_first_caption": caption_html(captions[first["id"]]["simple"], tour.glossary),
+        "tour_first_note": esc(first["note"]),
+        "tour_first_doc": esc(captions[first["id"]]["doc"]),
+        "tour_quickstart": quickstart(config, repo_url, prefix="tour-qs"),
+        "tour_steps": f'<ol class="grid three steps-grid tour-list">{"".join(items)}</ol>',
+        "tour_glossary": f'<details class="tour-words"><summary>Words used in the tour</summary><dl>{words}</dl></details>',
+    }
 
 
 # --- Claims against PROGRESS.md -----------------------------------------------------------------------------------------------
@@ -574,7 +686,6 @@ class Context:
             "bench_table": lambda: bench_table(self.results),
             "bench_meta": lambda: bench_meta(self.results),
             "context_table": lambda: context_table(self.results),
-            "demo_meta": lambda: demo_meta(self.results),
             "limitations": limitations,
             "quickstart": lambda: quickstart(self.config, self.repo_url),
             "capabilities_table": lambda: capabilities_table(self.config),
@@ -699,6 +810,7 @@ def build(
             raise SiteError("status chips do not match PROGRESS.md:\n  " + "\n  ".join(problems))
 
     results = read_results(results_path or site / "data" / "results.json")
+    tour = read_tour(site, warnings)
     toolforge = _toolforge()
     site_url = (config.get("site_url") or default_site_url(url)).rstrip("/") + "/"
     generated_on = str(results.get("generated_at") or "date not recorded")[:10]
@@ -724,22 +836,30 @@ def build(
     values["social_meta"] = TOKEN.sub(
         lambda m: values.get(m[1], m[0]), social_meta(site_url, has_image, "assets/social.png")
     )
+    values.update(tour_values(tour, config, url))
     ctx = Context(ROOT, site, values, config, results, url)
 
     src = site / "src"
     (dist / "index.html").write_text(
         expand((src / "index.html").read_text(encoding="utf-8"), ctx), encoding="utf-8", newline="\n"
     )
-    for name in ("styles.css", "app.js"):
+    for name in ("styles.css", "app.js", "tour.css", "tour.js"):
         shutil.copyfile(src / name, dist / name)
     (dist / "assets").mkdir(exist_ok=True)
     shutil.copyfile(src / "assets" / "favicon.svg", dist / "assets" / "favicon.svg")
     (dist / "data").mkdir(exist_ok=True)
-    (dist / "data" / "results.json").write_text(
-        json.dumps(results, indent=2, sort_keys=True, ensure_ascii=True) + "\n",
-        encoding="utf-8",
-        newline="\n",
-    )
+    documents = {
+        "results.json": results,
+        "tour.json": tour.data,
+        "tour_captions.json": tour.captions,
+        "glossary.json": tour.glossary,
+    }
+    for name, document in documents.items():
+        (dist / "data" / name).write_text(
+            json.dumps(document, indent=2, sort_keys=True, ensure_ascii=True) + "\n",
+            encoding="utf-8",
+            newline="\n",
+        )
     leftover = [
         p
         for p in sorted(dist.rglob("*"))

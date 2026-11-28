@@ -205,12 +205,12 @@
     },
     {
       "name": "Interactive guided tour",
-      "text": "A walkthrough of a recorded run. Not built yet: the tour section below is a written summary.",
-      "chip": "planned",
+      "text": "Twelve steps that play the events of a recorded demo run, in plain or technical words. The tour says beside them how that recording was made.",
+      "chip": "built",
       "patches": [
         "P20"
       ],
-      "doc": ""
+      "doc": "docs/SITE.md"
     }
   ]
 }

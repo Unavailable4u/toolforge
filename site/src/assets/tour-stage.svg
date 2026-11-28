@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" id="tour-stage" class="tour-stage" data-step="meet" viewBox="0 0 420 330" role="img" aria-labelledby="ts-title ts-desc">
+  <title id="ts-title">The parts of the shop</title>
+  <desc id="ts-desc">An agent and the shelf of approved tools sit above the ToolForge server, which holds the inspection stations G1 to G7. Below are the operator, the ledger and the locked room. The parts the current step is about are highlighted.</desc>
+  <g id="ts-agent" class="ts-part"><rect x="10" y="10" width="120" height="60" rx="10"/><text x="70" y="38">Agent</text><text class="ts-sub" x="70" y="57">the assistant</text></g>
+  <g id="ts-shelf" class="ts-part"><rect x="290" y="10" width="120" height="60" rx="10"/><text x="350" y="38">Shelf</text><text class="ts-sub" x="350" y="57">approved tools</text></g>
+  <g id="ts-server" class="ts-part ts-server"><rect x="10" y="100" width="400" height="130" rx="14"/><text x="210" y="128">ToolForge server</text></g>
+  <g id="ts-g1" class="ts-part ts-gate"><rect x="20" y="144" width="46" height="46" rx="8"/><text x="43" y="173">G1</text></g>
+  <g id="ts-g2" class="ts-part ts-gate"><rect x="76" y="144" width="46" height="46" rx="8"/><text x="99" y="173">G2</text></g>
+  <g id="ts-g3" class="ts-part ts-gate"><rect x="132" y="144" width="46" height="46" rx="8"/><text x="155" y="173">G3</text></g>
+  <g id="ts-g4" class="ts-part ts-gate"><rect x="188" y="144" width="46" height="46" rx="8"/><text x="211" y="173">G4</text></g>
+  <g id="ts-g5" class="ts-part ts-gate"><rect x="244" y="144" width="46" height="46" rx="8"/><text x="267" y="173">G5</text></g>
+  <g id="ts-g6" class="ts-part ts-gate"><rect x="300" y="144" width="46" height="46" rx="8"/><text x="323" y="173">G6</text></g>
+  <g id="ts-g7" class="ts-part ts-gate"><rect x="356" y="144" width="46" height="46" rx="8"/><text x="379" y="173">G7</text></g>
+  <g id="ts-operator" class="ts-part"><rect x="10" y="260" width="120" height="60" rx="10"/><text x="70" y="288">Operator</text><text class="ts-sub" x="70" y="307">a person</text></g>
+  <g id="ts-ledger" class="ts-part"><rect x="150" y="260" width="120" height="60" rx="10"/><text x="210" y="288">Ledger</text><text class="ts-sub" x="210" y="307">the notebook</text></g>
+  <g id="ts-room" class="ts-part ts-room"><rect x="290" y="260" width="120" height="60" rx="10"/><text x="350" y="288">Locked room</text><text class="ts-sub" x="350" y="307">sandbox</text></g>
+  <circle class="ts-token" cx="0" cy="0" r="8"/>
+</svg>

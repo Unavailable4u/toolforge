@@ -158,7 +158,8 @@ third_party/minilocker  pinned git submodule (external dependency, never copied)
 
 A static landing site is built from `site/` and published to GitHub Pages; it makes no network request and every number on it comes from a
 results file or says "Not measured yet". `python scripts/build_site.py` builds it into `site/dist`, and [docs/SITE.md](docs/SITE.md) covers
-previewing, editing the copy, refreshing the evidence and deploying. The interactive guided tour arrives with patch P20; the final pass is P21.
+previewing, editing the copy, refreshing the evidence and deploying. The page includes a twelve-step
+[guided tour](docs/SITE.md#tour) that plays the events of a recorded demo run. The final pass is patch P21.
 
 ## Working on this repository with an AI agent
 
