@@ -1,0 +1,52 @@
+<svg class="arch" viewBox="0 0 900 450" role="img" aria-labelledby="arch-title arch-desc">
+  <title id="arch-title">How ToolForge fits together</title>
+  <desc id="arch-desc">An AI agent, outside the trusted zone, talks over MCP to the ToolForge server. The server passes new tools to the gates and keeps approved tools in the registry. Tool code runs only in a sandbox behind a wall, and every step is written to a ledger. An operator approves and promotes tools through a separate command line and dashboard.</desc>
+  <defs>
+    <marker id="arch-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="a-head" d="M0 0 10 5 0 10z"/></marker>
+  </defs>
+  <rect class="a-zone a-untrusted" x="10" y="60" width="200" height="300" rx="14"/>
+  <text class="a-zone-label" x="110" y="86" text-anchor="middle">Not trusted</text>
+  <rect class="a-zone a-trusted" x="250" y="20" width="310" height="420" rx="14"/>
+  <text class="a-zone-label" x="405" y="46" text-anchor="middle">On your machine: trusted</text>
+  <rect class="a-zone a-wall" x="610" y="100" width="280" height="260" rx="14"/>
+  <text class="a-zone-label" x="750" y="126" text-anchor="middle">Behind the wall</text>
+  <line class="a-wall-line" x1="585" y1="70" x2="585" y2="390"/>
+
+  <rect class="a-box" x="30" y="165" width="160" height="100" rx="10"/>
+  <text class="a-title" x="110" y="210" text-anchor="middle">AI agent</text>
+  <text class="a-sub" x="110" y="232" text-anchor="middle">and its MCP client</text>
+
+  <rect class="a-box" x="275" y="62" width="260" height="72" rx="10"/>
+  <text class="a-title" x="405" y="94" text-anchor="middle">1 · Server</text>
+  <text class="a-sub" x="405" y="116" text-anchor="middle">the only door for an agent</text>
+
+  <rect class="a-box" x="275" y="164" width="260" height="72" rx="10"/>
+  <text class="a-title" x="405" y="196" text-anchor="middle">2 · Gates G1 to G7</text>
+  <text class="a-sub" x="405" y="218" text-anchor="middle">inspect, and decide how far to trust</text>
+
+  <rect class="a-box" x="275" y="266" width="260" height="72" rx="10"/>
+  <text class="a-title" x="405" y="298" text-anchor="middle">3 · Registry</text>
+  <text class="a-sub" x="405" y="320" text-anchor="middle">the shelf of approved tools</text>
+
+  <rect class="a-box a-person" x="275" y="364" width="260" height="62" rx="10"/>
+  <text class="a-title" x="405" y="392" text-anchor="middle">5 · Operator</text>
+  <text class="a-sub" x="405" y="412" text-anchor="middle">command line and dashboard</text>
+
+  <rect class="a-box" x="635" y="148" width="230" height="130" rx="10"/>
+  <text class="a-title" x="750" y="184" text-anchor="middle">4 · Sandbox</text>
+  <text class="a-sub" x="750" y="208" text-anchor="middle">MiniLocker on Docker</text>
+  <text class="a-sub" x="750" y="230" text-anchor="middle">network closed, decoy keys</text>
+  <text class="a-sub" x="750" y="252" text-anchor="middle">tool code runs only here</text>
+
+  <rect class="a-box a-ledger" x="635" y="298" width="230" height="40" rx="10"/>
+  <text class="a-sub" x="750" y="323" text-anchor="middle">Ledger: a hash-chained notebook</text>
+
+  <path class="a-arrow" d="M190 215 C235 215 235 98 275 98" marker-end="url(#arch-arrow)"/>
+  <text class="a-label" x="208" y="150" text-anchor="middle">MCP</text>
+  <path class="a-arrow" d="M405 134 V164" marker-end="url(#arch-arrow)"/>
+  <path class="a-arrow" d="M405 236 V266" marker-end="url(#arch-arrow)"/>
+  <path class="a-arrow" d="M535 200 H635" marker-end="url(#arch-arrow)"/>
+  <path class="a-arrow" d="M405 364 V338" marker-end="url(#arch-arrow)"/>
+  <path class="a-arrow" d="M535 92 H600 C606 92 610 96 610 102 V150 C610 156 614 160 620 160 H635" marker-end="url(#arch-arrow)"/>
+  <path class="a-arrow" d="M750 278 V298" marker-end="url(#arch-arrow)"/>
+</svg>

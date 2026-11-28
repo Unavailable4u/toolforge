@@ -1,7 +1,7 @@
 """Shared fixtures and marker handling.
 
-Markers `docker`, `llm` and `attacks` are declared in pyproject.toml. Tests carrying them are skipped automatically
-when their prerequisite is missing, so `pytest` is always safe to run. (P19 adds the `browser` marker.)
+Markers `docker`, `llm`, `attacks` and `browser` are declared in pyproject.toml. Tests carrying them are skipped automatically
+when their prerequisite is missing, so `pytest` is always safe to run.
 """
 
 from __future__ import annotations
@@ -36,6 +36,19 @@ def docker_available() -> bool:
         return False
 
 
+@lru_cache(maxsize=1)
+def browser_available() -> bool:
+    """True when Playwright and a launchable Chromium exist; the site's browser tests are skipped otherwise."""
+    try:
+        from playwright.sync_api import sync_playwright
+
+        with sync_playwright() as playwright:
+            playwright.chromium.launch().close()
+    except Exception:
+        return False
+    return True
+
+
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
     for item in items:
         if "docker" in item.keywords and not docker_available():
@@ -44,6 +57,12 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
             item.add_marker(pytest.mark.skip(reason="the attack suite needs Docker"))
         if "llm" in item.keywords and not os.environ.get("TOOLFORGE_LLM_BASE_URL"):
             item.add_marker(pytest.mark.skip(reason="TOOLFORGE_LLM_BASE_URL is not set"))
+        if "browser" in item.keywords and not browser_available():
+            item.add_marker(
+                pytest.mark.skip(
+                    reason="Playwright with Chromium is not installed (pip install playwright; playwright install chromium)"
+                )
+            )
 
 
 @pytest.fixture(autouse=True)

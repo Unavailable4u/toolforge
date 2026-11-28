@@ -1,0 +1,11 @@
+<section id="built" class="section alt" aria-labelledby="built-title">
+  <div class="wrap">
+    <div class="prose">
+    <h2 id="built-title">How it was built</h2>
+    <p class="summary">ToolForge was built one small patch at a time from a written guide, and the repository keeps that guide.</p>
+    <p>Each patch is one commit with its own tests. <a href="{{repo_url}}/blob/main/PROGRESS.md">PROGRESS.md</a> says which patches are done and what each one left undone, and the guide in <a href="{{repo_url}}/tree/main/docs/guide">docs/guide</a> is what an agent follows to produce the next patch.</p>
+    <p>The sandbox is <a href="https://github.com/shaikh-dotcom/MiniLocker" target="_blank" rel="noopener noreferrer">MiniLocker</a>, an earlier project of the same author, pinned as a submodule. ToolForge adds the verification, the registry and the MCP server on top of it.</p>
+    <p>Still to come: <span class="chip chip-planned">planned</span> an interactive tour, and <span class="chip chip-planned">planned</span> a hardening pass with a tagged release.</p>
+    </div>
+  </div>
+</section>

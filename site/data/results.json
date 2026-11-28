@@ -1,0 +1,15 @@
+{
+  "attacks": null,
+  "bench": null,
+  "context": null,
+  "demo": {
+    "agent": "scripted",
+    "isolated": false,
+    "mode": "replay",
+    "recorded_at": "2026-11-28",
+    "sandbox": "stand-in",
+    "toolforge_version": "0.0.1"
+  },
+  "generated_at": "2026-11-28",
+  "schema": 1
+}

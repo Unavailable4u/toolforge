@@ -57,4 +57,5 @@ markers = [
     "docker: needs a Docker daemon (skipped automatically when none answers)",
     "llm: needs a configured OpenAI-compatible endpoint (TOOLFORGE_LLM_BASE_URL)",
     "attacks: the hostile-author suite against real sandboxes (needs Docker)",
+    "browser: drives the built website in headless Chromium (skipped when Playwright or its Chromium is not installed)",
 ]

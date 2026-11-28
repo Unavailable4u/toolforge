@@ -1,0 +1,35 @@
+<section id="proof" class="section" aria-labelledby="proof-title">
+  <div class="wrap">
+    <div class="prose">
+      <h2 id="proof-title">Evidence: what has actually been measured</h2>
+      <p class="summary">Every number in this section comes from a results file with its date, or it says Not measured yet.</p>
+      <p>A blank is honest and a made-up number is not, so a missing result is never drawn as zero. The data behind this page is <a href="data/results.json">results.json</a>, written on {{generated_on}}.</p>
+    </div>
+
+    <h3 id="proof-attacks">The Attack Lab</h3>
+    <div class="prose">
+      <p>A catalogue of hostile tool authors, each trying one trick against the gates and the sandbox. An attack is <strong>contained</strong> when the defence held and <strong>breached</strong> when it did not. If the lab cannot tell, it says <strong>inconclusive</strong>.</p>
+    </div>
+    {{attacks_meta}}
+    {{attacks_table}}
+
+    <h3 id="proof-bench">The benchmark</h3>
+    <div class="prose">
+      <p>Does an agent finish tasks it has no tool for more often with ToolForge than with one general-purpose code tool in the same sandbox? The benchmark asks that question and reports intervals, because a handful of runs says little.</p>
+    </div>
+    {{bench_meta}}
+    {{bench_table}}
+
+    <h3 id="proof-context">The cost in context</h3>
+    <div class="prose">
+      <p>ToolForge shows an agent a few meta-tools instead of listing every tool. This checks whether that keeps the model's context small as the registry grows, rather than assuming it.</p>
+    </div>
+    {{context_table}}
+
+    <h3 id="proof-blast">What a Blast Radius report holds</h3>
+    <div class="prose">
+      <p>For each version of a tool, a report says what it was seen doing while it was watched, in five areas: network, files, secrets, compute and persistence. Each area ends in a plain word: <em>observed</em>, <em>none observed</em> or <em>not measured</em>. Not measured never means zero.</p>
+      <p>Reports are rebuilt from the ledgers, and the whole ledger is checked for tampering first. Run <code>toolforge report NAME@VERSION</code> on your own registry to see one. The format is in <a href="{{repo_url}}/blob/main/docs/verification.md">docs/verification.md</a>.</p>
+    </div>
+  </div>
+</section>

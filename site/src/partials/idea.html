@@ -1,0 +1,31 @@
+<section id="idea" class="section alt" aria-labelledby="idea-title">
+  <div class="wrap">
+    <div class="prose">
+      <h2 id="idea-title">The idea, in four steps</h2>
+      <p class="summary">A new tool is inspected, tested and tried in a locked room before it goes on the shelf, and every inspection is written down.</p>
+      <p>Think of a tool shop with an inspector at the door. Nothing reaches the shelf until it has been inspected, tested and tried in a room with no windows. Every inspection goes into a notebook where an edited page would show.</p>
+    </div>
+    <ol class="grid four steps-grid">
+      <li class="card">
+        <h3><span class="step-n">1</span> Forge</h3>
+        <p>Someone brings a new tool to the shop. The agent writes the tool, its tests and a label, called the manifest, that says what the tool may touch.</p>
+        <p class="example"><strong>For example:</strong> asked to total a column in a SQLite file, an agent forges a small query tool.</p>
+      </li>
+      <li class="card">
+        <h3><span class="step-n">2</span> Verify</h3>
+        <p>The inspector works through a series of stations, the gates. They read the code, build it, run its tests, feed it odd inputs, let a second AI try to break it and probe it in a locked room. A person approves any request for the network or a secret.</p>
+        <p class="example"><strong>For example:</strong> a tool that opens a fake credentials file is caught reaching for it.</p>
+      </li>
+      <li class="card">
+        <h3><span class="step-n">3</span> Run</h3>
+        <p>Every use happens in a locked, windowless room: a hardened container. The tool gets only what its label says, and the network stays closed unless a person approved the exact hosts.</p>
+        <p class="example"><strong>For example:</strong> a tool with no network permission cannot call out, whatever its code tries.</p>
+      </li>
+      <li class="card">
+        <h3><span class="step-n">4</span> Reuse</h3>
+        <p>The next agent looks on the shelf first. Tools have versions and a track record. A broken one is repaired as a new version and inspected again, and a bad one can be rolled back.</p>
+        <p class="example"><strong>For example:</strong> the SQLite tool from step one answers questions about a different database, with no new build.</p>
+      </li>
+    </ol>
+  </div>
+</section>

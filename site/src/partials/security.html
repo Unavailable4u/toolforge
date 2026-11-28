@@ -1,0 +1,35 @@
+<section id="security" class="section alt" aria-labelledby="security-title">
+  <div class="wrap">
+    <div class="prose">
+      <h2 id="security-title">Security, in plain words</h2>
+      <p class="summary">ToolForge is built so that a mistaken or hostile tool is contained and recorded, but it is not a guarantee against every attack.</p>
+    </div>
+    <div class="two-col">
+      <div class="card">
+        <h3>What it is built to do</h3>
+        <ul>
+          <li>Run tool code only inside the sandbox, never on the host.</li>
+          <li>Keep the network closed unless a person approved the exact hosts.</li>
+          <li>Keep secrets out of the sandbox. A broker adds them to approved requests.</li>
+          <li>Give an agent no way to approve, promote, release, roll back or delete. A test reads the server's source to keep it that way.</li>
+          <li>Listen on the local machine only, unless a bearer token is set.</li>
+          <li>Record every step in a hash-chained ledger, so an edited line breaks the chain.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>What it does not promise</h3>
+        <ul>
+          <li>A container is not a virtual machine. A flaw in Docker or the kernel could defeat it.</li>
+          <li>The gates look for known kinds of trouble. A clever tool can still pass them, so the sandbox is the real wall.</li>
+          <li>A ledger shows tampering. It does not stop someone with full access to the machine.</li>
+          <li>The detector for hostile text is a heuristic, not a filter you can rely on alone.</li>
+          <li>It has one operator and no user accounts.</li>
+          <li>The Docker Compose set-up was written without a Docker daemon to try it on.</li>
+        </ul>
+      </div>
+    </div>
+    <div class="prose">
+      <p>The full list of limits is <a href="#limits">further down</a>. The page you are reading makes no network request except to load itself, and sets no cookies.</p>
+    </div>
+  </div>
+</section>

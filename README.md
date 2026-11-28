@@ -148,12 +148,17 @@ examples/toolpacks/   reference tool packages
 bench/                the benchmark and its task set
 demo/                 the scripted demo, its transcripts and its committed recording
 deploy/, docker-compose.yml   the container image and the one-command startup
-scripts/              guide checker, cover and slide builders
+scripts/              guide checker, cover and slide builders, and the website build
+site/                 the static website (source, data and build output)
 docs/                 reference pages; docs/guide/ is the build plan
 third_party/minilocker  pinned git submodule (external dependency, never copied)
 ```
 
-The landing site and its guided tour (`site/`) arrive with patches P19 and P20; the final pass is P21.
+## Website
+
+A static landing site is built from `site/` and published to GitHub Pages; it makes no network request and every number on it comes from a
+results file or says "Not measured yet". `python scripts/build_site.py` builds it into `site/dist`, and [docs/SITE.md](docs/SITE.md) covers
+previewing, editing the copy, refreshing the evidence and deploying. The interactive guided tour arrives with patch P20; the final pass is P21.
 
 ## Working on this repository with an AI agent
 

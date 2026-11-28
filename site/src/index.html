@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; form-action 'none'">
+<title>{{title}}</title>
+<meta name="description" content="{{description}}">
+<meta name="theme-color" content="#f6f3ee" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#14161a" media="(prefers-color-scheme: dark)">
+{{social_meta}}
+<link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+<link rel="stylesheet" href="styles.css">
+<script src="app.js"></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+{{partial:header}}
+<main id="main">
+{{partial:hero}}
+{{partial:problem}}
+{{partial:idea}}
+{{partial:tour}}
+{{partial:architecture}}
+{{partial:gates}}
+{{partial:capabilities}}
+{{partial:features}}
+{{partial:security}}
+{{partial:proof}}
+{{partial:tools}}
+{{partial:quickstart}}
+{{partial:built}}
+{{partial:limits}}
+{{partial:faq}}
+</main>
+{{partial:footer}}
+</body>
+</html>

@@ -1,0 +1,216 @@
+{
+  "repo_url": "",
+  "site_url": "",
+  "title": "ToolForge: let an AI agent build its own tools, safely",
+  "tagline": "An MCP server that lets an AI agent build, verify and reuse its own tools, safely.",
+  "description": "When an AI agent has no tool for a job, ToolForge lets it forge one. The tool is inspected, tested and tried in a locked sandbox, a person approves it, and every step is written to a tamper-evident ledger.",
+  "allowed_external": [
+    "https://github.com/shaikh-dotcom/MiniLocker",
+    "https://modelcontextprotocol.io/",
+    "https://docs.docker.com/get-docker/"
+  ],
+  "quickstart": [
+    {
+      "title": "Install",
+      "text": "You need Python 3.12 and Docker. On Windows, work inside WSL2. The unit tests need no Docker; real sandboxes do.",
+      "source": "README.md",
+      "commands": [
+        "git clone --recurse-submodules {{repo_url}}",
+        "cd toolforge",
+        "python3 -m venv .venv && . .venv/bin/activate",
+        "pip install -e \".[dev,sandbox]\""
+      ]
+    },
+    {
+      "title": "Build the sandbox image and check the setup",
+      "text": "`doctor` checks Python, Docker, the image and the MiniLocker checkout. No API key is needed to begin.",
+      "source": "README.md",
+      "commands": [
+        "toolforge images build",
+        "toolforge doctor"
+      ]
+    },
+    {
+      "title": "Start the server",
+      "text": "This is the MCP server on standard input and output, which is how most clients start it.",
+      "source": "README.md",
+      "commands": [
+        "toolforge serve"
+      ]
+    },
+    {
+      "title": "Connect a client",
+      "text": "Claude Code is one example. Any client that reads an MCP configuration can start `toolforge serve` the same way; the page on clients has the stdio and HTTP settings.",
+      "source": "docs/clients.md",
+      "commands": [
+        "claude mcp add toolforge -- toolforge serve"
+      ]
+    },
+    {
+      "title": "Submit a tool and promote it",
+      "text": "A tool an agent submits is verified but not usable until you say so. The agent cannot promote its own tool: there is no MCP tool that does it.",
+      "source": "README.md",
+      "commands": [
+        "toolforge submit examples/toolpacks/csv_summary",
+        "toolforge promote csv_summary@1.0.0 --reason \"reference tool, read it first\""
+      ]
+    }
+  ],
+  "capabilities": [
+    {
+      "name": "Data and file software",
+      "how": "Python tools that query SQLite or DuckDB, convert CSV, JSON or YAML, or work with text and images, using the libraries already in the runtime image. Files the caller passes arrive under inputs/.",
+      "chip": "built",
+      "patches": [
+        "P14a"
+      ],
+      "limit": "Python 3.12 only, with the pinned libraries in the image. A library that is not in the image cannot be used."
+    },
+    {
+      "name": "HTTP APIs",
+      "how": "Tools that declare the hosts they call. Their tests use mocked replies. A live call waits until an operator approves those exact hosts, and tokens are brokered, never handed to the tool.",
+      "chip": "built",
+      "patches": [
+        "P09",
+        "P14a"
+      ],
+      "limit": "One egress allowlist is shared by every tool. Live calls need Docker and the egress proxy."
+    },
+    {
+      "name": "Web pages",
+      "how": "A plan: a list of steps from a closed vocabulary, written as data and run in MiniLocker's browser sandbox. It carries no code of its own.",
+      "chip": "experimental",
+      "patches": [
+        "P14b"
+      ],
+      "limit": "A fixed list of approved hosts and no screenshot-and-click. Gate G5 is skipped for a plan, so a plan is never fully verified. The browser image has to be built first."
+    },
+    {
+      "name": "Games and simulations",
+      "how": "Session tools keep one sandbox open between calls, so game state survives. Steps are snapshotted and can be rewound. Reference packs exist for chess, blackjack and a toy-text gymnasium game.",
+      "chip": "built",
+      "patches": [
+        "P13",
+        "P14a"
+      ],
+      "limit": "Engines with a state that can be written as text or JSON. A session has a time limit, and only a few can be open at once."
+    },
+    {
+      "name": "Desktop GUIs",
+      "how": "Not built. A page of notes records what a virtual-display image would need.",
+      "chip": "planned",
+      "patches": [],
+      "limit": "It needs a vision step to read the screen. Neither ToolForge nor MiniLocker has one."
+    }
+  ],
+  "features": [
+    {
+      "name": "Reuse and ranking",
+      "text": "Before building, an agent searches what earlier agents already forged. Each match comes with a confidence rating, how often it was used and its success rate, and a tool whose recent calls mostly fail is marked down.",
+      "chip": "built",
+      "patches": [
+        "P12"
+      ],
+      "doc": "docs/repair.md"
+    },
+    {
+      "name": "Repair, rollback and quarantine",
+      "text": "A broken tool is repaired as a new version that goes through the same gates. An operator can roll back or quarantine a version, and a version that touches a decoy credential is quarantined until an operator releases it.",
+      "chip": "built",
+      "patches": [
+        "P12"
+      ],
+      "doc": "docs/repair.md"
+    },
+    {
+      "name": "Sessions and rewind",
+      "text": "A stateful tool keeps its sandbox between calls. Each step is snapshotted, so a mistake in a game or a long task can be rewound.",
+      "chip": "built",
+      "patches": [
+        "P13"
+      ],
+      "doc": "docs/sessions.md"
+    },
+    {
+      "name": "Approvals with a permission diff",
+      "text": "A tool that asks for the network or a secret waits for a person. The approval shows exactly what is new compared with the version before it.",
+      "chip": "built",
+      "patches": [
+        "P09"
+      ],
+      "doc": "docs/approvals.md"
+    },
+    {
+      "name": "Blast Radius reports",
+      "text": "For each version, a report of what it was seen doing while watched: network, files, secrets, compute and persistence. A dimension that nothing observed says so; it is never shown as zero.",
+      "chip": "built",
+      "patches": [
+        "P08"
+      ],
+      "doc": "docs/verification.md"
+    },
+    {
+      "name": "Operator dashboard",
+      "text": "A local page to read the registry, the gates and the reports, and to approve, promote, quarantine or roll back. It is a separate process that an agent cannot reach. The page itself has had little testing in a real browser.",
+      "chip": "experimental",
+      "patches": [
+        "P17"
+      ],
+      "doc": "docs/dashboard.md"
+    },
+    {
+      "name": "Attack Lab",
+      "text": "A catalogue of hostile tool authors played against the pipeline and the sandbox. Each attack ends as contained, breached or inconclusive, with the evidence.",
+      "chip": "built",
+      "patches": [
+        "P15"
+      ],
+      "doc": "docs/ATTACKS.md"
+    },
+    {
+      "name": "Benchmark",
+      "text": "A harness that measures whether an agent finishes tasks it has no tool for, with and without ToolForge, with intervals. The harness is built; see the evidence section for what has been run.",
+      "chip": "built",
+      "patches": [
+        "P16"
+      ],
+      "doc": "docs/BENCHMARK.md"
+    },
+    {
+      "name": "Works with any MCP client",
+      "text": "It speaks MCP over standard input and output, or over HTTP with a bearer token. Settings for Claude Code and for any client that reads an MCP JSON file are in the docs.",
+      "chip": "built",
+      "patches": [
+        "P07"
+      ],
+      "doc": "docs/clients.md"
+    },
+    {
+      "name": "Portable bundles and signatures (optional)",
+      "text": "A verified tool can be handed to another operator as a signed bundle. The receiver checks the signature and still runs its own gates.",
+      "chip": "built",
+      "patches": [
+        "S01"
+      ],
+      "doc": "docs/PROVENANCE.md"
+    },
+    {
+      "name": "Tool chains (optional)",
+      "text": "A short, fixed list of active tools run in one call. It is off unless an operator switches it on.",
+      "chip": "built",
+      "patches": [
+        "S02"
+      ],
+      "doc": "docs/CHAINS.md"
+    },
+    {
+      "name": "Interactive guided tour",
+      "text": "A walkthrough of a recorded run. Not built yet: the tour section below is a written summary.",
+      "chip": "planned",
+      "patches": [
+        "P20"
+      ],
+      "doc": ""
+    }
+  ]
+}

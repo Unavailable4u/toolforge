@@ -368,7 +368,8 @@ def test_builder_tokens_are_null_when_a_build_reported_no_usage() -> None:
     )  # no build: nothing was spent
 
 
-def test_safety_counts_come_from_the_runs_ledgers(tmp_path: Path) -> None:
+def test_safety_counts_come_from_the_runs_ledgers(tmp_path: Path, minilocker: None) -> None:
+    # Writes real ledger files, which is MiniLocker's hash chain: skipped (not failed) in a checkout without the submodule.
     home = tmp_path / "home"
     assert harness.safety_counts(home)["policy_violations"] is None
     ledger = ToolforgeLedger(home / "ledgers" / "x@0.1.0" / "calls.jsonl", "bench")

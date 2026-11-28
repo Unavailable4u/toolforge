@@ -1,0 +1,58 @@
+name: pages
+
+# Builds the static site (site/src -> site/dist) and publishes it to GitHub Pages. In the repository settings, set
+# Pages > Source to "GitHub Actions" once. The site makes no network request and the build uses the committed site/data/results.json.
+
+on:
+  push:
+    branches: [main]
+    # The build reads these: the site itself, the docs and code its lists come from, and the build scripts.
+    paths:
+      - "site/**"
+      - "docs/**"
+      - "src/**"
+      - "scripts/build_site*.py"
+      - "scripts/render_cover.py"
+      - "README.md"
+      - "PROGRESS.md"
+      - ".env.example"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      # The converter that scripts/render_cover.py uses to make the social preview image. Without it the site still builds.
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends librsvg2-bin
+      - run: pip install -e .
+      # --release refuses a placeholder repository address, so a dead GitHub button cannot be published.
+      - run: python scripts/build_site.py --release
+      - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: site/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

@@ -1,0 +1,40 @@
+<section id="faq" class="section alt" aria-labelledby="faq-title">
+  <div class="wrap">
+    <div class="prose">
+    <h2 id="faq-title">Questions people ask</h2>
+    <p class="summary">Short answers to the questions that come up first.</p>
+    <details>
+      <summary>Is it safe to run?</summary>
+      <p>It is safer than letting an agent run unchecked code, and it is not risk-free. Tool code runs only in a hardened container with the network closed unless you approve exact hosts, and every step is logged. A container is not a virtual machine, so a flaw in Docker or the kernel would defeat it. Read the known limits before you trust it with anything important.</p>
+    </details>
+    <details>
+      <summary>Do I need an API key?</summary>
+      <p>Not to begin. You can submit a tool, read its report and promote it without one. A language model is needed only for the independent challenger gate, the server-side builder, the benchmark and the live demo.</p>
+    </details>
+    <details>
+      <summary>Which AI assistants does it work with?</summary>
+      <p>Any client that speaks MCP over standard input and output, or over HTTP, should work. The docs show settings for Claude Code and for a generic MCP JSON file, and the tests use the official MCP Python client.</p>
+    </details>
+    <details>
+      <summary>How is this different from letting an agent run code?</summary>
+      <p>A tool is inspected before use, declares what it may touch, runs only in the sandbox, is recorded in a ledger, and is kept as a versioned tool that the next agent can find. A person decides about anything risky. The benchmark compares an agent with ToolForge against one with a single code-running tool in the same sandbox; see the evidence section for what has been run.</p>
+    </details>
+    <details>
+      <summary>Can an agent approve its own tool?</summary>
+      <p>No. No MCP tool approves, promotes, releases, rolls back or deletes. Those are operator actions on the command line or the dashboard, and a test reads the server's source to keep it that way.</p>
+    </details>
+    <details>
+      <summary>Where does my data go?</summary>
+      <p>Nowhere by default. The registry, ledgers and files live in a folder on your machine. If you set up a hosted model for the builder or the challenger, that provider receives tool source, tests and sample inputs, but never secrets. This website sets no cookies and loads nothing from other sites.</p>
+    </details>
+    <details>
+      <summary>Why only Python?</summary>
+      <p>Version one is deliberately narrow: one language, one runtime image and pinned libraries. Another language would need its own image and its own checks, and none exist.</p>
+    </details>
+    <details>
+      <summary>Who is it for?</summary>
+      <p>People who build or run AI agents and want them to extend their own abilities without being handed unchecked code execution. It has one operator and one registry. It is not a multi-user service.</p>
+    </details>
+    </div>
+  </div>
+</section>

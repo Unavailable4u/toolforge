@@ -1,0 +1,23 @@
+<section id="architecture" class="section alt" aria-labelledby="architecture-title">
+  <div class="wrap">
+    <div class="prose">
+      <h2 id="architecture-title">How it fits together</h2>
+      <p class="summary">Five parts, with a wall between the agent that asks for tools and the room where tool code runs.</p>
+    </div>
+    <figure class="diagram" tabindex="0">
+      {{svg:architecture}}
+      <figcaption>In words: the agent talks only to the server. The server hands new tools to the gates and keeps approved ones in the registry. Tool code runs only inside the sandbox, behind the wall. An operator, a person on the command line or the dashboard, is the only one who approves, promotes or rolls back.</figcaption>
+    </figure>
+    <ol class="grid parts">
+      <li class="card"><h3>The server</h3><p>The only thing an agent can reach. It offers a short, fixed list of tools and refuses everything else. It cannot approve, promote or delete anything.</p></li>
+      <li class="card"><h3>The gates</h3><p>The inspection line. It decides how far a new tool is trusted and writes down why.</p></li>
+      <li class="card"><h3>The registry</h3><p>The shelf. Versions of tools, their manifests, their track records and their reports.</p></li>
+      <li class="card"><h3>The sandbox</h3><p>A locked room made by <a href="https://github.com/shaikh-dotcom/MiniLocker" target="_blank" rel="noopener noreferrer">MiniLocker</a> on top of Docker. Tool code never runs anywhere else.</p></li>
+      <li class="card"><h3>The operator</h3><p>You. A command line and a local dashboard, kept apart from the server so an agent cannot reach them.</p></li>
+    </ol>
+    <div class="prose">
+      <h3>Who is trusted</h3>
+      <p>The operator and the host are trusted. The agent is not: it is treated as a stranger who might be confused or manipulated. Tool code is hostile until proven otherwise, and it stays inside the sandbox. Text that a tool returns is treated as hostile too, and is fenced and flagged before a model reads it.</p>
+    </div>
+  </div>
+</section>
